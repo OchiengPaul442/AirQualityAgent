@@ -1,101 +1,117 @@
 # Air Quality AI Agent
 
-**Status: ✅ PRODUCTION READY - Enterprise-Grade with Cost Optimizations**
+## Overview
 
-A sophisticated, scalable AI system for air quality monitoring, research, and policy development. Optimized for large-scale deployments with **51-54% cost reduction**, client-side session management, and intelligent response caching.
+The Air Quality AI Agent is a sophisticated, scalable AI system designed for air quality monitoring, research, and policy development. It provides real-time data analysis, intelligent recommendations, and comprehensive research capabilities, optimized for enterprise deployments with significant cost reductions through client-side session management and intelligent caching.
 
-**🎯 Latest Enhancements (Dec 2025):**
+## Features
 
-- ✅ **Client-side session management** - ChatGPT-style conversations (90% storage cost reduction)
-- ✅ **Intelligent response caching** - 60-80% fewer AI API calls
-- ✅ **Rate limiting** - Protection against abuse (20 req/60s per IP)
-- ✅ **Data accuracy** - All values formatted to 1 decimal place
-- ✅ **Token tracking** - Full cost visibility
-- ✅ **Enterprise scalability** - Stateless API, 10x throughput improvement
+### AI Capabilities
 
-## 🚀 Features
+- **Environmental Consultant**: Provides real-time air quality data and health recommendations.
+- **Senior Researcher**: Delivers comprehensive research documents with citations and in-depth analysis.
+- **Policy Advisor**: Offers evidence-based policy development tailored to regional contexts, with a focus on African regions.
 
-### **Multi-Role AI Capabilities**
+### AI Providers
 
-- **Environmental Consultant** (Default): Real-time air quality data and health recommendations
-- **Senior Researcher**: Comprehensive research documents with citations and analysis
-- **Policy Advisor**: Evidence-based policy development tailored to regional contexts (especially African)
+- **Google Gemini**: For production-grade, high-quality analysis.
+- **OpenAI**: Supports direct API or compatible providers (OpenRouter, DeepSeek, Kimi).
+- **Ollama**: For local testing and privacy-focused deployments.
 
-### **AI Provider Support**
+### Data Sources
 
-- **Google Gemini**: For production-grade, high-quality analysis
-- **OpenAI**: Direct OpenAI API or compatible providers (OpenRouter, DeepSeek, Kimi)
-- **Ollama**: For local testing and privacy-focused deployment
+- WAQI (World Air Quality Index)
+- AirQo
+- Weather Service
+- Search Service
+- Document Scanner
+- Robust Scraper
 
-### **Real-Time Data Tools**
+### Model Context Protocol (MCP)
 
-- **WAQI (World Air Quality Index)**: Global coverage with 21+ stations per search
-  - Includes forecast data in city feed responses
-- **AirQo**: African air quality network (588 sites, 43 grids) with intelligent capabilities:
-  - Smart location search using sites/summary endpoint
-  - Multi-site measurements with readings/recent endpoint
-  - **7-day forecasts** with location-based search support
-  - Comprehensive site details with health tips and AQI ranges
-- **Robust Scraper**: Production-ready web scraper with retry logic
-- **Weather Service**: Global weather data via Open-Meteo API
-- **Search Service**: Web search integration for latest research and policies
-- **Document Scanner**: Text and PDF document analysis
-- **Model Context Protocol (MCP)**:
-  - **MCP Server**: Exposes agent capabilities as an MCP server for use with Claude Desktop or other MCP clients.
-  - **MCP Client**: Ability to connect to other MCP servers (PostgreSQL, MySQL, GitHub, Slack, etc.)
-  - **REST API for MCP**: Frontend-friendly endpoints for UI/UX integration
+- **MCP Server**: Exposes agent capabilities for use with MCP clients like Claude Desktop.
+- **MCP Client**: Connects to external MCP servers (PostgreSQL, MySQL, GitHub, Slack, etc.).
+- **REST API for MCP**: Frontend-friendly endpoints for UI/UX integration.
 
-### **Cost Optimization & Scalability**
+### Cost Optimization and Scalability
 
-- **Client-Side Sessions**: ChatGPT-style conversations with history sent from client (90% storage cost reduction)
-- **Intelligent Caching**: Educational queries cached for 1 hour, real-time data always fresh (60-80% AI call reduction)
-- **Rate Limiting**: Configurable per-IP rate limits (default: 20 req/60s) to prevent abuse
-- **Token Tracking**: Full visibility into AI usage costs per request
-- **Data Accuracy**: All numeric values formatted to 1 decimal place, preserving exact API values
-- **Async Operations**: Non-blocking I/O throughout for 10x throughput improvement
-- **Stateless API**: Horizontal scaling ready, no server-side session state
-- **Smart Caching**: Redis-backed caching with in-memory fallback for high performance
-- **REST API**: Built with FastAPI with automatic API key sanitization
-- **Security**: Automatic credential sanitization in all responses
+- Client-side session management for reduced storage costs.
+- Intelligent response caching to minimize AI API calls.
+- Rate limiting to prevent abuse.
+- Token tracking for cost visibility.
+- Async operations for improved throughput.
+- Stateless API design for horizontal scaling.
+- Redis-backed caching with in-memory fallback.
 
-## 🛠️ Setup
+## Prerequisites
 
-### 1. Prerequisites
-
-- Python 3.10+
-- [Ollama](https://ollama.com/) (optional, for local testing)
+- Python 3.10 or higher
+- Ollama (optional, for local testing)
 - Redis (optional, for caching)
 
-### 2. Installation
+## Installation
 
-```bash
-# Clone the repository
-git clone <repo-url>
-cd agent2
+1. Clone the repository:
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+   ```bash
+   git clone https://github.com/OchiengPaul442/AirQualityAgent.git
+   cd AirQualityAgent
+   ```
 
-# Install dependencies
-pip install -r requirements.txt
-```
+2. Create a virtual environment:
 
-### 3. Configuration
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
 
-Copy the example environment file:
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-cp .env.example .env
-```
+## Configuration
 
-Edit `.env` with your settings:
+1. Copy the example environment file:
 
-### 4. Running the Agent
+   ```bash
+   cp .env.example .env
+   ```
 
-You can run the agent in two modes:
+2. Edit `.env` with your settings. Examples:
 
-**1. API Server (FastAPI)**
+   - For local testing with Ollama:
+
+     ```
+     AI_PROVIDER=ollama
+     AI_MODEL=llama3.2
+     OLLAMA_BASE_URL=http://localhost:11434
+     ```
+
+   - For production with Gemini:
+
+     ```
+     AI_PROVIDER=gemini
+     AI_MODEL=gemini-2.5-flash
+     AI_API_KEY=your_gemini_api_key
+     ```
+
+   - For OpenAI:
+     ```
+     AI_PROVIDER=openai
+     AI_MODEL=gpt-4o
+     AI_API_KEY=your_openai_api_key
+     OPENAI_BASE_URL=https://api.openai.com/v1
+     ```
+
+   Additional configurations for OpenRouter, DeepSeek, or Kimi can be set similarly using the OpenAI provider with appropriate base URLs and API keys.
+
+## Running the Agent
+
+The agent can be run in two modes:
+
+### API Server Mode
+
 Provides a REST API for chat and interaction.
 
 ```bash
@@ -103,171 +119,89 @@ Provides a REST API for chat and interaction.
 # Select option 1
 ```
 
-**2. MCP Server**
-Exposes tools via stdio for MCP clients (like Claude Desktop).
+Or directly:
 
 ```bash
-./start_server.sh
-# Select option 2
-# OR directly:
-python src/mcp/server.py
-```
-
-## 🏗️ Architecture
-
-- **`src/api`**: FastAPI routes and application entry point.
-- **`src/services`**: Core business logic (Agent, AirQo, WAQI, Weather).
-- **`src/tools`**: Standalone tools (Scraper, Document Scanner).
-- **`src/mcp`**: Model Context Protocol server and client implementation.
-- **`src/db`**: Database models and connection.
-
-**For Local Testing (Ollama):**
-
-```dotenv
-AI_PROVIDER=ollama
-AI_MODEL=llama3.2  # Make sure to run `ollama pull llama3.2` first
-OLLAMA_BASE_URL=http://localhost:11434
-```
-
-**For Production (Gemini):**
-
-```dotenv
-AI_PROVIDER=gemini
-AI_MODEL=gemini-2.5-flash
-AI_API_KEY=your_gemini_api_key
-```
-
-**For OpenAI (Direct):**
-
-```dotenv
-AI_PROVIDER=openai
-AI_MODEL=gpt-4o
-AI_API_KEY=your_openai_api_key
-OPENAI_BASE_URL=https://api.openai.com/v1
-```
-
-**For OpenRouter (Free/Paid Models):**
-
-```dotenv
-AI_PROVIDER=openai
-AI_MODEL=gpt-oss-120b  # or any OpenRouter model
-AI_API_KEY=your_openrouter_api_key
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-```
-
-**For DeepSeek:**
-
-```dotenv
-AI_PROVIDER=openai
-AI_MODEL=deepseek-chat
-AI_API_KEY=your_deepseek_api_key
-OPENAI_BASE_URL=https://api.deepseek.com/v1
-```
-
-**For Kimi (Moonshot):**
-
-```dotenv
-AI_PROVIDER=openai
-AI_MODEL=moonshot-v1-8k
-AI_API_KEY=your_kimi_api_key
-OPENAI_BASE_URL=https://api.moonshot.cn/v1
-```
-
-### 4. Running the Server
-
-**For Stable Testing (Recommended):**
-
-```bash
-# Use the startup scripts
-./start_server.sh    # Linux/Mac
-start_server.bat     # Windows
-
-# Or directly:
 python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-**For Development (with auto-reload):**
+For development with auto-reload:
 
 ```bash
 python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Note**: Use `--reload` only during active development. For testing the agent, run without `--reload` to prevent constant restarts when formatters or other tools modify files.
+### MCP Server Mode
 
-## 🧪 Usage
+Exposes tools via stdio for MCP clients.
+
+```bash
+./start_server.sh
+# Select option 2
+```
+
+Or directly:
+
+```bash
+python src/mcp/server.py
+```
+
+## Usage
 
 ### Chat Endpoint
 
-**POST** `/api/v1/agent/chat`
+Interact with the agent via the REST API.
 
-**With Client-Side History (Recommended):**
+**Endpoint**: `POST /api/v1/agent/chat`
+
+**Request Body**:
 
 ```json
 {
-  "message": "What about tomorrow?",
+  "message": "What's the air quality in Nairobi?",
   "session_id": "optional-session-id",
   "history": [
-    { "role": "user", "content": "What's the air quality in Nairobi?" },
-    {
-      "role": "assistant",
-      "content": "The air quality in Nairobi is Good (AQI 45)..."
-    }
+    { "role": "user", "content": "Previous message" },
+    { "role": "assistant", "content": "Previous response" }
   ],
   "save_to_db": false
 }
 ```
 
-**Response:**
+**Response**:
 
 ```json
 {
-  "response": "Tomorrow in Nairobi, the forecast shows...",
+  "response": "The air quality in Nairobi is...",
   "session_id": "optional-session-id",
-  "tools_used": ["weather_api"],
-  "tokens_used": 480,
+  "tools_used": ["waqi_api"],
+  "tokens_used": 150,
   "cached": false
 }
 ```
 
-**Key Features:**
+Key features:
 
-- Send conversation history from client (ChatGPT-style)
-- `save_to_db: false` by default (90% storage cost reduction)
-- Token usage tracking for cost visibility
-- Cache attribution (`cached: true/false`)
+- Client-side conversation history management.
+- Optional database saving for cost efficiency.
+- Token usage tracking.
+- Cache status indication.
 
-### MCP Connection API (NEW)
+### MCP Connection API
 
-**Connect to External Data Source:**
+Manage connections to external data sources.
 
-```bash
-POST /api/v1/mcp/connect
-Content-Type: application/json
-
-{
-  "name": "postgres-db",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://..."]
-}
-```
-
-**List Connections:**
-
-```bash
-GET /api/v1/mcp/list
-```
-
-**Disconnect:**
-
-```bash
-DELETE /api/v1/mcp/disconnect/{name}
-```
-
-See [`docs/MCP_CONNECTION_GUIDE.md`](docs/MCP_CONNECTION_GUIDE.md) for complete MCP integration guide.
+- **Connect**: `POST /api/v1/mcp/connect`
+- **List**: `GET /api/v1/mcp/list`
+- **Disconnect**: `DELETE /api/v1/mcp/disconnect/{name}`
 
 ### Direct Air Quality Query
 
-**POST** `/api/v1/air-quality/query`
+Query air quality data directly.
+
+**Endpoint**: `POST /api/v1/air-quality/query`
+
+**Request Body**:
 
 ```json
 {
@@ -278,88 +212,61 @@ See [`docs/MCP_CONNECTION_GUIDE.md`](docs/MCP_CONNECTION_GUIDE.md) for complete 
 
 ### List Sessions
 
-**GET** `/api/v1/sessions`
+Retrieve session information.
 
-## 🧪 Testing
+**Endpoint**: `GET /api/v1/sessions`
 
-### Run Unit Tests (Fast - with mocks)
+## Testing
+
+### Unit Tests
+
+Run fast unit tests with mocks:
 
 ```bash
 python tests/test_all_services.py
 ```
 
-**Result:** 16/16 tests passing ✅ (~2.5s)
+### Comprehensive Stress Tests
 
-### Run Comprehensive Stress Tests (Real API calls)
+Run tests with real API calls:
 
 ```bash
 python tests/comprehensive_stress_test.py
 ```
 
-**Result:** 27/27 tests passing ✅ (~29s)
+Test coverage includes all services: AirQo, WAQI, Weather, Scraper, Search, Document Scanner, and Cache.
 
-### Legacy Stress Test
+## Project Structure
 
-```bash
-python tests/stress_test.py
-```
-
-**Result:** 6/6 categories passing ✅
-
-### Test Coverage
-
-- ✅ AirQo Service (site discovery, measurements, grids)
-- ✅ WAQI Service (city feeds, coordinates, station search)
-- ✅ Weather Service (multiple cities, geocoding)
-- ✅ Web Scraper (success cases, error handling)
-- ✅ Search Service (multiple queries)
-- ✅ Document Scanner (text files, error cases)
-- ✅ Cache Service (Redis/in-memory, API caching)
-
-**See [TEST_RESULTS_AND_IMPROVEMENTS.md](docs/TEST_RESULTS_AND_IMPROVEMENTS.md) for detailed results**
-
-## 📂 Project Structure
-
-- `src/api`: FastAPI routes and models.
-- `src/services`: Core logic (AgentService, WAQIService, AirQoService, etc.).
-- `src/mcp`: MCP server and client implementations.
-- `src/tools`: Utilities (scraper, document scanner).
-- `src/db`: Database models and repository.
+- `src/api/`: FastAPI routes and models.
+- `src/services/`: Core business logic (Agent, AirQo, WAQI, Weather services).
+- `src/tools/`: Utilities (scraper, document scanner).
+- `src/mcp/`: MCP server and client implementations.
+- `src/db/`: Database models and repository.
 - `docs/`: Additional documentation.
 - `tests/`: Test suites.
 
-## 🔒 Security
+## Security
 
-- **API keys are automatically sanitized** in all responses
-- Sensitive fields (`token`, `api_key`, `password`) are redacted
-- Use environment variables for credentials
-- Read-only database connections recommended for MCP
+- API keys are automatically sanitized in all responses.
+- Sensitive fields (token, api_key, password) are redacted.
+- Use environment variables for credentials.
+- Read-only database connections are recommended for MCP.
 
-## 📚 Documentation
+## Documentation
 
-### **Quick Start**
+- `docs/QUICK_START.md`: Get started quickly with examples.
+- `docs/IMPLEMENTATION_SUMMARY.md`: Feature overview.
+- `docs/CLIENT_INTEGRATION_GUIDE.md`: Integration examples.
+- `docs/TESTING_GUIDE.md`: Testing scenarios.
+- `docs/ARCHITECTURE.md`: System architecture.
+- `docs/COST_OPTIMIZATION_GUIDE.md`: Deployment guide.
+- `docs/MCP_CONNECTION_GUIDE.md`: MCP integration.
+- Additional guides in the `docs/` directory.
 
-- **[QUICK_START.md](docs/QUICK_START.md)** - Get started in 5 minutes with curl examples
+## Development
 
-### **Implementation Guides**
-
-- **[IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md)** - Overview of all features and changes
-- **[CLIENT_INTEGRATION_GUIDE.md](docs/CLIENT_INTEGRATION_GUIDE.md)** - React, Python, Flutter examples
-- **[TESTING_GUIDE.md](docs/TESTING_GUIDE.md)** - Comprehensive testing scenarios
-
-### **Architecture & Deployment**
-
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture with diagrams
-- **[COST_OPTIMIZATION_GUIDE.md](docs/COST_OPTIMIZATION_GUIDE.md)** - Production deployment guide
-
-### **Additional Documentation**
-
-- **[MCP Connection Guide](docs/MCP_CONNECTION_GUIDE.md)** - Connect external data sources
-- **[System Improvements](docs/SYSTEM_IMPROVEMENTS.md)** - Technical improvements
-
-## 🧹 Development
-
-To format code:
+Format code using:
 
 ```bash
 black src/
