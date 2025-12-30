@@ -10,24 +10,30 @@ class Message(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """
+    Chat request model - simplified for production use.
+    
+    Session Management:
+    - Provide session_id to continue an existing conversation
+    - Omit session_id to start a new conversation (server generates ID)
+    - All messages are automatically saved to the database
+    - Close the session via DELETE /sessions/{session_id} when done
+    """
     message: str = Field(..., description="Current user message")
-    session_id: str | None = Field(None, description="Optional session ID for tracking")
-    history: list[Message] | None = Field(
+    session_id: str | None = Field(
         None, 
-        description="Optional conversation history sent by client (for stateless chat)"
-    )
-    save_to_db: bool = Field(
-        False, 
-        description="Whether to persist this conversation to database (default: False for cost savings)"
+        description="Session ID for continuing a conversation. If omitted, a new session is created."
     )
 
 
 class ChatResponse(BaseModel):
-    response: str
-    session_id: str
-    tools_used: list[str] | None = None
+    """Chat response with session tracking and cost information"""
+    response: str = Field(..., description="AI assistant's response")
+    session_id: str = Field(..., description="Session ID for this conversation")
+    tools_used: list[str] | None = Field(None, description="Tools/APIs called during this response")
     tokens_used: int | None = Field(None, description="Approximate tokens used (for cost tracking)")
     cached: bool = Field(False, description="Whether response was served from cache")
+    message_count: int | None = Field(None, description="Total messages in this session")
 
 
 class HealthCheck(BaseModel):
