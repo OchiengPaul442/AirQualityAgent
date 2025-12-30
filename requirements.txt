@@ -1,50 +1,65 @@
-# Core Framework
-fastapi>=0.127.1
-uvicorn[standard]>=0.30.0
-mcp>=0.1.0
+# =============================================================================
+# Air Quality Agent - Production Requirements
+# Python 3.10+ compatible
+# Last updated: December 30, 2024
+# =============================================================================
 
-# AI/ML Libraries
-openai>=1.0.0
-anthropic>=0.40.0
-google-generativeai>=0.8.0
-ollama>=0.1.6
-pandas>=2.0.0
-numpy>=1.24.0
-scipy>=1.10.0
-scikit-learn>=1.3.0
-statsmodels>=0.14.0
+# -----------------------------------------------------------------------------
+# Core Web Framework
+# -----------------------------------------------------------------------------
+fastapi==0.115.6                    # Modern async web framework
+uvicorn[standard]==0.32.1          # ASGI server with WebSocket support
+starlette==0.40.0                  # FastAPI dependency
+pydantic==2.10.3                   # Data validation (includes pydantic-core)
+annotated-types==0.7.0             # Type annotations support
 
-# Visualization
-matplotlib>=3.7.0
-seaborn>=0.12.0
-reportlab>=4.0.0
+# -----------------------------------------------------------------------------
+# AI & LLM Providers
+# -----------------------------------------------------------------------------
+openai==2.14.0                     # OpenAI GPT models (latest as of Dec 2024)
+anthropic==0.39.0                  # Claude models
+google-genai==1.56.0               # Gemini models (new Google AI SDK)
+ollama==0.6.1                      # Local LLM support (updated for httpx 0.28+)
 
-# API & Web
-requests>=2.31.0
-duckduckgo-search>=6.0.0
-python-multipart
+# -----------------------------------------------------------------------------
+# Model Context Protocol (MCP)
+# -----------------------------------------------------------------------------
+mcp==1.2.0                         # MCP server/client implementation
+httpx==0.28.1                      # Async HTTP client
+httpx-sse==0.4.0                   # Server-sent events support
 
+# -----------------------------------------------------------------------------
 # Database & Caching
-sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.0  # For PostgreSQL support
-redis>=5.0.0  # For high-performance caching
+# -----------------------------------------------------------------------------
+sqlalchemy==2.0.36                 # SQL toolkit and ORM
+psycopg2-binary==2.9.10            # PostgreSQL adapter
+redis==7.1.0                       # Redis client for caching (supports Redis 7.x-8.x)
+aiofiles==24.1.0                   # Async file operations
 
-# Configuration
-python-dotenv>=1.0.0
-pydantic-settings>=2.0.0
+# -----------------------------------------------------------------------------
+# Configuration & Environment
+# -----------------------------------------------------------------------------
+python-dotenv==1.0.1               # Load environment variables
+pydantic-settings==2.7.0           # Settings management
 
-# MCP (Model Context Protocol)
-mcp>=0.1.0
+# -----------------------------------------------------------------------------
+# Web Scraping & Data Extraction
+# -----------------------------------------------------------------------------
+requests==2.32.3                   # HTTP library
+beautifulsoup4==4.12.3             # HTML/XML parsing
+lxml==5.3.0                        # XML/HTML parser
+trafilatura==2.0.0                 # Web content extraction
+duckduckgo-search==7.1.0           # DuckDuckGo search API
 
-# PDF Processing
-PyPDF2>=3.0.0
+# -----------------------------------------------------------------------------
+# Document Processing
+# -----------------------------------------------------------------------------
+PyPDF2==3.0.1                      # PDF reading and manipulation
+python-multipart==0.0.20           # Form data parsing
 
-# Web Scraping & Research
-trafilatura>=1.6.0
-beautifulsoup4>=4.12.0
-ddgs>=0.1.0
-
-# Code Quality & Formatting
-black>=24.0.0
-ruff>=0.1.0
-isort>=5.13.0
+# -----------------------------------------------------------------------------
+# Development & Code Quality (optional - remove for production)
+# -----------------------------------------------------------------------------
+black==25.12.0                     # Code formatter
+ruff==0.9.0                        # Fast Python linter
+isort==5.13.2                      # Import sorting

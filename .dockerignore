@@ -1,0 +1,204 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.env.local
+.env.*.local
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+*.cover
+.hypothesis/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.coveragerc
+junit.xml
+
+# Documentation
+docs/
+*.md
+!README.md
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+chat_sessions.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+*.bak
+*.backup
+*.orig
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Git
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+azure-pipelines.yml
+Jenkinsfile
+
+# Docker
+.dockerignore
+Dockerfile.*
+docker-compose.yml
+docker-compose.*.yml
+
+# Development and testing files
+tests/
+test_*.py
+*_test.py
+scripts/
+examples/
+samples/
+
+# Cache directories
+.cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.sage.py
+
+# Package manager files
+poetry.lock
+Pipfile
+Pipfile.lock
+conda-meta/
+.conda/
+
+# Build artifacts
+*.o
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+*.out
+*.app
+
+# Media files (if not needed)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.ico
+*.mp4
+*.mov
+*.avi
+*.wmv
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints
+
+# Environment and config (keep .env.example if you have one)
+.env.production
+.env.development
+.env.test
+
+# Large data files
+*.csv
+*.json
+*.xml
+*.parquet
+data/
+datasets/
+
+# Monitoring and profiling
+*.prof
+*.lprof
+*.pstats
+
+# Security
+*.pem
+*.key
+*.cert
+*.crt
+*.csr
+secrets/
+.secrets/
+
+# Misc
+.editorconfig
+.pre-commit-config.yaml
+setup.py
+setup.cfg
+MANIFEST.in
+pyproject.toml.bak
+requirements.dev.txt
+requirements-dev.txt
+

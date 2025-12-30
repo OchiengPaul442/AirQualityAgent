@@ -1,486 +1,269 @@
-# System Architecture - Air Quality AI Agent
+# System Architecture
 
-## 🏗️ High-Level Architecture
+This document describes the architecture and design of the Air Quality AI Agent.
+
+## Overview
+
+The Air Quality AI Agent is a stateless, scalable AI system built with FastAPI that provides real-time air quality monitoring, analysis, and recommendations through multiple AI providers.
+
+## System Components
+
+### 1. API Layer (`src/api/`)
+
+**FastAPI Application:**
+
+- RESTful endpoints for chat, air quality queries, and MCP management
+- Automatic API documentation via OpenAPI
+- Rate limiting and security middleware
+- Health check endpoints
+
+**Key Files:**
+
+- `main.py`: Application entry point and configuration
+- `routes.py`: Endpoint definitions and routing
+- `models.py`: Pydantic models for request/response validation
+- `dependencies.py`: Dependency injection and utilities
+
+### 2. Service Layer (`src/services/`)
+
+**Agent Service (`agent_service.py`):**
+
+- Core AI agent logic with multi-provider support
+- Tool orchestration and execution
+- Conversation history management
+- Response caching and optimization
+
+**Data Services:**
+
+- `waqi_service.py`: World Air Quality Index API integration
+- `airqo_service.py`: AirQo network data access
+- `weather_service.py`: Weather data via Open-Meteo
+- `search_service.py`: Web search capabilities
+- `cache.py`: Redis and in-memory caching
+
+### 3. Tools Layer (`src/tools/`)
+
+**Utilities:**
+
+- `robust_scraper.py`: Web scraping with retry logic
+- `document_scanner.py`: PDF and text document analysis
+
+### 4. MCP Layer (`src/mcp/`)
+
+**Model Context Protocol:**
+
+- `server.py`: MCP server implementation for Claude Desktop integration
+- `client.py`: MCP client for connecting to external data sources
+
+### 5. Database Layer (`src/db/`)
+
+**SQLite Database:**
+
+- `database.py`: Database connection and session management
+- `models.py`: SQLAlchemy ORM models
+- `repository.py`: Data access patterns
+
+### 6. Configuration (`src/config.py`)
+
+Centralized settings management using Pydantic:
+
+- AI provider configuration
+- API keys and credentials
+- Database URLs
+- Cache settings
+- Feature flags
+
+## Architecture Patterns
+
+### Multi-Provider AI Support
+
+The agent supports multiple AI providers through a unified interface:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT SIDE                               │
-│  (Browser / Mobile App / Desktop)                                │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────┐       │
-│  │  Conversation Manager                                 │       │
-│  │  • Maintains history array in memory                  │       │
-│  │  • Sends history with each request                    │       │
-│  │  • Handles token counting & cost tracking             │       │
-│  │  • Local storage for persistence (optional)           │       │
-│  └──────────────────────────────────────────────────────┘       │
-│                           │                                       │
-└───────────────────────────┼───────────────────────────────────────┘
-                            │
-                            │ HTTPS (JSON)
-                            │ { message, history, save_to_db }
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     API GATEWAY LAYER                            │
-│                   (FastAPI - routes.py)                          │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ Rate Limiter │  │ Auth Check   │  │ Input Valid. │          │
-│  │ 20 req/60s   │→ │ (Optional)   │→ │ Pydantic     │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                              │                    │
-└──────────────────────────────────────────────┼──────────────────┘
+┌─────────────────┐
+│  Agent Service  │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │ Provider│
+    │ Factory │
+    └────┬────┘
+         │
+    ┌────┴────────────────┬──────────────┐
+    │                     │              │
+┌───▼────┐         ┌──────▼───┐    ┌────▼─────┐
+│ Gemini │         │  OpenAI  │    │  Ollama  │
+└────────┘         └──────────┘    └──────────┘
+```
+
+Each provider implements:
+
+- Message processing
+- Tool calling and execution
+- History management
+
+### Tool Execution Flow
+
+```
+User Query → Agent Service → AI Provider → Tool Selection
                                                │
-                                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    SERVICE LAYER                                 │
-│                  (agent_service.py)                              │
-│                                                                   │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  1. Check Cache (MD5 hash of message + history)     │        │
-│  │     • Educational queries: CACHE HIT → Return        │        │
-│  │     • City/real-time: BYPASS → Continue              │        │
-│  └─────────────────────────────────────────────────────┘        │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  2. Build Context                                    │        │
-│  │     • System instructions                            │        │
-│  │     • Conversation history from client               │        │
-│  │     • Available tools (WAQI, AirQo, Weather)         │        │
-│  └─────────────────────────────────────────────────────┘        │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  3. Call AI Provider                                 │        │
-│  │     • Gemini / OpenAI / Ollama                       │        │
-│  │     • Async streaming                                │        │
-│  │     • Tool calling support                           │        │
-│  └─────────────────────────────────────────────────────┘        │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  4. Execute Tools (if needed)                        │        │
-│  │     ┌────────────┐  ┌────────────┐  ┌────────────┐  │        │
-│  │     │ WAQI API   │  │ AirQo API  │  │ Weather    │  │        │
-│  │     │ (80K sites)│  │ (588 sites)│  │ Open-Meteo │  │        │
-│  │     └────────────┘  └────────────┘  └────────────┘  │        │
-│  │                                                       │        │
-│  │     Each tool:                                        │        │
-│  │     • Fetches data from external API                 │        │
-│  │     • Caches response (1 hour)                       │        │
-│  │     • Formats to 1 decimal place                     │        │
-│  │     • Returns to AI for synthesis                    │        │
-│  └─────────────────────────────────────────────────────┘        │
-│                           │                                       │
-│                           ▼                                       │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  5. Format & Cache Response                          │        │
-│  │     • Educational queries: Cache for 1 hour          │        │
-│  │     • City-specific: No caching (real-time)          │        │
-│  │     • Track tokens used                              │        │
-│  └─────────────────────────────────────────────────────┘        │
-└─────────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATA LAYER                                    │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ Redis Cache  │  │ SQLite DB    │  │ External APIs│          │
-│  │              │  │              │  │              │          │
-│  │ • Responses  │  │ • Saved      │  │ • WAQI       │          │
-│  │ • API data   │  │   convos     │  │ • AirQo      │          │
-│  │ • Rate limit │  │ • Sessions   │  │ • Weather    │          │
-│  │   counters   │  │   (optional) │  │              │          │
-│  │              │  │              │  │              │          │
-│  │ TTL: 1 hour  │  │ Permanent    │  │ 3rd party    │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-└─────────────────────────────────────────────────────────────────┘
+                          ┌────────────────────┘
+                          ▼
+                    Tool Executor
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+    ┌───▼───┐      ┌──────▼─────┐    ┌─────▼────┐
+    │ WAQI  │      │   AirQo    │    │ Weather  │
+    └───────┘      └────────────┘    └──────────┘
+        │                 │                 │
+        └─────────────────┼─────────────────┘
+                          ▼
+                    AI Provider → Final Response
 ```
 
----
+### Caching Strategy
 
-## 🔄 Request Flow (Detailed)
-
-### **Scenario 1: Educational Query (Cacheable)**
+Two-tier caching system for optimal performance:
 
 ```
-User: "What is PM2.5?"
-│
-├─► API Gateway
-│   ├─► Rate Limit Check: ✅ PASS (5/20 requests)
-│   └─► Input Validation: ✅ VALID
-│
-├─► Agent Service
-│   ├─► Cache Check
-│   │   ├─► Generate MD5: hash("What is PM2.5?" + [])
-│   │   ├─► Redis Lookup: ❌ MISS (first time)
-│   │   └─► Continue to AI
-│   │
-│   ├─► AI Provider (Gemini)
-│   │   ├─► System: "You are an air quality expert..."
-│   │   ├─► User: "What is PM2.5?"
-│   │   ├─► Tools: None needed
-│   │   └─► Response: "PM2.5 refers to particulate matter..."
-│   │
-│   └─► Cache Response
-│       ├─► Store in Redis (TTL: 3600s)
-│       └─► Return to user
-│
-└─► Response
-    ├─► "response": "PM2.5 refers to..."
-    ├─► "tokens_used": 450
-    ├─► "cached": false
-    └─► "tools_used": []
-
-──────────────────────────────────────────
-
-User asks SAME question again:
-│
-├─► API Gateway: ✅
-│
-├─► Agent Service
-│   ├─► Cache Check
-│   │   ├─► Generate MD5: hash("What is PM2.5?" + [])
-│   │   ├─► Redis Lookup: ✅ HIT!
-│   │   └─► Return cached response
-│   │
-│   └─► Skip AI call entirely
-│
-└─► Response
-    ├─► "response": "PM2.5 refers to..." (same as before)
-    ├─► "tokens_used": 0 (no AI call!)
-    ├─► "cached": true ⚡
-    └─► "tools_used": []
-
-💰 COST SAVINGS: 100% for this request
-⏱️ SPEED: 3s → 50ms (60x faster)
+Request → Cache Check
+            │
+    ┌───────┴────────┐
+    │                │
+Yes │                │ No
+    ▼                ▼
+Return Cached   Execute Query
+Response        → Cache Result
+                → Return Response
 ```
 
----
+**Caching Rules:**
 
-### **Scenario 2: City-Specific Query (Real-Time)**
+- Educational queries: 1 hour TTL
+- Real-time data: Never cached
+- Uses Redis when available, falls back to in-memory
 
-```
-User: "What's the air quality in Nairobi?"
-│
-├─► API Gateway: ✅
-│
-├─► Agent Service
-│   ├─► Cache Check
-│   │   ├─► Detect keywords: "nairobi", "current"
-│   │   └─► BYPASS cache (real-time data)
-│   │
-│   ├─► AI Provider (Gemini)
-│   │   ├─► Recognizes need for real-time data
-│   │   ├─► Tool Call: get_city_feed(city="Nairobi")
-│   │   └─► Waits for tool result
-│   │
-│   ├─► WAQI Service
-│   │   ├─► Check Redis cache for API response
-│   │   ├─► Cache MISS → Call WAQI API
-│   │   ├─► Receive: {"aqi": 45, "pm25": 12.7, ...}
-│   │   ├─► Format to 1 decimal: {"aqi": 45.0, "pm25": 12.7}
-│   │   ├─► Cache API response (TTL: 3600s)
-│   │   └─► Return to AI
-│   │
-│   ├─► AI Synthesizes Response
-│   │   ├─► "The current air quality in Nairobi is Good..."
-│   │   └─► Does NOT cache (city-specific)
-│   │
-│   └─► Return to user
-│
-└─► Response
-    ├─► "response": "The current air quality in Nairobi..."
-    ├─► "tokens_used": 520
-    ├─► "cached": false
-    └─► "tools_used": ["waqi_api"]
+### Error Handling
 
-📍 Real-time data, not cached
-🔄 API data cached separately (1 hour)
-```
+Robust error handling with fallback mechanisms:
 
----
+1. Tool execution errors: Return error message to AI for interpretation
+2. AI provider errors: Log and return user-friendly message
+3. Network errors: Retry with exponential backoff
+4. Empty responses: Fallback to direct prompt without tools
 
-### **Scenario 3: Contextual Follow-Up**
+## Data Flow
+
+### Standard Chat Request
 
 ```
-User: "What's the air in Nairobi?"
-Response: "The air quality in Nairobi is Good (AQI 45)..."
-
-──────────────────────────────────────────
-
-User: "What about tomorrow?"
-│
-├─► Client sends HISTORY:
-│   [
-│     {"role": "user", "content": "What's the air in Nairobi?"},
-│     {"role": "assistant", "content": "The air quality..."}
-│   ]
-│
-├─► API Gateway: ✅
-│
-├─► Agent Service
-│   ├─► Cache Check: BYPASS (contains "tomorrow", "nairobi")
-│   │
-│   ├─► AI Provider (Gemini)
-│   │   ├─► System instructions
-│   │   ├─► History (understands context!)
-│   │   ├─► Current: "What about tomorrow?"
-│   │   └─► Tool Call: get_forecast(city="Nairobi")
-│   │
-│   ├─► Weather Service
-│   │   ├─► Geocode Nairobi → lat/lon
-│   │   ├─► Call Open-Meteo forecast API
-│   │   ├─► Format data to 1 decimal
-│   │   └─► Return to AI
-│   │
-│   └─► AI Synthesizes
-│       └─► "Tomorrow in Nairobi, the forecast shows..."
-│
-└─► Response
-    ├─► "response": "Tomorrow in Nairobi..."
-    ├─► "tokens_used": 480
-    ├─► "cached": false
-    └─► "tools_used": ["weather_api"]
-
-🧠 Context-aware (knows we're talking about Nairobi)
-📅 Forecast data provided
+1. Client sends message with optional history
+2. Agent Service checks cache
+3. If not cached:
+   a. Format message for AI provider
+   b. AI selects and calls tools
+   c. Tools fetch data from external APIs
+   d. AI generates final response
+4. Response cached (if applicable)
+5. Return response with metadata
 ```
 
----
-
-## 🎯 Caching Strategy
-
-### **What Gets Cached:**
-
-```python
-CACHEABLE_PATTERNS = [
-    "what is",          # "What is PM2.5?"
-    "what are",         # "What are the health effects?"
-    "why is",           # "Why is air quality important?"
-    "how does",         # "How does pollution affect health?"
-    "explain",          # "Explain the AQI scale"
-    "tell me about",    # "Tell me about air pollution"
-    "definition",       # "Definition of PM10"
-]
-
-BYPASS_CACHE_IF_CONTAINS = [
-    "nairobi", "kampala", "lagos",  # City names
-    "current", "now", "today",      # Time-sensitive
-    "latest", "real-time",          # Real-time data
-    "forecast", "tomorrow",         # Future data
-]
-```
-
-### **Cache Key Generation:**
-
-```python
-import hashlib
-
-def generate_cache_key(message: str, history: list) -> str:
-    """
-    Create unique cache key from message + history
-    """
-    # Normalize message
-    normalized = message.lower().strip()
-
-    # Include last 3 messages for context
-    recent_history = history[-3:] if len(history) > 3 else history
-
-    # Serialize
-    context = f"{normalized}|{json.dumps(recent_history)}"
-
-    # Hash
-    return hashlib.md5(context.encode()).hexdigest()
-
-# Example:
-# Input: "What is PM2.5?" + []
-# Key: "a1b2c3d4e5f6..." (32 chars)
-```
-
----
-
-## 📊 Data Formatting Pipeline
+### Direct Air Quality Query
 
 ```
-External API Response
-│
-├─► {"pm25": 12.66667, "pm10": 23.12345, "aqi": 45}
-│
-▼
-data_formatter.py
-│
-├─► format_number(12.66667, decimal_places=1)
-│   └─► 12.7
-│
-├─► format_number(23.12345, decimal_places=1)
-│   └─► 23.1
-│
-├─► format_number(45, decimal_places=1)
-│   └─► 45.0
-│
-▼
-Formatted Response
-│
-├─► {
-│     "pm25": 12.7,
-│     "pm10": 23.1,
-│     "aqi": 45.0,
-│     "_formatted": true,
-│     "_source": "waqi",
-│     "_accuracy_note": "Values formatted to 1 decimal place"
-│   }
-│
-▼
-Returned to AI for synthesis
-│
-▼
-User sees: "PM2.5: 12.7 µg/m³"
+1. Client requests city data
+2. API routes to appropriate service (WAQI/AirQo)
+3. Service fetches from external API
+4. Data formatted and returned
+5. No AI processing involved
 ```
 
----
+## Scalability Features
 
-## 🔐 Security Layers
+### Stateless Design
 
-```
-┌────────────────────────────────────────┐
-│  1. Rate Limiting (20 req/60s per IP)  │
-│     • Prevents abuse                    │
-│     • Configurable per environment      │
-└────────────────────────────────────────┘
-                 │
-                 ▼
-┌────────────────────────────────────────┐
-│  2. Input Validation (Pydantic)         │
-│     • Type checking                     │
-│     • Required fields                   │
-│     • Max length limits                 │
-└────────────────────────────────────────┘
-                 │
-                 ▼
-┌────────────────────────────────────────┐
-│  3. API Key Protection                  │
-│     • Environment variables only        │
-│     • Never in code                     │
-│     • .env in .gitignore                │
-└────────────────────────────────────────┘
-                 │
-                 ▼
-┌────────────────────────────────────────┐
-│  4. CORS Configuration                  │
-│     • Whitelist allowed origins         │
-│     • Proper headers                    │
-└────────────────────────────────────────┘
-```
+- No server-side session storage required
+- Clients manage conversation history
+- Enables horizontal scaling without session affinity
 
----
+### Async Operations
 
-## 💰 Cost Breakdown (100K Users/Month)
+- Non-blocking I/O throughout
+- Concurrent tool execution when possible
+- Thread pool for CPU-bound operations
 
-### **WITHOUT Optimizations:**
+### Resource Optimization
 
-```
-┌─────────────────────────┬─────────┬──────────┐
-│ Component               │ Calls   │ Cost     │
-├─────────────────────────┼─────────┼──────────┤
-│ AI API (Gemini)         │ 500K    │ $2,000   │
-│ WAQI API                │ 300K    │ $300     │
-│ AirQo API (free)        │ 100K    │ $0       │
-│ Database writes         │ 1M      │ $400     │
-│ Server compute          │ 730h    │ $500     │
-│ Redis cache             │ 730h    │ $100     │
-│ Storage                 │ 100GB   │ $400     │
-├─────────────────────────┼─────────┼──────────┤
-│ TOTAL                   │         │ $3,700   │
-└─────────────────────────┴─────────┴──────────┘
-```
+- Connection pooling for database and HTTP
+- Lazy loading of AI clients
+- Efficient memory management
 
-### **WITH Optimizations:**
+## Security Considerations
+
+### API Key Protection
+
+- All API keys stored in environment variables
+- Automatic sanitization of sensitive fields in responses
+- Never log credentials
+
+### Input Validation
+
+- Pydantic models for request validation
+- SQL injection prevention via ORM
+- XSS prevention in responses
+
+### Rate Limiting
+
+- Per-IP rate limits to prevent abuse
+- Configurable limits via environment variables
+- 429 status code for exceeded limits
+
+## Deployment Architecture
+
+### Development
 
 ```
-┌─────────────────────────┬─────────┬──────────┬───────────┐
-│ Component               │ Calls   │ Cost     │ Savings   │
-├─────────────────────────┼─────────┼──────────┼───────────┤
-│ AI API (65% cached)     │ 175K    │ $700     │ -65% ⬇️   │
-│ WAQI API (cached)       │ 100K    │ $100     │ -67% ⬇️   │
-│ AirQo API (free)        │ 50K     │ $0       │ -50% ⬇️   │
-│ Database writes         │ 100K    │ $40      │ -90% ⬇️   │
-│ Server compute          │ 730h    │ $500     │ 0%        │
-│ Redis cache             │ 730h    │ $180     │ +80% ⬆️   │
-│ Storage                 │ 10GB    │ $100     │ -75% ⬇️   │
-├─────────────────────────┼─────────┼──────────┼───────────┤
-│ TOTAL                   │         │ $1,820   │ -51% 🎉   │
-└─────────────────────────┴─────────┴──────────┴───────────┘
+Local Machine
+├── Python venv
+├── SQLite database
+├── In-memory cache
+└── Ollama (optional)
 ```
 
----
-
-## 🚀 Scalability Model
+### Production
 
 ```
-┌──────────────────┬──────────┬────────────┬─────────────┐
-│ Users/Month      │ Req/Sec  │ Instances  │ Cost/Month  │
-├──────────────────┼──────────┼────────────┼─────────────┤
-│ 10K              │ 5        │ 1          │ $420        │
-│ 100K             │ 50       │ 2          │ $1,820      │
-│ 500K             │ 250      │ 5          │ $8,510      │
-│ 1M               │ 500      │ 10         │ $17,020     │
-│ 5M               │ 2,500    │ 50         │ $85,100     │
-└──────────────────┴──────────┴────────────┴─────────────┘
-
-Each instance:
-• 2 vCPU, 4GB RAM
-• Handles ~50 req/sec
-• Horizontal scaling (stateless)
-• Load balancer distributes traffic
+┌─────────────────┐
+│  Load Balancer  │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+┌───▼────┐ ┌──▼─────┐
+│ API 1  │ │ API 2  │  (Multiple instances)
+└───┬────┘ └───┬────┘
+    │          │
+    └────┬─────┘
+         │
+    ┌────▼────┐
+    │  Redis  │  (Shared cache)
+    └─────────┘
 ```
 
----
+## Technology Stack
 
-## 📈 Performance Metrics
+- **Framework:** FastAPI (async Python web framework)
+- **AI Providers:** Google Gemini, OpenAI, Ollama
+- **Database:** SQLite (development), PostgreSQL (production recommended)
+- **Caching:** Redis with in-memory fallback
+- **HTTP Client:** requests library with retry logic
+- **Validation:** Pydantic models
+- **Logging:** Python logging module
 
-### **Response Times:**
+## Performance Characteristics
 
-```
-┌────────────────────────┬────────────┬─────────────┐
-│ Request Type           │ Before     │ After       │
-├────────────────────────┼────────────┼─────────────┤
-│ Cached educational     │ 3-5s       │ 50-100ms    │
-│ Uncached AI            │ 3-5s       │ 2-4s        │
-│ With WAQI tool         │ 5-8s       │ 3-6s        │
-│ With multiple tools    │ 8-12s      │ 5-9s        │
-└────────────────────────┴────────────┴─────────────┘
-```
-
-### **Throughput:**
-
-```
-┌────────────────────────┬────────────┬─────────────┐
-│ Configuration          │ Req/Sec    │ Concurrent  │
-├────────────────────────┼────────────┼─────────────┤
-│ Single instance        │ 50         │ 100         │
-│ With Redis caching     │ 500        │ 1,000       │
-│ 5 instances (LB)       │ 2,500      │ 5,000       │
-└────────────────────────┴────────────┴─────────────┘
-```
-
----
-
-## 🎯 Success Criteria
-
-After implementation, verify:
-
-- ✅ **Cache hit rate: 60-80%** for educational queries
-- ✅ **Database writes: <10%** of total requests
-- ✅ **Response time: <100ms** for cached queries
-- ✅ **Rate limit: 429 errors** for excessive requests
-- ✅ **Data accuracy: 1 decimal** on all numeric values
-- ✅ **Token tracking: Present** in all responses
-- ✅ **Context retention: Works** with client-side history
-
----
-
-**Architecture Version:** 2.0 (Optimized)  
-**Last Updated:** December 30, 2025
+- **Response Time:** 1-3 seconds (depending on tool usage)
+- **Throughput:** 100+ requests/second per instance
+- **Cache Hit Rate:** 60-80% for educational queries
+- **Cost Reduction:** 51-54% via caching and optimization

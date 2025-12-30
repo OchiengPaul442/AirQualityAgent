@@ -1,0 +1,89 @@
+services:
+  # Air Quality AI Agent API
+  airquality-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: airquality-agent
+    ports:
+      - "8000:8000"
+    environment:
+      # AI Provider Configuration
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - AI_MODEL=${AI_MODEL:-gemini-2.5-flash}
+      - AI_API_KEY=${AI_API_KEY}
+
+      # OpenAI/Ollama Configuration (if needed)
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+
+      # Database
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./chat_sessions.db}
+
+      # Data Sources
+      - WAQI_API_KEY=${WAQI_API_KEY}
+      - AIRQO_API_TOKEN=${AIRQO_API_TOKEN}
+
+      # Redis Configuration
+      - REDIS_ENABLED=${REDIS_ENABLED:-true}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # Cache Settings
+      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
+    depends_on:
+      - redis
+    volumes:
+      - ./chat_sessions.db:/app/chat_sessions.db
+    restart: unless-stopped
+    networks:
+      - airquality-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: airquality-redis
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass} ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - airquality-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Ollama (Optional - for local AI)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: airquality-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - airquality-network
+    profiles:
+      - ollama
+
+volumes:
+  redis-data:
+    driver: local
+  ollama-data:
+    driver: local
+
+networks:
+  airquality-network:
+    driver: bridge

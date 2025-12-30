@@ -605,6 +605,16 @@ If you have the information, provide the final response directly.
                     logger.info(f"Gemini requested tool execution: {function_name}")
 
                     tool_result = self._execute_tool(function_name, function_args)
+                    
+                    # Check if tool execution failed
+                    if isinstance(tool_result, dict) and "error" in tool_result:
+                        logger.warning(f"Tool {function_name} failed: {tool_result['error']}")
+                        # Provide context to AI about the error so it can respond appropriately
+                        error_context = {
+                            "error": tool_result["error"],
+                            "message": f"The tool '{function_name}' encountered an error. Please provide an informative response to the user explaining what went wrong and suggest alternatives if possible."
+                        }
+                        tool_result = error_context
 
                     # Send tool result back to model
                     response = chat.send_message(
@@ -620,8 +630,15 @@ If you have the information, provide the final response directly.
                     )
                     break
 
+        # Ensure we have a valid response
+        final_response = response.text if response.text else ""
+        
+        if not final_response or not final_response.strip():
+            logger.warning("Gemini returned empty response. Providing fallback message.")
+            final_response = "I apologize, but I wasn't able to retrieve the requested information at this time. This could be due to data unavailability or connectivity issues with the data sources. Please try:\n\n1. Asking about a different location\n2. Rephrasing your question\n3. Checking back in a few moments\n\nIs there anything else I can help you with?"
+
         return {
-            "response": response.text if response.text else "No response generated.",
+            "response": final_response,
             "tools_used": tools_used,
         }
 
@@ -677,6 +694,16 @@ If you have the information, provide the final response directly.
                 )
 
                 tool_result = self._execute_tool(function_name, function_args)
+                
+                # Check if tool execution failed
+                if isinstance(tool_result, dict) and "error" in tool_result:
+                    logger.warning(f"Tool {function_name} failed: {tool_result['error']}")
+                    # Provide context to AI about the error so it can respond appropriately
+                    error_context = {
+                        "error": tool_result["error"],
+                        "message": f"The tool '{function_name}' encountered an error. Please provide an informative response to the user explaining what went wrong and suggest alternatives if possible."
+                    }
+                    tool_result = error_context
 
                 # Add tool response to messages - convert message to dict
                 assistant_msg = response.choices[0].message
@@ -736,18 +763,29 @@ If you have the information, provide the final response directly.
 
         # Ensure we always have a response
         if not response_text or not response_text.strip():
-            logger.warning("Empty response from API. Attempting direct response without tools.")
-            # If model didn't use tools or returned empty, try direct prompt
+            logger.warning("Empty response from API. Attempting enhanced fallback.")
+            # Enhanced fallback with more context
             try:
-                direct_prompt = f"{message}\n\nNote: I have access to real-time air quality data from WAQI (global cities) and AirQo (African cities), weather information, and web search capabilities. Please provide a helpful response based on this context."
+                fallback_prompt = f"""The user asked: "{message}"
+
+I attempted to get information using available tools, but the response was empty or incomplete. 
+
+Please provide a helpful response that:
+1. Acknowledges the user's question
+2. Explains that the specific data they requested may not be available at the moment
+3. Suggests alternative approaches or locations they could try
+4. Offers to help with related questions
+
+Be professional, empathetic, and solution-oriented."""
+
                 direct_response = self.client.chat.completions.create(
                     model=self.settings.AI_MODEL,
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are an air quality and environmental health consultant. Provide professional, detailed advice.",
+                            "content": "You are a professional air quality and environmental health consultant. When data is unavailable, provide helpful alternatives and maintain a positive, solution-oriented tone.",
                         },
-                        {"role": "user", "content": direct_prompt},
+                        {"role": "user", "content": fallback_prompt},
                     ],
                     max_tokens=2048,
                     temperature=0.7,
@@ -755,11 +793,15 @@ If you have the information, provide the final response directly.
                 )
                 response_text = direct_response.choices[0].message.content
                 logger.info(
-                    f"Direct response generated. Length: {len(response_text) if response_text else 0}"
+                    f"Fallback response generated. Length: {len(response_text) if response_text else 0}"
                 )
+                
+                # If still no response, use a default message
+                if not response_text or not response_text.strip():
+                    response_text = "I apologize, but I'm unable to retrieve the specific air quality data you requested at this moment. This could be due to:\n\n• The location not being covered by our monitoring networks\n• Temporary connectivity issues with data sources\n• The monitoring station being offline\n\nPlease try:\n1. A nearby major city (e.g., capital cities usually have monitoring stations)\n2. Rephrasing your question\n3. Checking back in a few moments\n\nI can also help you with general air quality information, health recommendations, or data from other locations."
             except Exception as e:
-                logger.error(f"Direct response fallback failed: {e}")
-                response_text = "I apologize, but I'm having difficulty accessing the information right now. Please try rephrasing your question or check back shortly."
+                logger.error(f"Fallback response generation failed: {e}")
+                response_text = "I apologize, but I'm experiencing technical difficulties retrieving the requested information. Please try again in a moment, or ask about a different location. I'm here to help with air quality information whenever you're ready."
 
         return {
             "response": response_text
@@ -1472,10 +1514,18 @@ If you have the information, provide the final response directly.
                 tool = DocumentScannerTool(file_path=file_path)
                 return tool.handle()
             else:
-                return {"error": f"Unknown function {function_name}"}
+                return {
+                    "error": f"Unknown function {function_name}",
+                    "guidance": "This tool is not available. Please inform the user and suggest alternative approaches."
+                }
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
-            return {"error": str(e)}
+            # Return a structured error that helps the AI provide a better response
+            return {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source."
+            }
 
     async def _execute_tool_async(self, function_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """Execute the requested tool asynchronously"""
@@ -1553,7 +1603,15 @@ If you have the information, provide the final response directly.
                 tool = DocumentScannerTool(file_path=file_path)
                 return await loop.run_in_executor(None, tool.handle)
             else:
-                return {"error": f"Unknown function {function_name}"}
+                return {
+                    "error": f"Unknown function {function_name}",
+                    "guidance": "This tool is not available. Please inform the user and suggest alternative approaches."
+                }
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
-            return {"error": str(e)}
+            # Return a structured error that helps the AI provide a better response
+            return {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source."
+            }

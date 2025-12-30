@@ -255,14 +255,39 @@ Test coverage includes all services: AirQo, WAQI, Weather, Scraper, Search, Docu
 
 ## Documentation
 
-- `docs/QUICK_START.md`: Get started quickly with examples.
-- `docs/IMPLEMENTATION_SUMMARY.md`: Feature overview.
-- `docs/CLIENT_INTEGRATION_GUIDE.md`: Integration examples.
-- `docs/TESTING_GUIDE.md`: Testing scenarios.
-- `docs/ARCHITECTURE.md`: System architecture.
-- `docs/COST_OPTIMIZATION_GUIDE.md`: Deployment guide.
-- `docs/MCP_CONNECTION_GUIDE.md`: MCP integration.
-- Additional guides in the `docs/` directory.
+Complete guides are available in the `docs/` directory:
+
+- **[Getting Started](docs/GETTING_STARTED.md)** - Installation and setup guide
+- **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and architecture
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment
+- **[Docker Guide](docs/DOCKER.md)** - Container-based deployment
+- **[MCP Integration](docs/MCP_GUIDE.md)** - Model Context Protocol guide
+
+## Docker Deployment
+
+Quick start with Docker:
+
+```bash
+# Clone and configure
+git clone https://github.com/OchiengPaul442/AirQualityAgent.git
+cd AirQualityAgent
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run with Docker Compose
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f airquality-agent
+```
+
+Access the API at `http://localhost:8000`
+
+See [docs/DOCKER.md](docs/DOCKER.md) for detailed Docker deployment instructions.
 
 ## Development
 
