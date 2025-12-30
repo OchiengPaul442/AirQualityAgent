@@ -6,6 +6,7 @@ import time
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -31,6 +32,7 @@ from src.db.repository import (
 )
 from src.services.agent_service import AgentService
 from src.services.airqo_service import AirQoService
+from src.services.openmeteo_service import OpenMeteoService
 from src.services.waqi_service import WAQIService
 
 router = APIRouter()
@@ -298,9 +300,9 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         # This ensures the agent sees the full context of previous exchanges
         history_objs = get_recent_session_history(db, session_id, max_messages=20)
         
-        # Convert to format expected by agent
-        history = [
-            {"role": m.role, "content": m.content} 
+        # Convert to format expected by agent - explicitly convert to str to avoid type issues
+        history: list[dict[str, str]] = [
+            {"role": str(m.role), "content": str(m.content)} 
             for m in history_objs
         ]
         
@@ -349,65 +351,112 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 @router.post("/air-quality/query")
 async def query_air_quality(request: AirQualityQueryRequest):
     """
-    Direct air quality data query endpoint.
+    Unified air quality data query endpoint with intelligent multi-source fallback.
     
-    **Intelligent Failure Handling:**
-    - Only returns successful API responses
-    - If one source fails, returns data from the other
-    - If both fail, returns 404 with error details
+    **Data Source Strategy:**
+    - Queries WAQI and AirQo by city name
+    - Queries Open-Meteo if coordinates provided
+    - Returns all successful responses
+    - Supports forecast data (Open-Meteo only)
+    - Gracefully handles failures
     
-    **Example Response (Success):**
+    **Request Parameters:**
+    - city: City name (for WAQI and AirQo)
+    - latitude/longitude: Coordinates (for Open-Meteo)
+    - include_forecast: Set to true to include forecast data
+    - forecast_days: Number of forecast days (1-7, default: 5)
+    - timezone: Timezone for Open-Meteo (default: auto)
+    
+    **Example Response:**
     ```json
     {
         "waqi": { ... },
-        "airqo": { ... }
+        "airqo": { ... },
+        "openmeteo": {
+            "current": { ... },
+            "forecast": { ... }
+        }
     }
     ```
     """
-    try:
-        results = {}
-        errors = {}
+    results: dict[str, Any] = {}
+    errors: dict[str, str] = {}
 
-        # Try WAQI API
-        if "waqi" in settings.ENABLED_DATA_SOURCES:
+    try:
+        # Try WAQI API for city-based queries
+        if "waqi" in settings.ENABLED_DATA_SOURCES and request.city:
             try:
                 waqi = WAQIService()
                 waqi_data = waqi.get_city_feed(request.city)
                 if waqi_data and waqi_data.get("status") == "ok":
                     results["waqi"] = sanitize_response(waqi_data)
-                else:
-                    errors["waqi"] = "No data available"
             except Exception as e:
                 logger.warning(f"WAQI API failed for {request.city}: {str(e)}")
-                errors["waqi"] = f"WAQI API error: {str(e)}"
+                errors["waqi"] = str(e)
 
-        # Try AirQo API
-        if "airqo" in settings.ENABLED_DATA_SOURCES:
+        # Try AirQo API for African city queries
+        if "airqo" in settings.ENABLED_DATA_SOURCES and request.city:
             try:
                 airqo = AirQoService()
                 airqo_data = airqo.get_recent_measurements(city=request.city)
                 if airqo_data and airqo_data.get("success"):
                     results["airqo"] = sanitize_response(airqo_data)
-                else:
-                    errors["airqo"] = "No data available"
             except Exception as e:
                 logger.warning(f"AirQo API failed for {request.city}: {str(e)}")
-                errors["airqo"] = f"AirQo API error: {str(e)}"
+                errors["airqo"] = str(e)
 
-        # Return only if we have at least one successful result
+        # Try Open-Meteo API if coordinates are provided
+        if (
+            "openmeteo" in settings.ENABLED_DATA_SOURCES
+            and request.latitude is not None
+            and request.longitude is not None
+        ):
+            try:
+                openmeteo = OpenMeteoService()
+                openmeteo_result = {}
+                
+                # Get current air quality (always)
+                current_data = openmeteo.get_current_air_quality(
+                    latitude=request.latitude,
+                    longitude=request.longitude,
+                    timezone=request.timezone
+                )
+                if current_data:
+                    openmeteo_result["current"] = current_data
+                
+                # Get forecast if requested
+                if request.include_forecast:
+                    forecast_days = request.forecast_days or 5
+                    forecast_data = openmeteo.get_hourly_forecast(
+                        latitude=request.latitude,
+                        longitude=request.longitude,
+                        forecast_days=forecast_days,
+                        timezone=request.timezone
+                    )
+                    if forecast_data:
+                        openmeteo_result["forecast"] = forecast_data
+                
+                if openmeteo_result:
+                    results["openmeteo"] = sanitize_response(openmeteo_result)
+            except Exception as e:
+                logger.warning(f"Open-Meteo API failed: {str(e)}")
+                errors["openmeteo"] = str(e)
+
+        # Return results if any source succeeded
         if results:
             return results
-        
-        # If both failed, return 404 with error details
+
+        # All sources failed
+        location = request.city if request.city else f"({request.latitude}, {request.longitude})"
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail={
-                "message": f"No air quality data found for {request.city}",
+                "message": f"No air quality data found for {location}",
                 "errors": errors,
-                "suggestion": "Try a different city name or check if the location is covered by our data sources"
+                "suggestion": "Try a different location or provide coordinates for Open-Meteo"
             }
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

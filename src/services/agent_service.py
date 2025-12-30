@@ -33,6 +33,7 @@ from src.config import get_settings
 from src.mcp.client import MCPClient
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
+from src.services.openmeteo_service import OpenMeteoService
 from src.services.search_service import SearchService
 from src.services.waqi_service import WAQIService
 from src.services.weather_service import WeatherService
@@ -46,6 +47,7 @@ class AgentService:
     def __init__(self):
         self.waqi = WAQIService()
         self.airqo = AirQoService()
+        self.openmeteo = OpenMeteoService()
         self.weather = WeatherService()
         self.scraper = RobustScraper()
         self.search = SearchService()
@@ -88,6 +90,7 @@ class AgentService:
             self.gemini_tools = [
                 self._get_gemini_waqi_tool(),
                 self._get_gemini_airqo_tool(),
+                self._get_gemini_openmeteo_tool(),
                 self._get_gemini_weather_tool(),
                 self._get_gemini_search_tool(),
                 self._get_gemini_scrape_tool(),
@@ -125,6 +128,7 @@ class AgentService:
             self.openai_tools = []
             self.openai_tools.extend(waqi_tools)
             self.openai_tools.extend(airqo_tools)
+            self.openai_tools.extend(self._get_openai_openmeteo_tool())
             self.openai_tools.append(self._get_openai_weather_tool())
             self.openai_tools.append(self._get_openai_search_tool())
             self.openai_tools.append(self._get_openai_scrape_tool())
@@ -152,7 +156,7 @@ You are the Air Quality AI Agent, a sophisticated multi-role environmental intel
 - Successful interventions from China (40% PM2.5 reduction), India, Mexico City
 - African-specific challenges: 4 of 5 people use polluting cooking fuels, only 17 of 54 countries have AQ standards
 - 14 critical AI agent roles needed for Africa's air quality ecosystem
-- Real-time data from WAQI (80,000+ sensors globally) and AirQo (16+ African cities)
+- Real-time data from WAQI (80,000+ sensors globally), AirQo (16+ African cities), and Open-Meteo (free global CAMS data)
 
 **Senior Researcher Mode**: When users request detailed research, plans, policies, or comprehensive analysis, you transform into a Senior Air Quality Researcher with expertise in:
 - Environmental science and epidemiology
@@ -332,6 +336,26 @@ You must detect the user's expertise level and adapt your response:
 - **Citation**: When using web search, cite sources with links
 - **Direct Tool Calls**: When you need data, call the tool IMMEDIATELY. Do not describe your plan. Do not say "I will check...". Just call the tool
 - **Forecast Note**: For AirQo forecasts, if location is mentioned, search for site_id first. For WAQI, forecast data is included in regular city feed response
+
+**Data Source Selection Strategy**:
+- **WAQI**: Best for city-level data by name (e.g., "London", "New York", "Nairobi"). Use get_city_air_quality for named cities.
+- **AirQo**: Specialized for African cities, especially East Africa (Kampala, Nairobi, etc.). Use get_african_city_air_quality for African locations.
+- **Open-Meteo**: Perfect for:
+  - Locations with known coordinates (latitude/longitude)
+  - Global coverage where WAQI/AirQo may not have stations
+  - When user needs historical data or multi-day forecasts (up to 7 days)
+  - When both European and US AQI indices are needed
+  - Requires no API key (always available)
+  - Use get_openmeteo_current_air_quality for current conditions
+  - Use get_openmeteo_forecast for hourly forecasts (up to 7 days)
+  - Use get_openmeteo_historical for past data analysis
+
+**Tool Selection Priority**:
+1. For named cities: Try WAQI first (get_city_air_quality)
+2. For African cities: Also try AirQo (get_african_city_air_quality)
+3. For coordinates or when city name fails: Use Open-Meteo (get_openmeteo_current_air_quality)
+4. For forecasts: Use Open-Meteo for detailed hourly forecasts
+5. For historical analysis: Use Open-Meteo (get_openmeteo_historical)
 
 **Examples of Automatic Search Triggers**:
 - "latest WHO guidelines" → search_web automatically
@@ -1184,6 +1208,181 @@ Be professional, empathetic, and solution-oriented."""
             },
         ]
 
+    def _get_gemini_openmeteo_tool(self):
+        return types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="get_openmeteo_current_air_quality",
+                    description="Get current air quality data for any global location using Open-Meteo (CAMS). Provides comprehensive pollutant data and both European & US AQI indices. No API key needed, covers worldwide.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "latitude": types.Schema(
+                                type=types.Type.NUMBER,
+                                description="Latitude of the location",
+                            ),
+                            "longitude": types.Schema(
+                                type=types.Type.NUMBER,
+                                description="Longitude of the location",
+                            ),
+                            "timezone": types.Schema(
+                                type=types.Type.STRING,
+                                description="Timezone (auto, GMT, or IANA timezone like Europe/Berlin)",
+                            ),
+                        },
+                        required=["latitude", "longitude"],
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_openmeteo_forecast",
+                    description="Get hourly air quality forecast up to 7 days for any global location. Includes all major pollutants and AQI indices.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "latitude": types.Schema(
+                                type=types.Type.NUMBER,
+                                description="Latitude of the location",
+                            ),
+                            "longitude": types.Schema(
+                                type=types.Type.NUMBER,
+                                description="Longitude of the location",
+                            ),
+                            "forecast_days": types.Schema(
+                                type=types.Type.INTEGER,
+                                description="Number of forecast days (1-7)",
+                            ),
+                            "timezone": types.Schema(
+                                type=types.Type.STRING,
+                                description="Timezone (auto, GMT, or IANA timezone)",
+                            ),
+                        },
+                        required=["latitude", "longitude"],
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_openmeteo_historical",
+                    description="Get historical air quality data for any date range. Useful for trend analysis and long-term studies.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "latitude": types.Schema(
+                                type=types.Type.NUMBER,
+                                description="Latitude of the location",
+                            ),
+                            "longitude": types.Schema(
+                                type=types.Type.NUMBER,
+                                description="Longitude of the location",
+                            ),
+                            "start_date": types.Schema(
+                                type=types.Type.STRING,
+                                description="Start date in YYYY-MM-DD format",
+                            ),
+                            "end_date": types.Schema(
+                                type=types.Type.STRING,
+                                description="End date in YYYY-MM-DD format",
+                            ),
+                            "timezone": types.Schema(
+                                type=types.Type.STRING,
+                                description="Timezone (auto, GMT, or IANA timezone)",
+                            ),
+                        },
+                        required=["latitude", "longitude", "start_date", "end_date"],
+                    ),
+                ),
+            ]
+        )
+
+    def _get_openai_openmeteo_tool(self):
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_openmeteo_current_air_quality",
+                    "description": "Get current air quality data for any global location using Open-Meteo (CAMS). Provides comprehensive pollutant data and both European & US AQI indices. No API key needed, covers worldwide.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "latitude": {
+                                "type": "number",
+                                "description": "Latitude of the location",
+                            },
+                            "longitude": {
+                                "type": "number",
+                                "description": "Longitude of the location",
+                            },
+                            "timezone": {
+                                "type": "string",
+                                "description": "Timezone (auto, GMT, or IANA timezone like Europe/Berlin)",
+                            },
+                        },
+                        "required": ["latitude", "longitude"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_openmeteo_forecast",
+                    "description": "Get hourly air quality forecast up to 7 days for any global location. Includes all major pollutants and AQI indices.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "latitude": {
+                                "type": "number",
+                                "description": "Latitude of the location",
+                            },
+                            "longitude": {
+                                "type": "number",
+                                "description": "Longitude of the location",
+                            },
+                            "forecast_days": {
+                                "type": "integer",
+                                "description": "Number of forecast days (1-7)",
+                            },
+                            "timezone": {
+                                "type": "string",
+                                "description": "Timezone (auto, GMT, or IANA timezone)",
+                            },
+                        },
+                        "required": ["latitude", "longitude"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_openmeteo_historical",
+                    "description": "Get historical air quality data for any date range. Useful for trend analysis and long-term studies.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "latitude": {
+                                "type": "number",
+                                "description": "Latitude of the location",
+                            },
+                            "longitude": {
+                                "type": "number",
+                                "description": "Longitude of the location",
+                            },
+                            "start_date": {
+                                "type": "string",
+                                "description": "Start date in YYYY-MM-DD format",
+                            },
+                            "end_date": {
+                                "type": "string",
+                                "description": "End date in YYYY-MM-DD format",
+                            },
+                            "timezone": {
+                                "type": "string",
+                                "description": "Timezone (auto, GMT, or IANA timezone)",
+                            },
+                        },
+                        "required": ["latitude", "longitude", "start_date", "end_date"],
+                    },
+                },
+            },
+        ]
+
     def _get_openai_weather_tool(self):
         return {
             "type": "function",
@@ -1550,6 +1749,39 @@ Be professional, empathetic, and solution-oriented."""
                 )
             elif function_name == "get_airqo_metadata":
                 return self.airqo.get_metadata(entity_type=args.get("entity_type", "grids"))
+            elif function_name == "get_openmeteo_current_air_quality":
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                timezone = args.get("timezone", "auto")
+                return self.openmeteo.get_current_air_quality(
+                    latitude=latitude, longitude=longitude, timezone=timezone
+                )
+            elif function_name == "get_openmeteo_forecast":
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                forecast_days = args.get("forecast_days", 5)
+                timezone = args.get("timezone", "auto")
+                return self.openmeteo.get_hourly_forecast(
+                    latitude=latitude,
+                    longitude=longitude,
+                    forecast_days=forecast_days,
+                    timezone=timezone,
+                )
+            elif function_name == "get_openmeteo_historical":
+                from datetime import datetime
+
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                start_date = datetime.strptime(args.get("start_date"), "%Y-%m-%d")
+                end_date = datetime.strptime(args.get("end_date"), "%Y-%m-%d")
+                timezone = args.get("timezone", "auto")
+                return self.openmeteo.get_historical_data(
+                    latitude=latitude,
+                    longitude=longitude,
+                    start_date=start_date,
+                    end_date=end_date,
+                    timezone=timezone,
+                )
             elif function_name == "get_city_weather":
                 city = args.get("city")
                 return self.weather.get_current_weather(city)
@@ -1638,6 +1870,48 @@ Be professional, empathetic, and solution-oriented."""
                 return await loop.run_in_executor(
                     None,
                     lambda: self.airqo.get_metadata(entity_type=args.get("entity_type", "grids")),
+                )
+            elif function_name == "get_openmeteo_current_air_quality":
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                timezone = args.get("timezone", "auto")
+                return await loop.run_in_executor(
+                    None,
+                    lambda: self.openmeteo.get_current_air_quality(
+                        latitude=latitude, longitude=longitude, timezone=timezone
+                    ),
+                )
+            elif function_name == "get_openmeteo_forecast":
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                forecast_days = args.get("forecast_days", 5)
+                timezone = args.get("timezone", "auto")
+                return await loop.run_in_executor(
+                    None,
+                    lambda: self.openmeteo.get_hourly_forecast(
+                        latitude=latitude,
+                        longitude=longitude,
+                        forecast_days=forecast_days,
+                        timezone=timezone,
+                    ),
+                )
+            elif function_name == "get_openmeteo_historical":
+                from datetime import datetime
+
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                start_date = datetime.strptime(args.get("start_date"), "%Y-%m-%d")
+                end_date = datetime.strptime(args.get("end_date"), "%Y-%m-%d")
+                timezone = args.get("timezone", "auto")
+                return await loop.run_in_executor(
+                    None,
+                    lambda: self.openmeteo.get_historical_data(
+                        latitude=latitude,
+                        longitude=longitude,
+                        start_date=start_date,
+                        end_date=end_date,
+                        timezone=timezone,
+                    ),
                 )
             elif function_name == "get_city_weather":
                 city = args.get("city")

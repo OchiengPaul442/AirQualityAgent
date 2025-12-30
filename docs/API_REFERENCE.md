@@ -27,16 +27,16 @@ Currently, the API does not require authentication. For production deployments, 
 
 ## Endpoints Overview
 
-| Endpoint                  | Method | Purpose                |
-| ------------------------- | ------ | ---------------------- |
-| `/health`                 | GET    | Health check           |
-| `/agent/chat`             | POST   | Chat with AI agent     |
-| `/air-quality/query`      | POST   | Get air quality data   |
-| `/sessions/new`           | POST   | Create new session     |
-| `/sessions`               | GET    | List all sessions      |
-| `/sessions/{id}`          | GET    | Get session details    |
-| `/sessions/{id}`          | DELETE | Delete session         |
-| `/sessions/{id}/messages` | GET    | Get paginated messages |
+| Endpoint                  | Method | Purpose                            |
+| ------------------------- | ------ | ---------------------------------- |
+| `/health`                 | GET    | Health check                       |
+| `/agent/chat`             | POST   | Chat with AI agent                 |
+| `/air-quality/query`      | POST   | Get air quality data (all sources) |
+| `/sessions/new`           | POST   | Create new session                 |
+| `/sessions`               | GET    | List all sessions                  |
+| `/sessions/{id}`          | GET    | Get session details                |
+| `/sessions/{id}`          | DELETE | Delete session                     |
+| `/sessions/{id}/messages` | GET    | Get paginated messages             |
 
 ---
 
@@ -116,7 +116,7 @@ Send a message to the AI agent and receive a response with automatic conversatio
 
 ## Air Quality Query
 
-Get air quality data from multiple sources with intelligent failure handling.
+Get air quality data from multiple sources with intelligent failure handling and global coverage.
 
 **Endpoint:** `POST /api/v1/air-quality/query`
 
@@ -125,16 +125,41 @@ Get air quality data from multiple sources with intelligent failure handling.
 ```json
 {
   "city": "Kampala",
-  "country": "Uganda"
+  "country": "Uganda",
+  "latitude": 0.3476,
+  "longitude": 32.5825
 }
 ```
 
 **Parameters:**
 
-| Field     | Type   | Required | Description                |
-| --------- | ------ | -------- | -------------------------- |
-| `city`    | string | Yes      | City name                  |
-| `country` | string | No       | Country for disambiguation |
+| Field              | Type    | Required | Description                               |
+| ------------------ | ------- | -------- | ----------------------------------------- |
+| `city`             | string  | No\*     | City name for WAQI and AirQo              |
+| `country`          | string  | No       | Country for disambiguation                |
+| `latitude`         | float   | No\*     | Latitude for Open-Meteo (-90 to 90)       |
+| `longitude`        | float   | No\*     | Longitude for Open-Meteo (-180 to 180)    |
+| `include_forecast` | boolean | No       | Include forecast data (default: false)    |
+| `forecast_days`    | integer | No       | Number of forecast days 1-7 (default: 5)  |
+| `timezone`         | string  | No       | Timezone for Open-Meteo (default: "auto") |
+
+\*Either `city` or both `latitude`+`longitude` must be provided
+
+### Data Source Strategy
+
+The endpoint intelligently routes to multiple data sources:
+
+1. **WAQI** (World Air Quality Index) - City-based queries
+2. **AirQo** - African cities with PM2.5 focus
+3. **Open-Meteo** - Global coordinate-based queries (no API key)
+
+**Routing Logic:**
+
+- If `city` is provided → queries WAQI and AirQo
+- If `latitude` and `longitude` provided → queries Open-Meteo
+- All successful responses are returned
+- Failures are handled gracefully
+- If `include_forecast=true` → adds forecast data from Open-Meteo (requires coordinates)
 
 ### Response (Success - 200)
 
@@ -155,15 +180,25 @@ Get air quality data from multiple sources with intelligent failure handling.
         "aqi_category": "Moderate"
       }
     ]
+  },
+  "openmeteo": {
+    "latitude": 0.3476,
+    "longitude": 32.5825,
+    "current": {
+      "pm10": 12.5,
+      "pm2_5": 8.3,
+      "european_aqi": 25
+    }
   }
 }
 ```
 
 **Key Features:**
 
-✅ **Only successful data returned** (no error fields in success response)  
-✅ **Multi-source aggregation** (WAQI + AirQo)  
-✅ **Graceful degradation** (returns available data if one source fails)
+✅ **Multi-source aggregation** (WAQI + AirQo + Open-Meteo)  
+✅ **Intelligent routing** (city-based and coordinate-based)  
+✅ **Graceful degradation** (returns available data if sources fail)  
+✅ **Global coverage** (Open-Meteo covers any coordinate worldwide)
 
 ### Response (All Failed - 404)
 
@@ -175,12 +210,81 @@ Get air quality data from multiple sources with intelligent failure handling.
       "waqi": "WAQI API error: Unknown station",
       "airqo": "No measurements found"
     },
-    "suggestion": "Try a different city name or check if the location is covered by our data sources"
+    "suggestion": "Try a different location or provide coordinates for Open-Meteo"
   }
 }
 ```
 
-📖 **See [AIR_QUALITY_API.md](./AIR_QUALITY_API.md) for detailed examples and integration guide**
+### Integration Examples
+
+**City Query:**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/air-quality/query \
+  -H "Content-Type: application/json" \
+  -d '{"city": "Nairobi"}'
+```
+
+**Coordinates Query:**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/air-quality/query \
+  -H "Content-Type: application/json" \
+  -d '{"latitude": 52.52, "longitude": 13.41}'
+```
+
+**Combined Query:**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/air-quality/query \
+  -H "Content-Type: application/json" \
+  -d '{"city": "Berlin", "latitude": 52.52, "longitude": 13.41}'
+```
+
+**Forecast Query (7 days):**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/air-quality/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "latitude": 52.52,
+    "longitude": 13.41,
+    "include_forecast": true,
+    "forecast_days": 7,
+    "timezone": "Europe/Berlin"
+  }'
+```
+
+**Response with Forecast:**
+
+```json
+{
+  "openmeteo": {
+    "current": {
+      "latitude": 52.52,
+      "longitude": 13.41,
+      "current": {
+        "pm2_5": 8.3,
+        "pm10": 12.5,
+        "european_aqi": 25
+      }
+    },
+    "forecast": {
+      "hourly": {
+        "time": ["2024-01-15T11:00", "2024-01-15T12:00", "..."],
+        "pm2_5": [8.5, 9.1, "..."],
+        "pm10": [13.2, 14.0, "..."],
+        "european_aqi": [26, 28, "..."]
+      }
+    }
+  }
+}
+```
+
+📖 **Additional Resources:**
+
+- [AIR_QUALITY_API.md](./AIR_QUALITY_API.md) - Detailed air quality API guide
+- [OPENMETEO_INTEGRATION.md](./OPENMETEO_INTEGRATION.md) - Open-Meteo specific documentation
 
 ---
 

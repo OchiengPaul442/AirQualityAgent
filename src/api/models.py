@@ -42,8 +42,13 @@ class HealthCheck(BaseModel):
 
 
 class AirQualityQueryRequest(BaseModel):
-    city: str
+    city: str | None = None
     country: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    forecast_days: int | None = Field(None, ge=1, le=7, description="Number of forecast days (1-7) for Open-Meteo")
+    include_forecast: bool = Field(False, description="Whether to include forecast data")
+    timezone: str = Field("auto", description="Timezone (auto, GMT, or IANA like Europe/Berlin)")
 
 
 class MCPConnectionRequest(BaseModel):

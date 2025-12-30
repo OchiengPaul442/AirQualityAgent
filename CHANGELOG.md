@@ -4,6 +4,115 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.1.2] - 2025-12-31
+
+### 🚀 Enhanced Forecast Support & Comprehensive Frontend Guide
+
+#### Added
+
+- **Forecast Support in Unified Endpoint**: `/air-quality/query` now supports forecast requests
+  - `include_forecast` parameter to enable forecast data
+  - `forecast_days` parameter (1-7 days, default: 5)
+  - `timezone` parameter for Open-Meteo queries
+  - Returns both current and forecast data in single response
+- **Flexible Query Parameters**: `city` parameter is now optional
+  - Supports city-only queries (WAQI + AirQo)
+  - Supports coordinate-only queries (Open-Meteo with forecast)
+  - Supports combined queries (all sources)
+
+#### Enhanced
+
+- **Comprehensive Frontend Integration Guide**: Completely rewritten `API_ENHANCEMENTS_FRONTEND_GUIDE.md`
+  - Complete React/TypeScript implementation examples with charts
+  - Vue.js 3 Composition API examples
+  - Python client for backend-to-backend integration
+  - MCP (Model Context Protocol) integration with full examples
+  - Data access verification procedures
+  - Common MCP server configurations (PostgreSQL, Filesystem, Google Drive, GitHub)
+  - Advanced usage patterns (rate limiting, caching, token monitoring)
+  - Troubleshooting guide for common issues
+  - Best practices for production deployment
+
+#### Technical Improvements
+
+- Extended `AirQualityQueryRequest` model with forecast parameters
+- Improved routing logic to handle forecast requests intelligently
+- Added comprehensive TypeScript type definitions for all API models
+- Included recharts integration examples for forecast visualization
+
+#### Documentation
+
+- 60+ code examples across multiple frameworks
+- Complete MCP integration workflow
+- Data access verification test procedures
+- Rate limiting and retry logic examples
+- Session management patterns
+
+---
+
+## [2.1.1] - 2025-12-31
+
+### 🔨 Refactoring & Code Quality
+
+#### Changed
+
+- **Consolidated API Endpoints**: Removed separate Open-Meteo endpoints (`/air-quality/openmeteo/*`)
+- **Unified Query Endpoint**: `/air-quality/query` now intelligently handles all three data sources
+  - City-based queries → WAQI + AirQo
+  - Coordinate-based queries → Open-Meteo
+  - Combined queries → All applicable sources
+- **Type Safety**: Fixed type annotation issues (`Any` import, SQLAlchemy Column conversions)
+- **Code Quality**: Removed redundant code (~100 lines), improved maintainability
+
+#### Documentation
+
+- Updated API_REFERENCE.md to reflect unified endpoint architecture
+- Clarified data source routing strategy
+- Added comprehensive integration examples
+
+#### Technical Improvements
+
+- Fixed `dict[str, any]` → `dict[str, Any]` type annotation
+- Added explicit `str()` casting for SQLAlchemy Column types
+- Improved error handling and logging consistency
+
+---
+
+## [2.1.0] - 2025-12-31
+
+### 🌍 Open-Meteo Air Quality Integration
+
+Added Open-Meteo as a third air quality data source, providing free global coverage with no API key required.
+
+### ✨ Added
+
+- **Open-Meteo Service** - Free global air quality data from CAMS (Copernicus Atmosphere Monitoring Service)
+- **Agent Tools**: `get_openmeteo_current_air_quality`, `get_openmeteo_forecast`, `get_openmeteo_historical`
+- **Documentation**: OPENMETEO_INTEGRATION.md with comprehensive usage guide
+- **10,000 free API calls/day** - No API key required
+- **Global coverage**: 11km (Europe), 25km (Global) resolution
+- **7-day forecasts** with hourly granularity
+- **Historical data** from 2013 onwards
+- **Dual AQI standards**: Both European and US AQI
+- **Extended pollutant data**: PM2.5, PM10, NO2, O3, SO2, CO, dust, UV index, ammonia, methane
+- **Pollen data** for Europe (seasonal)
+
+### 🔧 Enhanced
+
+- Updated agent system instructions with Open-Meteo usage guidelines
+- Enhanced data source selection strategy for coordinate-based queries
+- Improved multi-source data aggregation
+- Extended `AirQualityQueryRequest` model with `latitude` and `longitude` parameters
+
+### 📚 Documentation Updates
+
+- Created comprehensive Open-Meteo integration guide
+- Updated API Reference with new endpoints
+- Updated README with Open-Meteo features
+- Added data source comparison table
+
+---
+
 ## [2.0.0] - 2025-12-31
 
 ### 🎉 Major Refactoring - Production Ready

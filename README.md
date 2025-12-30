@@ -48,6 +48,11 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 - **WAQI** (World Air Quality Index): Global coverage, 30,000+ stations
 - **AirQo**: East Africa focus with detailed local data
+- **Open-Meteo**: Free global air quality data from CAMS (no API key required)
+  - 11km resolution (Europe) and 25km resolution (Global)
+  - Real-time, historical, and forecast data (up to 7 days)
+  - European and US AQI indices
+  - Comprehensive pollutant data: PM2.5, PM10, NO2, O3, SO2, CO, dust, UV index
 - **Weather Service**: Contextual weather information
 - **Search Service**: Real-time web search
 - **Document Scanner**: Extract text from PDFs and images

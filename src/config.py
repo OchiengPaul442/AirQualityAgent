@@ -37,9 +37,10 @@ class Settings(BaseSettings):
     # Air Quality Data Sources
     WAQI_API_KEY: str = ""  # World Air Quality Index API key
     AIRQO_API_TOKEN: str = ""  # AirQo Analytics API token
+    # Open-Meteo requires no API key (free for non-commercial use up to 10,000 calls/day)
 
     # Data Source Configuration
-    ENABLED_DATA_SOURCES: str = "waqi,airqo"
+    ENABLED_DATA_SOURCES: str = "waqi,airqo,openmeteo"
 
     # Cache Configuration
     CACHE_TTL_SECONDS: int = 3600
