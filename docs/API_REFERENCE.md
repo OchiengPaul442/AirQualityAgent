@@ -32,6 +32,7 @@ Currently, the API does not require authentication. For production deployments, 
 | `/health`                 | GET    | Health check           |
 | `/agent/chat`             | POST   | Chat with AI agent     |
 | `/air-quality/query`      | POST   | Get air quality data   |
+| `/sessions/new`           | POST   | Create new session     |
 | `/sessions`               | GET    | List all sessions      |
 | `/sessions/{id}`          | GET    | Get session details    |
 | `/sessions/{id}`          | DELETE | Delete session         |
@@ -184,6 +185,30 @@ Get air quality data from multiple sources with intelligent failure handling.
 ---
 
 ## Session Management
+
+### Create New Session
+
+Explicitly create a new chat session. Use this when user clicks "New Chat" button.
+
+**Endpoint:** `POST /api/v1/sessions/new`
+
+**Request Body:** None
+
+**Response:**
+
+```json
+{
+  "session_id": "abc-123-def-456",
+  "created_at": "2024-01-15T10:30:00Z",
+  "message": "New session created successfully. Use this session_id for your chat messages."
+}
+```
+
+**Use Cases:**
+
+- User clicks "New Chat" button
+- Starting fresh conversation while previous session is still open
+- Need explicit session creation before sending messages
 
 ### List All Sessions
 

@@ -130,6 +130,27 @@ async def list_sessions(limit: int = 50, db: Session = Depends(get_db)):
     return result
 
 
+@router.post("/sessions/new")
+async def create_new_session(db: Session = Depends(get_db)):
+    """
+    Create a new chat session explicitly.
+    Use this when user clicks 'New Chat' button in the frontend.
+    
+    Returns:
+        New session ID that should be used for subsequent messages
+    """
+    new_session_id = str(uuid.uuid4())
+    from src.db.repository import create_session
+    
+    session = create_session(db, new_session_id)
+    
+    return {
+        "session_id": session.id,
+        "created_at": session.created_at,
+        "message": "New session created successfully. Use this session_id for your chat messages."
+    }
+
+
 @router.get("/sessions/{session_id}")
 async def get_session_details(session_id: str, db: Session = Depends(get_db)):
     """
@@ -229,23 +250,35 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
     """
     Chat with the Air Quality AI Agent.
     
-    **Session Management (Simplified):**
+    **Session Management:**
     - All conversations are automatically saved to the database
-    - Provide `session_id` to continue an existing conversation
-    - Omit `session_id` to start a new conversation
-    - Call `DELETE /sessions/{session_id}` when the user closes the chat
+    - First request: Omit `session_id` - server creates and returns a new session ID
+    - Subsequent requests: ALWAYS include the returned `session_id` to maintain conversation context
+    - Session closure: Call `DELETE /sessions/{session_id}` when user closes chat or starts new conversation
+    
+    **IMPORTANT - Session Persistence:**
+    - The agent references previous messages in the session for context-aware responses
+    - Always use the same session_id across related messages
+    - If session_id changes, the agent loses conversation context
     
     **Cost Optimization:**
     - Recent conversation history (last 20 messages) is used for context
     - Responses are cached to avoid redundant API calls
     - Token usage is tracked and returned in the response
     
-    **Example Request:**
-    ```json
-    {
-        "message": "What's the air quality in Kampala?",
-        "session_id": "abc-123"  // Optional, for continuing conversations
-    }
+    **Example Flow:**
+    ```javascript
+    // First message - no session_id
+    POST /agent/chat
+    {"message": "What's the air quality in Kampala?"}
+    // Response includes: {"session_id": "abc-123", ...}
+    
+    // Continue conversation - include session_id
+    POST /agent/chat
+    {"message": "What about yesterday?", "session_id": "abc-123"}
+    
+    // Close session when done
+    DELETE /sessions/abc-123
     ```
     """
     try:
@@ -258,20 +291,21 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
             )
         
         # Generate or use provided session ID
-        session_id = request.session_id or str(uuid.uuid4())
+        # Fix: Check for None or empty string to ensure session persistence
+        session_id = request.session_id if request.session_id and request.session_id.strip() else str(uuid.uuid4())
         
-        # Save user message to database
-        add_message(db, session_id, "user", request.message)
-        
-        # Get recent conversation history (last 20 messages for context)
-        # This limits token usage while maintaining conversation continuity
+        # Get conversation history BEFORE adding new message
+        # This ensures the agent sees the full context of previous exchanges
         history_objs = get_recent_session_history(db, session_id, max_messages=20)
         
-        # Exclude the just-added message (we'll send it separately to the agent)
+        # Convert to format expected by agent
         history = [
             {"role": m.role, "content": m.content} 
-            for m in history_objs[:-1]  # Exclude last message (the current one)
+            for m in history_objs
         ]
+        
+        # Save user message to database AFTER getting history
+        add_message(db, session_id, "user", request.message)
         
         # Initialize Agent Service
         agent = get_agent()
