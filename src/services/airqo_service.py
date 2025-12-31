@@ -5,6 +5,7 @@ Provides access to AirQo air quality monitoring network data.
 API Documentation: https://docs.airqo.net/airqo-rest-api-documentation/
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 
@@ -12,6 +13,8 @@ import requests
 
 from ..utils.data_formatter import format_air_quality_data
 from .cache import get_cache
+
+logger = logging.getLogger(__name__)
 
 
 class AirQoService:
@@ -296,6 +299,108 @@ class AirQoService:
             print(f"Error finding site ID for '{name}': {e}")
             return None
 
+    def get_air_quality_by_location(self, latitude: float, longitude: float, limit_sites: int = 3) -> dict[str, Any]:
+        """
+        Enhanced method to get air quality data for coordinates using AirQo's site-based approach.
+        This method prioritizes AirQo data for African locations by:
+        1. First reverse geocode to get city name, then search for sites
+        2. If sites found, get measurements using site IDs
+        3. If no sites, try coordinate-based search
+        4. If still no sites, try grid-based data for the region
+        5. Return formatted data with location context
+
+        Args:
+            latitude: Latitude coordinate
+            longitude: Longitude coordinate
+            limit_sites: Maximum number of sites to query (default 3)
+
+        Returns:
+            Formatted air quality data with measurements from available sites
+        """
+        try:
+            # Step 1: Reverse geocode to get city name first
+            city_name = self._reverse_geocode(latitude, longitude)
+
+            if city_name:
+                sites_response = self.get_sites_summary(search=city_name, limit=limit_sites)
+
+                if sites_response.get("success") and sites_response.get("sites"):
+                    sites = sites_response["sites"]
+                    site_ids = [site.get("_id") for site in sites if site.get("_id")]
+
+                    if site_ids:
+                        # Step 2: Get measurements for found sites
+                        params = {"site_id": ",".join(site_ids)}
+                        measurements_data = self._make_request("devices/readings/recent", params)
+
+                        # Add location context to the response
+                        if measurements_data.get("success"):
+                            measurements_data["coordinates"] = {"lat": latitude, "lon": longitude}
+                            measurements_data["city_found"] = city_name
+                            measurements_data["sites_found"] = len(site_ids)
+                            measurements_data["site_ids_used"] = site_ids
+
+                        return format_air_quality_data(measurements_data, source="airqo")
+
+            # Step 2: If reverse geocoding didn't work or no sites found, try coordinate-based search
+            location_query = f"{latitude:.4f},{longitude:.4f}"
+            sites_response = self.get_sites_summary(search=location_query, limit=limit_sites)
+
+            if sites_response.get("success") and sites_response.get("sites"):
+                sites = sites_response["sites"]
+                site_ids = [site.get("_id") for site in sites if site.get("_id")]
+
+                if site_ids:
+                    # Get measurements for found sites
+                    params = {"site_id": ",".join(site_ids)}
+                    measurements_data = self._make_request("devices/readings/recent", params)
+
+                    # Add location context to the response
+                    if measurements_data.get("success"):
+                        measurements_data["coordinates"] = {"lat": latitude, "lon": longitude}
+                        measurements_data["sites_found"] = len(site_ids)
+                        measurements_data["site_ids_used"] = site_ids
+                        measurements_data["search_method"] = "coordinates"
+
+                    return format_air_quality_data(measurements_data, source="airqo")
+
+            # Step 3: If no sites found, try grid-based search for the region
+            grids_response = self.get_grids_summary(search=city_name or location_query, limit=5)
+
+            if grids_response.get("success") and grids_response.get("grids"):
+                grids = grids_response["grids"]
+                grid_ids = [grid.get("_id") for grid in grids if grid.get("_id")]
+
+                if grid_ids:
+                    # Get measurements for first available grid
+                    grid_data = self._make_request(f"devices/measurements/grids/{grid_ids[0]}/recent")
+
+                    if grid_data.get("success"):
+                        grid_data["coordinates"] = {"lat": latitude, "lon": longitude}
+                        grid_data["city_searched"] = city_name
+                        grid_data["grid_used"] = grid_ids[0]
+                        grid_data["search_method"] = "grid_fallback"
+
+                    return format_air_quality_data(grid_data, source="airqo")
+
+            # Step 4: No sites or grids found
+            return {
+                "success": False,
+                "message": f"No AirQo monitoring sites or grids found near coordinates ({latitude:.4f}, {longitude:.4f}). "
+                          f"AirQo primarily covers East African countries. The coordinates may be outside the coverage area.",
+                "coordinates": {"lat": latitude, "lon": longitude},
+                "city_attempted": city_name,
+                "search_method": "none_found"
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error retrieving AirQo data for coordinates ({latitude:.4f}, {longitude:.4f}): {str(e)}",
+                "coordinates": {"lat": latitude, "lon": longitude},
+                "error": str(e)
+            }
+
     def get_recent_measurements(
         self,
         site_id: Optional[str] = None,
@@ -344,28 +449,46 @@ class AirQoService:
         # 3. Search for sites using city or search parameter
         search_query = search or city
         if search_query:
-            # Use sites/summary endpoint to find matching sites
-            sites_response = self.get_sites_summary(search=search_query, limit=5)
-            
-            if sites_response.get("success") and sites_response.get("sites"):
-                sites = sites_response["sites"]
+            try:
+                # Use sites/summary endpoint to find matching sites
+                sites_response = self.get_sites_summary(search=search_query, limit=10)
                 
-                # Extract site IDs from the first few matching sites
-                site_ids = [site.get("_id") for site in sites if site.get("_id")]
+                if sites_response.get("success") and sites_response.get("sites"):
+                    sites = sites_response["sites"]
+                    
+                    # Extract site IDs from matching sites
+                    site_ids = [site.get("_id") for site in sites if site.get("_id")]
+                    
+                    if site_ids:
+                        # Use the readings/recent endpoint with multiple site_ids
+                        # This endpoint accepts comma-separated site_ids
+                        params = {"site_id": ",".join(site_ids[:5])}  # Limit to first 5 sites
+                        data = self._make_request("devices/readings/recent", params)
+                        
+                        # Add search context to help AI understand the data
+                        if data.get("success"):
+                            data["search_location"] = search_query
+                            data["sites_queried"] = len(site_ids[:5])
+                        
+                        return format_air_quality_data(data, source="airqo")
                 
-                if site_ids:
-                    # Use the readings/recent endpoint with multiple site_ids
-                    # This endpoint accepts comma-separated site_ids
-                    params = {"site_id": ",".join(site_ids[:3])}  # Limit to first 3 sites
-                    data = self._make_request("devices/readings/recent", params)
-                    return format_air_quality_data(data, source="airqo")
-            
-            # If no sites found, return informative error
-            return {
-                "success": False,
-                "message": f"No monitoring sites found for '{search_query}'. Try searching for major cities like Kampala, Gulu, or Mbale.",
-                "sites": []
-            }
+                # If no sites found, return helpful error with coverage info
+                return {
+                    "success": False,
+                    "message": f"AirQo monitoring network does not have active stations in '{search_query}'. AirQo covers major East African cities including Kampala, Gulu, Mbale, Jinja, Nairobi, Dar es Salaam, and Kigali. Try checking WAQI or OpenMeteo for this location.",
+                    "location_searched": search_query,
+                    "sites": [],
+                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources."
+                }
+            except Exception as e:
+                logger.error(f"Error searching AirQo sites for {search_query}: {e}")
+                return {
+                    "success": False,
+                    "message": f"Error searching for AirQo monitoring sites in '{search_query}': {str(e)}",
+                    "location_searched": search_query,
+                    "error": str(e),
+                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources."
+                }
 
         raise ValueError("Must provide site_id, device_id, grid_id, cohort_id, city, or search parameter.")
 
@@ -434,19 +557,34 @@ class AirQoService:
 
         return self._make_request("devices", params)
 
-    def _get_coordinates(self, city: str) -> tuple[float, float] | None:
+    def _reverse_geocode(self, latitude: float, longitude: float) -> Optional[str]:
         """
-        Get coordinates for a city using OpenStreetMap Nominatim API
+        Reverse geocode coordinates to get city name using OpenStreetMap Nominatim API
         """
         try:
-            url = "https://nominatim.openstreetmap.org/search"
-            params = {"q": city, "format": "json", "limit": 1}
+            url = "https://nominatim.openstreetmap.org/reverse"
+            params = {
+                "lat": latitude,
+                "lon": longitude,
+                "format": "json",
+                "zoom": 10  # City level
+            }
             headers = {"User-Agent": "AirQoAgent/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                if data:
-                    return float(data[0]["lat"]), float(data[0]["lon"])
+                if data and "address" in data:
+                    address = data["address"]
+                    # Try to get city name from various possible fields, preferring cleaner names
+                    city = (address.get("city") or
+                           address.get("town") or
+                           address.get("village") or
+                           address.get("municipality") or
+                           address.get("county"))
+                    # Clean up the city name by removing qualifiers like "Capital City"
+                    if city:
+                        city = city.replace(" Capital City", "").replace(" City", "").strip()
+                    return city
         except Exception as e:
-            print(f"Error geocoding city {city}: {e}")
+            print(f"Error reverse geocoding coordinates ({latitude}, {longitude}): {e}")
         return None

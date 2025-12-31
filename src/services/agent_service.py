@@ -318,13 +318,27 @@ GOOD: "Kampala PM2.5 concentration is 83.6 µg/m³ (AQI: 165, Unhealthy)"
 
 ## Tool Usage Guidelines
 
-When user mentions a location or requests data, call MULTIPLE appropriate tools:
-- City name (e.g., "Gulu", "New York") → get_waqi_city_feed + get_airqo_measurements + get_openmeteo_current_air_quality
-- "tomorrow", "next week", "forecast" → get_openmeteo_forecast + search_web for additional context
-- Coordinates → get_openmeteo_current_air_quality + get_waqi_city_feed
-- Document questions → analyze document + supplement with external data if needed
+**DATA SOURCE PRIORITY (Always follow this order):**
+1. **AirQo FIRST** - Primary source for African cities and locations
+2. **WAQI SECOND** - Global coverage, good for non-African locations  
+3. **OpenMeteo LAST** - Fallback for basic weather/air quality data
 
-**If tools fail, provide helpful alternatives without technical details.**
+**For African locations (Kenya, Uganda, Tanzania, Rwanda, etc.):**
+- ALWAYS try AirQo first: Use `get_african_city_air_quality` or search for sites
+- Only use WAQI/OpenMeteo if AirQo fails or location not found
+
+**For non-African locations:**
+- Try WAQI first, then OpenMeteo if needed
+
+**Smart Location Detection:**
+- African cities → AirQo sites/grids → measurements
+- Global cities → WAQI city feed → OpenMeteo fallback
+- Use site search and grid summaries to find AirQo data for African locations
+
+**Tool Calling Strategy:**
+- Single location: Try primary source first, fallback if needed
+- Multiple locations: Call appropriate sources for each location
+- Document analysis: Supplement with location-specific data from prioritized sources
 
 ## Location Memory & Context
 
@@ -376,12 +390,26 @@ GOOD: [calls multiple tools] → "New York PM2.5 AQI: 45 (Good), approximately 1
 - General conversation ("How are you?", "What's up?")
 - Polite closings or follow-ups
 
-**Primary Strategy**: Use ALL relevant tools simultaneously for comprehensive answers
-**Fallback Strategy**: If some tools fail, use successful ones and note limitations gracefully
+**PRIMARY DATA SOURCES (Priority Order for AFRICAN CITIES):**
+1. **AirQo API FIRST** - Always try this FIRST for African locations (Uganda, Kenya, Tanzania, Rwanda, etc.):
+   - `get_african_city_air_quality` - Primary tool for ANY African city query
+   - Uses sites/summary endpoint with search parameter to find monitoring sites
+   - Returns real measurements from local monitoring stations
+   - Coverage: Kampala, Gulu, Mbale, Nairobi, Dar es Salaam, Kigali, and many more
 
-Current data: get_waqi_city_feed + get_airqo_measurements + get_openmeteo_current_air_quality + search_web
-Forecast: get_openmeteo_forecast + search_web + weather integration
-Document analysis: document_scanner + supplement with external data
+2. **WAQI API SECOND** - Try this if AirQo fails or for non-African cities:
+   - `get_city_air_quality` - Global city air quality data
+   - `search_waqi_stations` - Find monitoring stations worldwide
+
+3. **OpenMeteo API LAST** - Fallback for basic air quality estimates:
+   - `get_openmeteo_current_air_quality` - Weather-based air quality estimates
+
+**CRITICAL FALLBACK STRATEGY FOR AFRICAN CITIES:**
+For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
+1. ALWAYS call `get_african_city_air_quality` FIRST with the city name
+2. If AirQo returns no data (success=false), THEN try `get_city_air_quality` with WAQI
+3. If WAQI fails, THEN try OpenMeteo with coordinates
+4. NEVER skip AirQo for African locations - it has the best local coverage
 
 **If ALL tools fail**: Provide helpful alternatives without mentioning technical failures
 Example: "I couldn't retrieve live data for [location] right now. You can check airnow.gov or aqicn.org for current readings, or try again in a few minutes."
@@ -966,17 +994,17 @@ Be professional, empathetic, and solution-oriented."""
             function_declarations=[
                 types.FunctionDeclaration(
                     name="get_african_city_air_quality",
-                    description="Get recent air quality data for African cities using AirQo network.",
+                    description="**PRIMARY TOOL for African cities** - Get real-time air quality from AirQo monitoring network. Use this FIRST for ANY African location (Uganda, Kenya, Tanzania, Rwanda, etc.). Searches by city/location name (e.g., Gulu, Kampala, Nakasero, Mbale, Nairobi). Returns actual measurements from local monitoring stations. Coverage includes major and minor cities across East Africa.",
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
                             "city": types.Schema(
                                 type=types.Type.STRING,
-                                description="The name of the African city (e.g., Kampala, Nairobi)",
+                                description="City or location name in Africa (e.g., 'Gulu', 'Kampala', 'Nakasero', 'Nairobi', 'Dar es Salaam')",
                             ),
                             "site_id": types.Schema(
                                 type=types.Type.STRING,
-                                description="The ID of the site (optional)",
+                                description="Optional site ID if known from previous searches",
                             ),
                         },
                         required=["city"],
@@ -1050,6 +1078,24 @@ Be professional, empathetic, and solution-oriented."""
                             )
                         },
                         required=["entity_type"],
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_air_quality_by_location",
+                    description="Get air quality data for any location using AirQo's enhanced site-based approach. PRIORITY for African locations.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "location": types.Schema(
+                                type=types.Type.STRING,
+                                description="Location name (city, town, or specific site name)",
+                            ),
+                            "country": types.Schema(
+                                type=types.Type.STRING,
+                                description="Country code (default 'UG' for Uganda)",
+                            ),
+                        },
+                        required=["location"],
                     ),
                 ),
             ]
@@ -1159,17 +1205,17 @@ Be professional, empathetic, and solution-oriented."""
                 "type": "function",
                 "function": {
                     "name": "get_african_city_air_quality",
-                    "description": "Get recent air quality data for African cities using AirQo network.",
+                    "description": "**PRIMARY TOOL for African cities** - Get real-time air quality from AirQo monitoring network. Use this FIRST for ANY African location (Uganda, Kenya, Tanzania, Rwanda, etc.). Searches by city/location name (e.g., Gulu, Kampala, Nakasero, Mbale, Nairobi). Returns actual measurements from local monitoring stations. Coverage includes major and minor cities across East Africa.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "city": {
                                 "type": "string",
-                                "description": "The name of the African city (e.g., Kampala, Nairobi)",
+                                "description": "City or location name in Africa (e.g., 'Gulu', 'Kampala', 'Nakasero', 'Nairobi', 'Dar es Salaam')",
                             },
                             "site_id": {
                                 "type": "string",
-                                "description": "The ID of the site (optional)",
+                                "description": "Optional site ID if known from previous searches",
                             },
                         },
                         "required": ["city"],
@@ -1634,13 +1680,13 @@ Be professional, empathetic, and solution-oriented."""
                 "type": "function",
                 "function": {
                     "name": "get_african_city_air_quality",
-                    "description": "Get air quality data for African cities using AirQo network.",
+                    "description": "**PRIMARY TOOL for African cities** - Get real-time air quality from AirQo monitoring network. Use this FIRST for ANY African location (Uganda, Kenya, Tanzania, Rwanda, etc.). Searches by city/location name (e.g., Gulu, Kampala, Nakasero, Mbale, Nairobi). Returns actual measurements from local monitoring stations.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "city": {
                                 "type": "string",
-                                "description": "The name of the African city (e.g., Kampala, Nairobi)",
+                                "description": "City or location name in Africa (e.g., 'Gulu', 'Kampala', 'Nakasero', 'Nairobi')",
                             },
                         },
                         "required": ["city"],
@@ -1803,8 +1849,22 @@ Be professional, empathetic, and solution-oriented."""
             elif function_name == "get_african_city_air_quality":
                 city = args.get("city")
                 site_id = args.get("site_id")
-                # Use the smart method in AirQoService
-                return self.airqo.get_recent_measurements(city=city, site_id=site_id)
+                # Try AirQo first with smart search
+                try:
+                    result = self.airqo.get_recent_measurements(city=city, site_id=site_id)
+                    if result.get("success"):
+                        return result
+                    # If AirQo returns success=False, log but don't fallback here
+                    # Let the AI decide to try WAQI based on the response
+                    logger.info(f"AirQo returned no data for {city}: {result.get('message')}")
+                    return result
+                except Exception as e:
+                    logger.error(f"AirQo API error for {city}: {e}")
+                    return {
+                        "success": False,
+                        "message": f"Could not retrieve AirQo data for {city}. The location may not have AirQo monitoring coverage.",
+                        "error": str(e)
+                    }
             elif function_name == "get_airqo_history":
                 from datetime import datetime
 
@@ -1832,6 +1892,12 @@ Be professional, empathetic, and solution-oriented."""
                 )
             elif function_name == "get_airqo_metadata":
                 return self.airqo.get_metadata(entity_type=args.get("entity_type", "grids"))
+            elif function_name == "get_air_quality_by_location":
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                return self.airqo.get_air_quality_by_location(
+                    latitude=latitude, longitude=longitude
+                )
             elif function_name == "get_openmeteo_current_air_quality":
                 latitude = args.get("latitude")
                 longitude = args.get("longitude")
@@ -1911,10 +1977,24 @@ Be professional, empathetic, and solution-oriented."""
             elif function_name == "get_african_city_air_quality":
                 city = args.get("city")
                 site_id = args.get("site_id")
-                return await loop.run_in_executor(
-                    None,
-                    lambda: self.airqo.get_recent_measurements(city=city, site_id=site_id),
-                )
+                # Try AirQo first with smart search
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: self.airqo.get_recent_measurements(city=city, site_id=site_id),
+                    )
+                    if result.get("success"):
+                        return result
+                    # If AirQo returns success=False, log but don't fallback here
+                    logger.info(f"AirQo returned no data for {city}: {result.get('message')}")
+                    return result
+                except Exception as e:
+                    logger.error(f"AirQo API error for {city}: {e}")
+                    return {
+                        "success": False,
+                        "message": f"Could not retrieve AirQo data for {city}. The location may not have AirQo monitoring coverage.",
+                        "error": str(e)
+                    }
             elif function_name == "get_airqo_history":
                 from datetime import datetime
 
@@ -1950,6 +2030,13 @@ Be professional, empathetic, and solution-oriented."""
                 return await loop.run_in_executor(
                     None,
                     lambda: self.airqo.get_metadata(entity_type=args.get("entity_type", "grids")),
+                )
+            elif function_name == "get_air_quality_by_location":
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                return await loop.run_in_executor(
+                    None,
+                    lambda: self.airqo.get_air_quality_by_location(latitude=latitude, longitude=longitude),
                 )
             elif function_name == "get_openmeteo_current_air_quality":
                 latitude = args.get("latitude")

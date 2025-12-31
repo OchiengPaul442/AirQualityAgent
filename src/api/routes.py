@@ -379,7 +379,7 @@ async def chat(
                 if not document_data.get('success'):
                     raise HTTPException(
                         status_code=400,
-                        detail=f'Failed to process document: {document_data.get('error', 'Unknown error')}'
+                        detail=f"Failed to process document: {document_data.get('error', 'Unknown error')}"
                     )
                     
             except HTTPException:
