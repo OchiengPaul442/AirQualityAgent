@@ -226,14 +226,16 @@ class AirQoService:
 
         return self._make_request(f"devices/metadata/{entity_type}", params)
 
-    def get_sites_summary(self, search: str | None = None, limit: int = 30) -> dict[str, Any]:
+    def get_sites_summary(self, search: str | None = None, limit: int = 80, fetch_all: bool = True) -> dict[str, Any]:
         """
         Get sites summary - returns detailed site information including online status.
         This is more comprehensive than metadata/sites.
+        Supports automatic pagination to fetch all available results.
 
         Args:
             search: Optional search query to filter sites
-            limit: Maximum number of results (default 30)
+            limit: Results per page (default 80)
+            fetch_all: If True, automatically fetches all pages via pagination (default True)
 
         Returns:
             Dictionary with sites array containing detailed site information
@@ -242,16 +244,70 @@ class AirQoService:
         if search:
             params["search"] = search
 
-        return self._make_request("devices/sites/summary", params)
+        # Get first page
+        response = self._make_request("devices/sites/summary", params)
+        
+        # If fetch_all is False or no pagination info, return first page only
+        if not fetch_all or not response.get("success"):
+            return response
+        
+        # Collect all sites from first page
+        all_sites = response.get("sites", [])
+        meta = response.get("meta", {})
+        
+        # Check for pagination and fetch remaining pages
+        max_pages = 50  # Safety limit to prevent infinite loops
+        pages_fetched = 1
+        
+        while meta.get("nextPage") and pages_fetched < max_pages:
+            try:
+                # Extract next page URL
+                next_url = meta["nextPage"]
+                
+                # Parse the next page URL to extract skip parameter
+                import urllib.parse
+                parsed = urllib.parse.urlparse(next_url)
+                next_params = urllib.parse.parse_qs(parsed.query)
+                
+                # Update skip parameter for next page
+                if "skip" in next_params:
+                    params["skip"] = int(next_params["skip"][0])
+                    
+                    # Fetch next page
+                    next_response = self._make_request("devices/sites/summary", params)
+                    
+                    if next_response.get("success") and next_response.get("sites"):
+                        all_sites.extend(next_response["sites"])
+                        meta = next_response.get("meta", {})
+                        pages_fetched += 1
+                        logger.info(f"Fetched page {pages_fetched}, total sites: {len(all_sites)}")
+                    else:
+                        break
+                else:
+                    break
+                    
+            except Exception as e:
+                logger.warning(f"Error fetching next page: {e}")
+                break
+        
+        # Update response with all collected sites
+        response["sites"] = all_sites
+        if meta:
+            response["meta"]["totalResults"] = len(all_sites)
+            response["meta"]["pagesFetched"] = pages_fetched
+        
+        return response
 
-    def get_grids_summary(self, search: str | None = None, limit: int = 30) -> dict[str, Any]:
+    def get_grids_summary(self, search: str | None = None, limit: int = 80, fetch_all: bool = True) -> dict[str, Any]:
         """
         Get grids summary - returns grids with their associated sites.
         Each grid contains a list of sites with their details.
+        Supports automatic pagination to fetch all available results.
 
         Args:
             search: Optional search query to filter grids
-            limit: Maximum number of results (default 30)
+            limit: Results per page (default 80)
+            fetch_all: If True, automatically fetches all pages via pagination (default True)
 
         Returns:
             Dictionary with grids array, each containing sites
@@ -260,16 +316,68 @@ class AirQoService:
         if search:
             params["search"] = search
 
-        return self._make_request("devices/grids/summary", params)
+        # Get first page
+        response = self._make_request("devices/grids/summary", params)
+        
+        # If fetch_all is False or no pagination info, return first page only
+        if not fetch_all or not response.get("success"):
+            return response
+        
+        # Collect all grids from first page
+        all_grids = response.get("grids", [])
+        meta = response.get("meta", {})
+        
+        # Check for pagination and fetch remaining pages
+        max_pages = 50  # Safety limit to prevent infinite loops
+        pages_fetched = 1
+        
+        while meta.get("nextPage") and pages_fetched < max_pages:
+            try:
+                # Extract next page URL
+                next_url = meta["nextPage"]
+                
+                # Parse the next page URL to extract skip parameter
+                import urllib.parse
+                parsed = urllib.parse.urlparse(next_url)
+                next_params = urllib.parse.parse_qs(parsed.query)
+                
+                # Update skip parameter for next page
+                if "skip" in next_params:
+                    params["skip"] = int(next_params["skip"][0])
+                    
+                    # Fetch next page
+                    next_response = self._make_request("devices/grids/summary", params)
+                    
+                    if next_response.get("success") and next_response.get("grids"):
+                        all_grids.extend(next_response["grids"])
+                        meta = next_response.get("meta", {})
+                        pages_fetched += 1
+                        logger.info(f"Fetched page {pages_fetched}, total grids: {len(all_grids)}")
+                    else:
+                        break
+                else:
+                    break
+                    
+            except Exception as e:
+                logger.warning(f"Error fetching next page: {e}")
+                break
+        
+        # Update response with all collected grids
+        response["grids"] = all_grids
+        if meta:
+            response["meta"]["totalResults"] = len(all_grids)
+            response["meta"]["pagesFetched"] = pages_fetched
+        
+        return response
 
-    def get_site_id_by_name(self, name: str, limit: int = 5) -> Optional[Union[str, List[str]]]:
+    def get_site_id_by_name(self, name: str, limit: int = 80) -> Optional[Union[str, List[str]]]:
         """
         Helper to find Site ID(s) by searching for a name using sites/summary endpoint.
         Uses the proper AirQo API search flow.
 
         Args:
             name: Location name to search for (e.g., "Gulu University", "Kampala")
-            limit: Maximum number of site IDs to return (default 5)
+            limit: Maximum number of site IDs to return (default 80)
 
         Returns:
             Single site ID string if one result, list of IDs if multiple, or None if not found
@@ -365,7 +473,7 @@ class AirQoService:
                     return format_air_quality_data(measurements_data, source="airqo")
 
             # Step 3: If no sites found, try grid-based search for the region
-            grids_response = self.get_grids_summary(search=city_name or location_query, limit=5)
+            grids_response = self.get_grids_summary(search=city_name or location_query, limit=80)
 
             if grids_response.get("success") and grids_response.get("grids"):
                 grids = grids_response["grids"]
@@ -451,7 +559,7 @@ class AirQoService:
         if search_query:
             try:
                 # Use sites/summary endpoint to find matching sites
-                sites_response = self.get_sites_summary(search=search_query, limit=10)
+                sites_response = self.get_sites_summary(search=search_query, limit=80)
                 
                 if sites_response.get("success") and sites_response.get("sites"):
                     sites = sites_response["sites"]
@@ -492,7 +600,7 @@ class AirQoService:
 
         raise ValueError("Must provide site_id, device_id, grid_id, cohort_id, city, or search parameter.")
 
-    def search_sites_by_location(self, location: str, limit: int = 5) -> dict[str, Any]:
+    def search_sites_by_location(self, location: str, limit: int = 80) -> dict[str, Any]:
         """
         Search for monitoring sites by location name.
         Returns detailed site information from the sites/summary endpoint.
