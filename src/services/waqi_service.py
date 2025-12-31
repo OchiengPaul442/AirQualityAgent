@@ -75,28 +75,58 @@ class WAQIService:
         """
         Get real-time air quality data for a city
 
+        IMPORTANT: WAQI API returns AQI values, NOT raw concentrations.
+        - iaqi.pm25.v is the PM2.5 AQI (0-500 scale), NOT µg/m³
+        - iaqi.pm10.v is the PM10 AQI (0-500 scale), NOT µg/m³
+        - data.aqi is the overall AQI (maximum of all pollutant AQIs)
+
+        The data formatter will convert these AQI values to estimated concentrations
+        using EPA AQI breakpoint conversion formulas.
+
         Args:
             city: City name (e.g., "london", "beijing", "kampala")
 
         Returns:
-            AQI data with pollutants, time, location info (formatted to 1 decimal place)
+            AQI data with pollutants, time, location info.
+            Includes both AQI values and estimated concentrations in µg/m³.
         """
         data = self._make_request(f"feed/{city}/")
-        return format_air_quality_data(data, source="waqi")
+        formatted = format_air_quality_data(data, source="waqi")
+        
+        # Add explicit warning about data type
+        if "data" in formatted:
+            formatted["data"]["_important_note"] = (
+                "WAQI provides AQI index values (0-500 scale), not raw pollutant concentrations. "
+                "Concentrations in µg/m³ are estimated using EPA AQI breakpoint conversions. "
+                "For exact concentration measurements, consider using AirQo or OpenMeteo data sources."
+            )
+        
+        return formatted
 
     def get_station_by_coords(self, lat: float, lon: float) -> dict[str, Any]:
         """
         Get nearest station data by coordinates
+
+        IMPORTANT: WAQI API returns AQI values, NOT raw concentrations.
+        See get_city_feed() documentation for details.
 
         Args:
             lat: Latitude
             lon: Longitude
 
         Returns:
-            AQI data for nearest station (formatted to 1 decimal place)
+            AQI data for nearest station with both AQI and estimated concentrations
         """
         data = self._make_request(f"feed/geo:{lat};{lon}/")
-        return format_air_quality_data(data, source="waqi")
+        formatted = format_air_quality_data(data, source="waqi")
+        
+        if "data" in formatted:
+            formatted["data"]["_important_note"] = (
+                "WAQI provides AQI index values (0-500 scale), not raw pollutant concentrations. "
+                "Concentrations in µg/m³ are estimated using EPA AQI breakpoint conversions."
+            )
+        
+        return formatted
 
     def get_station_by_ip(self) -> dict[str, Any]:
         """

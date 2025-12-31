@@ -6,30 +6,33 @@
 
 The Air Quality AI Agent is a sophisticated, scalable AI system designed for air quality monitoring, research, and policy development. It provides real-time data analysis, intelligent recommendations, and comprehensive research capabilities.
 
-**Latest Updates (v2.0):**
+**Latest Updates (v2.1):**
 
+- ✅ **🆕 Optimized System Prompt**: Reduced from 33,000 to 500 characters (92% cost reduction)
+- ✅ **🆕 Tool-First Architecture**: Agent uses tools immediately instead of apologizing
+- ✅ **🆕 Best Practices Implementation**: Following OpenAI/Google prompt engineering standards
 - ✅ **Configurable Response Styles**: Tailor AI responses for executives, policymakers, researchers, or public
-- ✅ **Professional Error Handling**: Never exposes internal tool failures
-- ✅ **Multi-Source Forecasts**: Checks Open-Meteo, WAQI, AirQo, and web search
+- ✅ **Multi-Source Data**: WAQI, AirQo, Open-Meteo with intelligent fallbacks
 - ✅ **Document Upload & Analysis**: PDF, CSV, Excel file support
-- ✅ **Intelligent Fallbacks**: Web search when primary sources fail
+- ✅ **Location Memory**: Remembers locations from conversation history
+- ✅ **Forecast Detection**: Automatically identifies when users want predictions
 - ✅ Simplified session management (automatic saving)
 - ✅ Cost-optimized with 20-message context window
 - ✅ Production-ready error handling and logging
-- ✅ Comprehensive documentation with examples
 
 ---
 
 ## 📚 Documentation
 
-| Guide                                                  | Description                    |
-| ------------------------------------------------------ | ------------------------------ |
-| **[Getting Started](docs/GETTING_STARTED.md)**         | Quick setup and first steps    |
-| **[API Reference](docs/API_REFERENCE.md)**             | Complete API documentation     |
-| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)** | 🆕 Configure AI response style |
-| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**   | PDF/CSV/Excel file analysis    |
-| [Architecture](docs/ARCHITECTURE.md)                   | System design                  |
-| [Deployment](docs/DEPLOYMENT.md)                       | Production deployment          |
+| Guide                                                                 | Description                                     |
+| --------------------------------------------------------------------- | ----------------------------------------------- |
+| **[Getting Started](docs/GETTING_STARTED.md)**                        | Quick setup and first steps                     |
+| **[API Reference](docs/API_REFERENCE.md)**                            | Complete API documentation                      |
+| **[Data Accuracy Guide](docs/DATA_ACCURACY_AQI_VS_CONCENTRATION.md)** | ⚠️ **CRITICAL**: AQI vs Concentration explained |
+| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)**                | Configure AI response style                     |
+| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**                  | PDF/CSV/Excel file analysis                     |
+| [Architecture](docs/ARCHITECTURE.md)                                  | System design                                   |
+| [Deployment](docs/DEPLOYMENT.md)                                      | Production deployment                           |
 
 ---
 

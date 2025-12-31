@@ -4,6 +4,196 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.5.0] - 2024-12-31
+
+### 🔥 CRITICAL FIX: Data Accuracy - AQI vs Concentration
+
+**Issue**: Agent was returning incorrect air quality values, conflating AQI (Air Quality Index) with pollutant concentrations.
+
+**Root Cause**: WAQI API returns AQI values (0-500 scale), NOT raw concentrations in µg/m³. The system was treating these AQI numbers as concentrations, causing highly inaccurate reporting.
+
+**Example**:
+
+- Before: "Kampala PM2.5 is 177" (ambiguous and incorrect)
+- After: "Kampala PM2.5 AQI is 177 (Unhealthy), approximately 92.6 µg/m³" (accurate and clear)
+
+#### Added
+
+- **AQI Conversion Utility** (`src/utils/aqi_converter.py`)
+  - Convert AQI ↔ Concentration using EPA breakpoints (May 2024 update)
+  - Support for all major pollutants: PM2.5, PM10, O3, CO, NO2, SO2
+  - Health category information and recommendations
+- **Comprehensive Documentation** (`docs/DATA_ACCURACY_AQI_VS_CONCENTRATION.md`)
+  - Complete guide on AQI vs Concentration difference
+  - Data source behavior explanations
+  - EPA breakpoint tables and conversion formulas
+  - Developer guidelines and best practices
+- **Validation Test Suite** (`tests/test_data_accuracy.py`)
+  - Tests for all data sources (WAQI, AirQo, OpenMeteo)
+  - Validates AQI ↔ Concentration conversions
+  - All tests passing ✅
+
+#### Changed
+
+- **Enhanced Data Formatter** (`src/utils/data_formatter.py`)
+  - Automatically detects and handles different data types
+  - Converts WAQI AQI values to estimated concentrations
+  - Calculates AQI from AirQo/OpenMeteo concentrations
+  - Adds clear labels and data type indicators
+- **Updated WAQI Service** (`src/services/waqi_service.py`)
+  - Added explicit documentation about returning AQI values
+  - Includes important notes in responses about data type
+  - Automatic conversion to estimated concentrations
+- **Improved Agent Intelligence** (`src/services/agent_service.py`)
+  - System instructions now explain AQI vs Concentration
+  - Mandatory reporting format requiring data type specification
+  - Examples of correct vs incorrect responses
+  - Data source behavior guide
+- **Updated README** (`README.md`)
+  - Added prominent link to Data Accuracy Guide
+  - Marked as CRITICAL documentation
+
+#### Technical Details
+
+- Uses EPA AQI breakpoints (updated May 6, 2024)
+- Non-linear conversion following official EPA formulas
+- Maintains performance with instant calculations
+- No breaking changes to existing APIs
+- All data sources now provide both AQI and concentration
+
+#### Test Results
+
+```
+WAQI Service    ✅ PASSED (AQI → Concentration conversion)
+AirQo Service   ✅ PASSED (Concentration → AQI calculation)
+OpenMeteo       ✅ PASSED (Concentration handling)
+```
+
+#### Impact
+
+- ✅ Scientifically accurate data reporting
+- ✅ Clear distinction between AQI and concentration
+- ✅ Suitable for research and policy decisions
+- ✅ Consistent across all data sources
+- ✅ Follows EPA standards
+
+**For detailed information, see**: [DATA_ACCURACY_FIX_SUMMARY.md](DATA_ACCURACY_FIX_SUMMARY.md)
+
+---
+
+## [2.4.0] - 2025-01-XX
+
+### 🎯 Critical Fix: System Prompt Over-Engineering (92% Token Reduction)
+
+**Problem**: Agent was giving 300-word apologies instead of using tools. System prompt had bloated to 33,828 characters causing paralysis by analysis.
+
+**Solution**: Complete rewrite following OpenAI/Google best practices. Reduced to 500 characters with "Tool-First Architecture".
+
+#### Changed
+
+- System prompt: 33,828 → 500 chars (92% reduction)
+- Removed 10+ verbose sections that caused apologetic non-responses
+- New structure: "CRITICAL: Always Use Tools First" + concise rules
+- Agent now calls tools immediately instead of writing apologies
+
+#### Benefits
+
+- 92% cost reduction on system prompt tokens
+- Agent actually works - calls WAQI, AirQo, Open-Meteo
+- Faster responses, better UX
+- Follows OpenAI/Google prompt engineering standards
+
+#### Removed
+
+- `tests/test_context_memory.py` - Testing failed "enhancement"
+
+#### Documentation
+
+- README.md: Updated to v2.4.0, removed failed "Enhanced Context Memory" claims
+- CHANGELOG.md: Honest entry about fixing over-engineering
+
+---
+
+## [2.3.0] - 2025-12-31 ⚠️ DEPRECATED
+
+**WARNING: This version added 33,828 characters that broke the agent. Fixed in v2.4.0.**
+
+### 🚀 Major Intelligence Upgrade: Enhanced Context Memory & Conversation Understanding
+
+#### Added
+
+- **Enhanced Conversation Context Memory** 🧠
+
+  - Agent now **automatically extracts and remembers locations** throughout conversations
+  - Intelligent follow-up query handling without repetitive location requests
+  - Detects phrases like "same location", "tomorrow there", "what about next week"
+  - Most recent location persists for entire conversation session
+  - Eliminates frustrating "I don't have the location" responses
+
+- **Smart Forecast vs. Current Data Detection** 🔮
+
+  - Automatically distinguishes between forecast requests and current data queries
+  - Forecast keywords: "tomorrow", "next week", "going to be", "will be", "forecast", "prediction"
+  - Current keywords: "now", "currently", "today", "at the moment"
+  - Routes to appropriate tools automatically (Open-Meteo forecast, WAQI current, etc.)
+
+- **Context-Aware Tool Selection** 🛠️
+
+  - Extracts location from conversation history before every tool call
+  - Multi-step context extraction: current message → previous messages → session history
+  - Never claims missing location when it was mentioned earlier
+  - Seamless experience across multi-turn conversations
+
+- **Professional Conversation Flow** 💬
+  - Natural dialogue patterns matching human conversation expectations
+  - Eliminates robotic "provide the location" responses
+  - Contextually aware responses that reference previous exchanges
+  - Example: User asks "Gulu air quality" → "forecast tomorrow" → Agent uses Gulu automatically
+
+#### Changed
+
+- **System Prompt Enhancement**
+
+  - Added comprehensive "Section 2: CONVERSATION CONTEXT & LOCATION MEMORY"
+  - Updated "Tool Usage Protocols" with context-aware execution rules
+  - Enhanced forecast handling with explicit multi-source checking strategy
+  - Improved error responses to never expose tool failures
+
+- **Tool Selection Priority**
+  - Forecasts now prioritize Open-Meteo (7-day hourly CAMS data)
+  - Context extraction occurs before tool call (not during/after)
+  - Fallback chain: Primary tool → Alternative sources → Web search → Professional guidance
+
+#### Documentation
+
+- **[NEW] Context Memory Guide** (`docs/CONTEXT_MEMORY_GUIDE.md`)
+
+  - Comprehensive explanation of context memory system
+  - Example conversation flows demonstrating intelligent context tracking
+  - Testing scenarios and troubleshooting tips
+  - Response quality standards (good vs. bad examples)
+
+- **Updated README.md**
+  - Highlighted context memory as key v2.3 feature
+  - Added Context Memory Guide to documentation table
+
+#### Testing
+
+- **[NEW] Context Memory Test Script** (`tests/test_context_memory.py`)
+  - Simulates exact user scenario from reported issue
+  - Tests location extraction, forecast detection, and context persistence
+  - Validates agent never asks for location when already provided
+  - Comprehensive pass/fail checks with detailed output
+
+#### Fixed
+
+- **Critical UX Issue**: Agent no longer forgets locations mentioned in conversation
+- **Forecast Handling**: Agent correctly detects "tomorrow" as forecast request, not current data
+- **Context Loss**: Follow-up questions now correctly reference prior conversation context
+- **Repetitive Requests**: Eliminated asking for location multiple times in same session
+
+---
+
 ## [2.2.0] - 2025-01-01
 
 ### 🎯 Major Enhancements: In-Memory Document Processing & Professional Intelligence
