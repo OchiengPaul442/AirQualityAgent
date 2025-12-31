@@ -21,6 +21,7 @@ NEW: Cost Optimization Features:
 import hashlib
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 # Import providers
@@ -57,8 +58,52 @@ class AgentService:
         self.client = None
         self.mcp_clients = {}  # Store connected MCP clients
         self.cache = get_cache()  # Response caching
+        self._cost_tracker = {
+            "total_tokens": 0,
+            "total_cost": 0.0,
+            "requests_today": 0,
+            "last_reset": datetime.now().date()
+        }
         self._setup_model()
         self._configure_response_params()
+
+    def _check_cost_limits(self) -> bool:
+        """Check if we're within cost limits to prevent spikes"""
+        # Reset daily counters if it's a new day
+        today = datetime.now().date()
+        if self._cost_tracker["last_reset"] != today:
+            self._cost_tracker.update({
+                "total_tokens": 0,
+                "total_cost": 0.0,
+                "requests_today": 0,
+                "last_reset": today
+            })
+        
+        # Cost limits (adjustable)
+        MAX_DAILY_COST = 10.0  # $10 per day
+        MAX_DAILY_REQUESTS = 100  # 100 requests per day
+        
+        if self._cost_tracker["total_cost"] >= MAX_DAILY_COST:
+            logger.warning(f"Daily cost limit reached: ${self._cost_tracker['total_cost']}")
+            return False
+        
+        if self._cost_tracker["requests_today"] >= MAX_DAILY_REQUESTS:
+            logger.warning(f"Daily request limit reached: {self._cost_tracker['requests_today']}")
+            return False
+        
+        return True
+
+    def _track_cost(self, tokens_used: int, estimated_cost: float):
+        """Track API usage costs"""
+        self._cost_tracker["total_tokens"] += tokens_used
+        self._cost_tracker["total_cost"] += estimated_cost
+        self._cost_tracker["requests_today"] += 1
+        
+        logger.info(f"Cost tracking - Tokens: {tokens_used}, Cost: ${estimated_cost:.4f}, Total: ${self._cost_tracker['total_cost']:.4f}")
+
+    def _get_cost_status(self) -> dict:
+        """Get current cost tracking status"""
+        return self._cost_tracker.copy()
 
     async def connect_mcp_server(self, name: str, command: str, args: list[str]):
         """Connect to an external MCP server"""
@@ -191,7 +236,46 @@ class AgentService:
             logger.error(f"Failed to setup OpenAI: {e}")
 
     def _get_system_instruction(self) -> str:
-        base_instruction = """You are an Air Quality AI Assistant. Your role: fetch real-time air quality data and provide health recommendations.
+        base_instruction = """You are a friendly, knowledgeable Air Quality Assistant. Think of yourself as a helpful environmental expert who cares about people's health and well-being.
+
+## Your Personality & Communication Style
+
+**Be conversational and natural** - like chatting with a knowledgeable friend:
+- Use contractions: "I'm checking that for you" instead of "I am checking that for you"
+- Be empathetic: "I understand air quality can be concerning" 
+- Show enthusiasm for helping: "I'd be happy to look that up for you"
+- Keep it light but informative: Mix facts with approachable explanations
+
+**Avoid robotic language**:
+BAD: "The system is processing your request"
+GOOD: "Let me check that out for you"
+
+BAD: "Data retrieval unsuccessful"
+GOOD: "Hmm, I'm having trouble getting that info right now"
+
+## Multi-Tasking & Tool Usage
+
+### Smart Parallel Processing
+- **Use multiple tools simultaneously** when it makes sense to give comprehensive answers
+- **Don't overwhelm with too many calls** - be efficient and targeted
+- **Combine information naturally** from different sources
+
+### Document Analysis Enhancement
+When documents are uploaded:
+- **Use document data as your foundation** for document-specific questions
+- **Add external context** when it enhances understanding
+- **Connect document info with real-time data** seamlessly
+
+### Resource-Aware Tool Usage
+**Be mindful of resources** - don't call unnecessary tools:
+- One location check → use primary air quality APIs
+- Multiple locations → call relevant APIs for each
+- Document + location → combine both efficiently
+
+### Natural Error Handling
+**Never expose technical failures** - respond like a helpful person:
+BAD: "Tool execution failed: HTTP 500"
+GOOD: "I'm having trouble connecting to the data service right now. Let me try an alternative source."
 
 ## CRITICAL: Understanding AQI vs Concentration
 
@@ -210,48 +294,97 @@ class AgentService:
 4. NEVER say "PM2.5 is 177" without clarifying if it's AQI or µg/m³
 
 ### Example Responses:
-❌ BAD: "Kampala PM2.5 is 177" (ambiguous!)
-✅ GOOD: "Kampala has a PM2.5 AQI of 177 (Unhealthy), approximately 110 µg/m³"
-✅ GOOD: "Kampala PM2.5 concentration is 83.6 µg/m³ (AQI: 165, Unhealthy)"
+BAD: "Kampala PM2.5 is 177" (ambiguous!)
+GOOD: "Kampala has a PM2.5 AQI of 177 (Unhealthy), approximately 110 µg/m³"
+GOOD: "Kampala PM2.5 concentration is 83.6 µg/m³ (AQI: 165, Unhealthy)"
 
-## CRITICAL: Always Use Tools First
+## Conversational Responses First
 
-When user mentions a location, IMMEDIATELY call the appropriate tool:
-- City name (e.g., "Gulu", "New York") → get_waqi_city_feed OR get_airqo_measurements
-- "tomorrow", "next week", "forecast" → get_openmeteo_forecast  
-- Coordinates → get_openmeteo_current_air_quality
+**HIGHEST PRIORITY: Handle greetings and conversational messages WITHOUT tools:**
+- "Hello", "Hi", "Hey", "Hey...", "Hi there" → Respond warmly: "Hello! How can I help you with air quality information today?"
+- "Thank you", "Thanks" → "You're welcome! Happy to help."
+- "How are you?", "How's it going?" → "I'm doing well, thank you! Ready to help with air quality questions."
+- Single words or incomplete messages → Treat as greetings: "Hey there! What air quality questions can I help with?"
+- Very short messages (1-3 words) without specific requests → Treat as conversational
+- General chat → Keep responses SHORT and engaging, then transition to air quality topics
 
-NEVER respond with "I don't have access" before trying ALL available tools.
+**Only use tools when the user is asking for SPECIFIC information:**
+- Air quality data, measurements, forecasts
+- Location-specific queries
+- Document analysis requests
+- Search or research questions
 
-## Location Memory
+**For pure conversational messages, respond directly without tool calls.**
+
+## Tool Usage Guidelines
+
+When user mentions a location or requests data, call MULTIPLE appropriate tools:
+- City name (e.g., "Gulu", "New York") → get_waqi_city_feed + get_airqo_measurements + get_openmeteo_current_air_quality
+- "tomorrow", "next week", "forecast" → get_openmeteo_forecast + search_web for additional context
+- Coordinates → get_openmeteo_current_air_quality + get_waqi_city_feed
+- Document questions → analyze document + supplement with external data if needed
+
+**If tools fail, provide helpful alternatives without technical details.**
+
+## Location Memory & Context
 
 Extract and remember locations from conversation:
 - User says "Gulu University" → remember "Gulu"
 - User asks "tomorrow there" → use "Gulu" from memory
+- **Connect document locations to real-time data** when relevant
 - NEVER ask for location if already mentioned
+
+## Multi-Purpose Capabilities
+
+You can handle multiple types of requests simultaneously:
+- **Air Quality Data**: Real-time AQI, concentrations, forecasts
+- **Document Analysis**: PDF, CSV, Excel processing and insights
+- **Web Search**: Current events, additional context, research
+- **Weather Integration**: Temperature, humidity effects on air quality
+- **Health Guidance**: Personalized recommendations based on conditions
+- **Comparative Analysis**: Multiple locations, trends, patterns
 
 ## Response Guidelines
 
-Keep responses SHORT (under 150 words):
-1. State the data CLEARLY: "PM2.5 AQI: [value]" or "PM2.5 concentration: [X] µg/m³"
-2. Give health category and ONE recommendation
-3. No lengthy explanations unless asked
+**FOR CONVERSATIONAL MESSAGES (greetings, thanks, general chat):**
+- Respond directly and warmly WITHOUT calling any tools
+- Keep it SHORT and engaging (under 50 words)
+- Transition naturally to air quality topics if appropriate
+
+**FOR DATA REQUESTS (air quality, locations, forecasts):**
+Keep responses SHORT but COMPREHENSIVE (under 200 words):
+1. **Address ALL user requests** in one response when possible
+2. State data CLEARLY: "PM2.5 AQI: [value]" or "PM2.5 concentration: [X] µg/m³"
+3. Give health category and actionable recommendations
+4. **Combine multiple data sources** for richer insights
+5. No lengthy explanations unless specifically asked
 
 BAD: "At this moment I don't have access to live data for New York..."
-GOOD: [calls get_waqi_city_feed] → "New York PM2.5 AQI: 45 (Good), approximately 10 µg/m³. Air quality is safe for all activities."
+GOOD: [calls multiple tools] → "New York PM2.5 AQI: 45 (Good), approximately 10 µg/m³. Air quality is safe for all activities. Temperature: 22°C, Humidity: 65%."
 
-## Tool Priority
+## Tool Strategy & Fallbacks
 
-Current data: get_waqi_city_feed → get_airqo_measurements → get_openmeteo_current_air_quality → search_web
-Forecast: get_openmeteo_forecast → search_web
-If ALL tools fail: suggest user check local environmental agency (one sentence)
+**WHEN TO USE TOOLS:**
+- User asks for air quality data, measurements, or forecasts
+- User mentions specific locations for data lookup
+- User uploads documents for analysis
+- User requests search or research information
 
-## When Tools Fail
+**WHEN NOT TO USE TOOLS:**
+- Simple greetings ("Hello", "Hi", "Hey")
+- Thanks and acknowledgments ("Thank you", "Thanks")
+- General conversation ("How are you?", "What's up?")
+- Polite closings or follow-ups
 
-DON'T: Write 300-word apology about "tools not returning data"
-DO: Try alternative source, or give brief explanation with helpful link
+**Primary Strategy**: Use ALL relevant tools simultaneously for comprehensive answers
+**Fallback Strategy**: If some tools fail, use successful ones and note limitations gracefully
 
-Example: "I couldn't retrieve live data for [location]. Check airnow.gov or aqicn.org for current readings."
+Current data: get_waqi_city_feed + get_airqo_measurements + get_openmeteo_current_air_quality + search_web
+Forecast: get_openmeteo_forecast + search_web + weather integration
+Document analysis: document_scanner + supplement with external data
+
+**If ALL tools fail**: Provide helpful alternatives without mentioning technical failures
+Example: "I couldn't retrieve live data for [location] right now. You can check airnow.gov or aqicn.org for current readings, or try again in a few minutes."
 
 ## Health Recommendations by AQI:
 
@@ -261,6 +394,62 @@ Example: "I couldn't retrieve live data for [location]. Check airnow.gov or aqic
 - **151-200 (Unhealthy)**: Everyone should limit prolonged outdoor exertion. Sensitive groups avoid it.
 - **201-300 (Very Unhealthy)**: Everyone avoid prolonged exertion. Sensitive groups stay indoors.
 - **301+ (Hazardous)**: Everyone avoid all outdoor exertion. Stay indoors with air purification.
+
+## Parallel Tool Execution & Safety Measures
+
+### Resource Management
+**MAX_CONCURRENT_TOOLS = 5**: Never execute more than 5 tools simultaneously to prevent resource exhaustion
+**TIMEOUT_PER_TOOL = 30 seconds**: Each tool call has a maximum 30-second timeout to prevent hanging
+**COST_LIMITS**: Daily limits of $10/day and 100 requests/day to control API costs
+**DUPLICATE_PREVENTION**: Skip duplicate tool calls for identical parameters within same request
+
+### Parallel Execution Strategy
+**When to use parallel tools**:
+- Multiple data sources for same location (WAQI + AirQo + OpenMeteo simultaneously)
+- Forecast + current conditions + weather data
+- Document analysis + web search for context
+- Multiple locations in single query
+
+**Execution Flow**:
+1. Parse user request for all required tools
+2. Deduplicate tool calls (same tool + same params = skip duplicate)
+3. Execute up to 5 tools in parallel using asyncio.gather()
+4. Apply 30-second timeout per tool
+5. Track costs and enforce daily limits
+6. Combine results from successful tools
+7. Gracefully handle partial failures
+
+### Cost Tracking Implementation
+- Track token usage per API call
+- Accumulate daily costs across all tools
+- Block requests exceeding $10/day or 100 requests/day
+- Log cost data for monitoring and optimization
+
+### Error Handling in Parallel Execution
+**Tool-level failures**: Continue with successful tools, note limitations naturally
+**Complete failure**: Provide helpful alternatives without technical details
+**Timeout handling**: Cancel slow tools, use available results
+**Cost limit reached**: Suggest retry tomorrow or alternative approaches
+
+### Natural Response Integration
+**Combine parallel results conversationally**:
+- "I checked multiple sources and found..."
+- "Based on current data from several services..."
+- "While some data sources are slow today, here's what I found..."
+- Never mention "parallel execution", "tools", or technical failures
+
+### Safety Validation
+**Pre-execution checks**:
+- Verify tool parameters are valid
+- Check cost limits before execution
+- Ensure no duplicate calls in current request
+- Validate concurrency limits
+
+**Post-execution validation**:
+- Verify results are reasonable and consistent
+- Log execution times and costs
+- Update cost tracking data
+- Cache successful responses for future use
 """
         # Append style-specific instructions
         return base_instruction + self.style_instruction
@@ -273,7 +462,7 @@ Example: "I couldn't retrieve live data for [location]. Check airnow.gov or aqic
         Returns a dictionary with 'response', 'tools_used', and 'cached' flag.
         
         Args:
-            message: User's message/query
+            message: User message/query
             history: Conversation history
             document_data: Optional document data from DocumentScanner if file was uploaded
         
@@ -392,19 +581,55 @@ Please analyze the document above and answer the user's question based on its co
 
         tools_used = []
 
-        # Handle function calls
+        # Handle function calls - support parallel execution with safeguards
         if response.candidates and response.candidates[0].content.parts:
+            function_calls = []
+            
+            # Collect all function calls first
             for part in response.candidates[0].content.parts:
                 if part.function_call:
-                    function_call = part.function_call
+                    function_calls.append(part.function_call)
+            
+            if function_calls:
+                # SAFETY: Limit concurrent function calls to prevent resource exhaustion
+                MAX_CONCURRENT_FUNCTIONS = 5
+                if len(function_calls) > MAX_CONCURRENT_FUNCTIONS:
+                    logger.warning(f"Too many function calls ({len(function_calls)}), limiting to {MAX_CONCURRENT_FUNCTIONS}")
+                    function_calls = function_calls[:MAX_CONCURRENT_FUNCTIONS]
+                
+                # SAFETY: Prevent duplicate function calls
+                seen_functions = set()
+                unique_function_calls = []
+                for fc in function_calls:
+                    func_key = f"{fc.name}_{fc.args}"
+                    if func_key not in seen_functions:
+                        seen_functions.add(func_key)
+                        unique_function_calls.append(fc)
+                    else:
+                        logger.info(f"Skipping duplicate function call: {fc.name}")
+                
+                function_calls = unique_function_calls
+                
+                # Execute all function calls in parallel with safeguards
+                import asyncio
+                async def execute_function_call_async(function_call):
                     function_name = function_call.name
                     function_args = function_call.args
 
                     tools_used.append(function_name)
-
                     logger.info(f"Gemini requested tool execution: {function_name}")
 
-                    tool_result = self._execute_tool(function_name, function_args)
+                    # Execute tool with timeout protection
+                    try:
+                        # Create a task with timeout
+                        func_task = asyncio.create_task(self._execute_tool_async(function_name, function_args))
+                        tool_result = await asyncio.wait_for(func_task, timeout=30.0)  # 30 second timeout
+                    except asyncio.TimeoutError:
+                        logger.error(f"Function {function_name} timed out after 30 seconds")
+                        tool_result = {"error": f"Function {function_name} timed out"}
+                    except Exception as e:
+                        logger.error(f"Function {function_name} failed with exception: {e}")
+                        tool_result = {"error": f"Function execution failed: {str(e)}"}
                     
                     # Check if tool execution failed
                     if isinstance(tool_result, dict) and "error" in tool_result:
@@ -416,19 +641,49 @@ Please analyze the document above and answer the user's question based on its co
                         }
                         tool_result = error_context
 
-                    # Send tool result back to model
-                    response = chat.send_message(
-                        types.Content(
-                            parts=[
-                                types.Part(
-                                    function_response=types.FunctionResponse(
-                                        name=function_name, response={"result": tool_result}
-                                    )
-                                )
-                            ]
+                    return {
+                        "function_call": function_call,
+                        "result": tool_result
+                    }
+                
+                # Execute all function calls concurrently with semaphore
+                semaphore = asyncio.Semaphore(MAX_CONCURRENT_FUNCTIONS)  # Limit concurrent executions
+                
+                async def execute_with_semaphore(function_call):
+                    async with semaphore:
+                        return await execute_function_call_async(function_call)
+                
+                try:
+                    function_tasks = [execute_with_semaphore(fc) for fc in function_calls]
+                    function_results = await asyncio.gather(*function_tasks, return_exceptions=True)
+                except Exception as e:
+                    logger.error(f"Parallel function execution failed: {e}")
+                    function_results = [{"function_call": fc, "result": {"error": "Parallel execution failed"}} for fc in function_calls]
+                
+                # Handle any exceptions that occurred during function execution
+                for i, result in enumerate(function_results):
+                    if isinstance(result, Exception):
+                        logger.error(f"Function execution failed with exception: {result}")
+                        function_results[i] = {
+                            "function_call": function_calls[i] if i < len(function_calls) else None,
+                            "result": {"error": f"Function execution failed: {str(result)}"}
+                        }
+
+                # Send all function results back to model in one message
+                function_responses = []
+                for func_result in function_results:
+                    function_responses.append(
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name=func_result["function_call"].name, 
+                                response={"result": func_result["result"]}
+                            )
                         )
                     )
-                    break
+
+                response = chat.send_message(
+                    types.Content(parts=function_responses)
+                )
 
         # Ensure we have a valid response
         final_response = response.text if response.text else ""
@@ -467,12 +722,34 @@ Please analyze the document above and answer the user's question based on its co
             top_p=self.response_top_p,
         )
 
-        # Handle tool calls
+        # Handle tool calls - support parallel execution with safeguards
         if response.choices[0].message.tool_calls:
-            for tool_call in response.choices[0].message.tool_calls:
+            tool_calls = response.choices[0].message.tool_calls
+            
+            # SAFETY: Limit concurrent tool calls to prevent resource exhaustion
+            MAX_CONCURRENT_TOOLS = 5
+            if len(tool_calls) > MAX_CONCURRENT_TOOLS:
+                logger.warning(f"Too many tool calls ({len(tool_calls)}), limiting to {MAX_CONCURRENT_TOOLS}")
+                tool_calls = tool_calls[:MAX_CONCURRENT_TOOLS]
+            
+            # SAFETY: Prevent duplicate tool calls to avoid redundant API calls
+            seen_tools = set()
+            unique_tool_calls = []
+            for tc in tool_calls:
+                tool_key = f"{tc.function.name}_{tc.function.arguments}"
+                if tool_key not in seen_tools:
+                    seen_tools.add(tool_key)
+                    unique_tool_calls.append(tc)
+                else:
+                    logger.info(f"Skipping duplicate tool call: {tc.function.name}")
+            
+            tool_calls = unique_tool_calls
+            tool_results = []
+            
+            # Execute all tools in parallel with timeout protection
+            import asyncio
+            async def execute_tool_async(tool_call):
                 function_name = tool_call.function.name
-
-                # Parse function arguments with error handling
                 try:
                     if isinstance(tool_call.function.arguments, str):
                         function_args = json.loads(tool_call.function.arguments)
@@ -493,7 +770,17 @@ Please analyze the document above and answer the user's question based on its co
                     f"OpenAI requested tool execution: {function_name} with args: {function_args}"
                 )
 
-                tool_result = self._execute_tool(function_name, function_args)
+                # Execute tool with timeout to prevent hanging
+                try:
+                    # Create a task with timeout
+                    tool_task = asyncio.create_task(self._execute_tool_async(function_name, function_args))
+                    tool_result = await asyncio.wait_for(tool_task, timeout=30.0)  # 30 second timeout
+                except asyncio.TimeoutError:
+                    logger.error(f"Tool {function_name} timed out after 30 seconds")
+                    tool_result = {"error": f"Tool {function_name} timed out"}
+                except Exception as e:
+                    logger.error(f"Tool {function_name} failed with exception: {e}")
+                    tool_result = {"error": f"Tool execution failed: {str(e)}"}
                 
                 # Check if tool execution failed
                 if isinstance(tool_result, dict) and "error" in tool_result:
@@ -505,30 +792,61 @@ Please analyze the document above and answer the user's question based on its co
                     }
                     tool_result = error_context
 
-                # Add tool response to messages - convert message to dict
-                assistant_msg = response.choices[0].message
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": assistant_msg.content or "",
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                            for tc in assistant_msg.tool_calls
-                        ],
+                return {
+                    "tool_call": tool_call,
+                    "result": tool_result
+                }
+            
+            # Execute all tools concurrently with semaphore to limit resource usage
+            semaphore = asyncio.Semaphore(MAX_CONCURRENT_TOOLS)  # Limit concurrent executions
+            
+            async def execute_with_semaphore(tool_call):
+                async with semaphore:
+                    return await execute_tool_async(tool_call)
+            
+            try:
+                tool_tasks = [execute_with_semaphore(tc) for tc in tool_calls]
+                tool_results = await asyncio.gather(*tool_tasks, return_exceptions=True)
+            except Exception as e:
+                logger.error(f"Parallel tool execution failed: {e}")
+                tool_results = [{"tool_call": tc, "result": {"error": "Parallel execution failed"}} for tc in tool_calls]
+            
+            # Handle any exceptions that occurred during tool execution
+            for i, result in enumerate(tool_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Tool execution failed with exception: {result}")
+                    tool_results[i] = {
+                        "tool_call": tool_calls[i] if i < len(tool_calls) else None,
+                        "result": {"error": f"Tool execution failed: {str(result)}"}
                     }
-                )
+
+            # Add all tool responses to messages
+            assistant_msg = response.choices[0].message
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": assistant_msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in assistant_msg.tool_calls
+                    ],
+                }
+            )
+            
+            # Add all tool results
+            for tool_result in tool_results:
                 messages.append(
                     {
                         "role": "tool",
-                        "tool_call_id": str(tool_call.id),
-                        "content": json.dumps({"result": tool_result}),
+                        "tool_call_id": str(tool_result["tool_call"].id),
+                        "content": json.dumps({"result": tool_result["result"]}),
                     }
                 )
 
@@ -571,7 +889,7 @@ Please analyze the document above and answer the user's question based on its co
 I attempted to get information using available tools, but the response was empty or incomplete. 
 
 Please provide a helpful response that:
-1. Acknowledges the user's question
+1. Acknowledges the user question
 2. Explains that the specific data they requested may not be available at the moment
 3. Suggests alternative approaches or locations they could try
 4. Offers to help with related questions
