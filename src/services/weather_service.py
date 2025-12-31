@@ -78,3 +78,67 @@ class WeatherService:
         except Exception as e:
             logger.error(f"Error fetching weather for {city}: {e}")
             return {"error": str(e)}
+
+    def get_weather_forecast(self, city: str, days: int = 7) -> dict[str, Any]:
+        """Get weather forecast for a city."""
+        coords = self.get_coordinates(city)
+        if not coords:
+            return {"error": f"Could not find coordinates for city: {city}"}
+
+        try:
+            params = {
+                "latitude": coords["latitude"],
+                "longitude": coords["longitude"],
+                "current": [
+                    "temperature_2m",
+                    "relative_humidity_2m",
+                    "apparent_temperature",
+                    "precipitation",
+                    "weather_code",
+                    "wind_speed_10m",
+                ],
+                "hourly": [
+                    "temperature_2m",
+                    "relative_humidity_2m",
+                    "precipitation_probability",
+                    "precipitation",
+                    "weather_code",
+                    "wind_speed_10m",
+                ],
+                "daily": [
+                    "temperature_2m_max",
+                    "temperature_2m_min",
+                    "precipitation_sum",
+                    "precipitation_probability_max",
+                    "weather_code",
+                    "wind_speed_10m_max",
+                    "sunrise",
+                    "sunset",
+                ],
+                "forecast_days": min(days, 16),  # Max 16 days
+                "timezone": "auto",
+            }
+
+            response = requests.get(self.BASE_URL, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            return {
+                "success": True,
+                "location": f"{coords['name']}, {coords['country']}",
+                "coordinates": {
+                    "latitude": coords["latitude"],
+                    "longitude": coords["longitude"],
+                },
+                "current": data.get("current", {}),
+                "current_units": data.get("current_units", {}),
+                "hourly": data.get("hourly", {}),
+                "hourly_units": data.get("hourly_units", {}),
+                "daily": data.get("daily", {}),
+                "daily_units": data.get("daily_units", {}),
+                "timezone": data.get("timezone", "UTC"),
+            }
+
+        except Exception as e:
+            logger.error(f"Error fetching weather forecast for {city}: {e}")
+            return {"error": str(e), "success": False}

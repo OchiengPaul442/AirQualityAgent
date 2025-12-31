@@ -161,20 +161,25 @@ class AgentService:
             }
         }
         
-        # Get style preset or use custom values
+        # Get style preset configuration
         style = self.settings.AI_RESPONSE_STYLE.lower()
+        
+        # Priority: Explicit .env values > Style presets > Defaults
+        # If user sets values in .env, always use those regardless of style preset
+        # The style preset only affects the instruction suffix
+        
         if style in style_presets:
-            preset = style_presets[style]
-            self.response_temperature = preset["temperature"]
-            self.response_top_p = preset["top_p"]
-            self.style_instruction = preset["instruction_suffix"]
-            logger.info(f"Applied '{style}' response style preset (temp={self.response_temperature}, top_p={self.response_top_p})")
+            # Use .env temperature/top_p values but get instruction from preset
+            self.response_temperature = self.settings.AI_RESPONSE_TEMPERATURE
+            self.response_top_p = self.settings.AI_RESPONSE_TOP_P
+            self.style_instruction = style_presets[style]["instruction_suffix"]
+            logger.info(f"Applied '{style}' style with custom params from .env (temp={self.response_temperature}, top_p={self.response_top_p})")
         else:
-            # Use custom values from config
+            # Unknown style - use .env values and default instruction
             self.response_temperature = self.settings.AI_RESPONSE_TEMPERATURE
             self.response_top_p = self.settings.AI_RESPONSE_TOP_P
             self.style_instruction = "\\n\\nIMPORTANT: Provide clear, professional responses suitable for all audiences. Avoid repetition."
-            logger.info(f"Using custom response parameters (temp={self.response_temperature}, top_p={self.response_top_p})")
+            logger.info(f"Using response parameters from .env (temp={self.response_temperature}, top_p={self.response_top_p})")
 
     def _setup_gemini(self):
         """Configure Gemini model"""
@@ -227,7 +232,12 @@ class AgentService:
             self.openai_tools.extend(waqi_tools)
             self.openai_tools.extend(airqo_tools)
             self.openai_tools.extend(self._get_openai_openmeteo_tool())
-            self.openai_tools.append(self._get_openai_weather_tool())
+            # Weather tools returns a list now
+            weather_tools = self._get_openai_weather_tool()
+            if isinstance(weather_tools, list):
+                self.openai_tools.extend(weather_tools)
+            else:
+                self.openai_tools.append(weather_tools)
             self.openai_tools.append(self._get_openai_search_tool())
             self.openai_tools.append(self._get_openai_scrape_tool())
             self.openai_tools.append(self._get_openai_document_scanner_tool())
@@ -354,9 +364,49 @@ You can handle multiple types of requests simultaneously:
 - **Air Quality Data**: Real-time AQI, concentrations, forecasts
 - **Document Analysis**: PDF, CSV, Excel processing and insights
 - **Web Search**: Current events, additional context, research
+- **Weather Forecasts**: Temperature, humidity, precipitation, wind speed predictions (up to 16 days)
 - **Weather Integration**: Temperature, humidity effects on air quality
 - **Health Guidance**: Personalized recommendations based on conditions
 - **Comparative Analysis**: Multiple locations, trends, patterns
+
+## Weather Data Tools
+
+**For Weather Forecasts (NOT air quality):**
+- Use `get_weather_forecast` when user asks about:
+  * "weather forecast", "weather prediction", "upcoming weather", "future weather"
+  * "will it rain", "temperature tomorrow", "weather this week"  
+  * "what's the weather like", "weather conditions"
+  * Example: "What's the weather forecast in London?" → Use get_weather_forecast
+- Use `get_city_weather` for CURRENT weather conditions only
+- Returns: temperature, humidity, precipitation, wind speed, hourly & daily forecasts
+
+**For Air Quality (pollution, PM2.5, AQI):**
+- Use AirQo → WAQI → OpenMeteo priority order as described above
+- Air quality and weather are DIFFERENT - don't confuse them
+
+**INTELLIGENT WEATHER + AIR QUALITY ANALYSIS:**
+When analyzing air quality, AUTOMATICALLY consider weather factors:
+1. **Wind Speed Impact:**
+   - Low wind (<10 km/h) → pollutants accumulate, worse air quality
+   - High wind (>15 km/h) → pollutants disperse, better air quality
+   
+2. **Precipitation Impact:**
+   - Rain/snow → washes out pollutants, improves air quality temporarily
+   - No precipitation + high humidity → pollutants can accumulate
+   
+3. **Temperature Impact:**
+   - Temperature inversions (cold air trapped below warm) → traps pollutants
+   - Hot, sunny days → can increase ozone formation
+   
+4. **Combined Analysis:**
+   - ALWAYS combine weather forecast with air quality data when available
+   - Predict air quality trends based on upcoming weather
+   - Example: "Current AQI is 85 (Moderate), but heavy rain tonight will improve conditions tomorrow"
+   
+**WHEN TO AUTOMATICALLY CALL BOTH:**
+- User asks about air quality → Get AQ data + weather for context
+- User asks about weather → If location has air quality issues, mention them
+- User asks "is it safe to go outside?" → MUST check both weather and air quality
 
 ## Response Guidelines
 
@@ -1106,7 +1156,7 @@ Be professional, empathetic, and solution-oriented."""
             function_declarations=[
                 types.FunctionDeclaration(
                     name="get_city_weather",
-                    description="Get current weather data for a specific city.",
+                    description="Get current weather conditions for any city. Returns temperature, humidity, wind, precipitation, and weather conditions.",
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
@@ -1117,7 +1167,25 @@ Be professional, empathetic, and solution-oriented."""
                         },
                         required=["city"],
                     ),
-                )
+                ),
+                types.FunctionDeclaration(
+                    name="get_weather_forecast",
+                    description="**Get detailed weather FORECAST for any city** - Use this when user asks for weather forecast, future weather, upcoming weather, or weather predictions. Returns hourly and daily forecasts up to 16 days including temperature, precipitation, humidity, wind, sunrise/sunset.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "city": types.Schema(
+                                type=types.Type.STRING,
+                                description="The name of the city (e.g., 'London', 'New York', 'Tokyo')",
+                            ),
+                            "days": types.Schema(
+                                type=types.Type.INTEGER,
+                                description="Number of forecast days (1-16, default: 7)",
+                            ),
+                        },
+                        required=["city"],
+                    ),
+                ),
             ]
         )
 
@@ -1472,20 +1540,43 @@ Be professional, empathetic, and solution-oriented."""
         ]
 
     def _get_openai_weather_tool(self):
-        return {
-            "type": "function",
-            "function": {
-                "name": "get_city_weather",
-                "description": "Get current weather data for a specific city.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "city": {"type": "string", "description": "The name of the city"}
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_city_weather",
+                    "description": "Get current weather conditions for any city. Returns temperature, humidity, wind, precipitation, and weather conditions.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string", "description": "The name of the city"}
+                        },
+                        "required": ["city"],
                     },
-                    "required": ["city"],
                 },
             },
-        }
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather_forecast",
+                    "description": "**Get detailed weather FORECAST for any city** - Use this when user asks for weather forecast, future weather, upcoming weather, or weather predictions. Returns hourly and daily forecasts up to 16 days including temperature, precipitation, humidity, wind, sunrise/sunset.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {
+                                "type": "string",
+                                "description": "The name of the city (e.g., 'London', 'New York', 'Tokyo')",
+                            },
+                            "days": {
+                                "type": "integer",
+                                "description": "Number of forecast days (1-16, default: 7)",
+                            },
+                        },
+                        "required": ["city"],
+                    },
+                },
+            },
+        ]
 
     def _get_openai_search_tool(self):
         return {
@@ -1697,13 +1788,34 @@ Be professional, empathetic, and solution-oriented."""
                 "type": "function",
                 "function": {
                     "name": "get_city_weather",
-                    "description": "Get current weather data for a specific city.",
+                    "description": "Get current weather conditions for any city. Returns temperature, humidity, wind, precipitation, and weather conditions.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "city": {
                                 "type": "string",
                                 "description": "The name of the city",
+                            },
+                        },
+                        "required": ["city"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather_forecast",
+                    "description": "**Get detailed weather FORECAST for any city** - Use this when user asks for weather forecast, future weather, upcoming weather, or weather predictions. Returns hourly and daily forecasts up to 16 days including temperature, precipitation, humidity, wind, sunrise/sunset.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {
+                                "type": "string",
+                                "description": "The name of the city (e.g., 'London', 'New York', 'Tokyo')",
+                            },
+                            "days": {
+                                "type": "integer",
+                                "description": "Number of forecast days (1-16, default: 7)",
                             },
                         },
                         "required": ["city"],
@@ -1934,6 +2046,10 @@ Be professional, empathetic, and solution-oriented."""
             elif function_name == "get_city_weather":
                 city = args.get("city")
                 return self.weather.get_current_weather(city)
+            elif function_name == "get_weather_forecast":
+                city = args.get("city")
+                days = args.get("days", 7)
+                return self.weather.get_weather_forecast(city, days)
             elif function_name == "search_web":
                 query = args.get("query")
                 return self.search.search(query)
