@@ -2,11 +2,15 @@
 
 ## Overview
 
-Upload and analyze PDF, CSV, or Excel files with **in-memory processing** for cost-effective analysis. Files are **never stored** on the server - processed entirely in RAM and immediately discarded.
+Upload and analyze PDF, CSV, or Excel files **directly through the chat endpoint** with **in-memory processing** for cost-effective analysis. Files are **never stored** on the server - processed entirely in RAM and immediately discarded.
+
+**Important:** Document upload is now integrated into the `/api/v1/agent/chat` endpoint. You can upload a file along with your message to the AI agent for analysis.
 
 **Key Benefits:**
 
-- ✅ **No Server Storage** - Zero disk usage, pure in-memory
+- ✅ **Unified Endpoint** - Upload and chat in one request
+- ✅ **Conversational Context** - Documents analyzed within conversation flow
+- ✅ **No Server Storage** - Zero disk usage, pure in-memory processing
 - ✅ **8MB Limit** - Optimized for cost and performance
 - ✅ **Secure** - Files discarded after processing
 - ✅ **Fast** - Streaming chunks prevent memory spikes
@@ -18,16 +22,17 @@ Upload and analyze PDF, CSV, or Excel files with **in-memory processing** for co
 ### Endpoint
 
 ```
-POST /api/v1/air-quality/query
+POST /api/v1/agent/chat
 Content-Type: multipart/form-data
 ```
 
 ### Parameters
 
-- `document` (file, optional) - PDF/CSV/Excel file, max 8MB
-- `city` (string, optional) - City name
-- `latitude`/`longitude` (numbers, optional) - Coordinates
-- `include_forecast` (boolean, optional) - Include forecasts
+| Field        | Type   | Required | Description                                                  |
+| ------------ | ------ | -------- | ------------------------------------------------------------ |
+| `message`    | string | Yes      | Your question or instruction about the document              |
+| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new. |
+| `file`       | file   | No       | Document to analyze (PDF, CSV, Excel) - Max 8MB              |
 
 ### Supported Files
 
@@ -53,17 +58,21 @@ if os.path.getsize(file_path) > 8 * 1024 * 1024:
     print("Error: File exceeds 8MB limit")
     exit(1)
 
-# Upload
+# Upload document with your question
 with open(file_path, 'rb') as f:
     response = requests.post(
-        'http://localhost:8000/api/v1/air-quality/query',
-        data={'city': 'Kampala', 'include_forecast': True},
-        files={'document': f}
+        'http://localhost:8000/api/v1/agent/chat',
+        data={
+            'message': 'Analyze this air quality data and summarize PM2.5 trends',
+            'session_id': 'your-session-id'  # Optional, omit for new session
+        },
+        files={'file': f}
     )
 
 result = response.json()
-print("Air Quality:", result.get('waqi'))
-print("Document:", result.get('document'))
+print("AI Response:", result['response'])
+print("Session ID:", result['session_id'])
+print("Document Processed:", result['document_filename'])
 ```
 
 ### JavaScript/React
@@ -73,23 +82,30 @@ import React, { useState } from "react";
 
 function FileUpload() {
   const MAX_SIZE = 8 * 1024 * 1024; // 8MB
+  const [sessionId, setSessionId] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const file = e.target.file.files[0];
+    const message = e.target.message.value;
 
     // Client-side validation
-    if (file.size > MAX_SIZE) {
+    if (file && file.size > MAX_SIZE) {
       alert("File must be under 8MB");
       return;
     }
 
     const formData = new FormData();
-    formData.append("city", "Kampala");
-    formData.append("document", file);
+    formData.append("message", message);
+    if (sessionId) {
+      formData.append("session_id", sessionId);
+    }
+    if (file) {
+      formData.append("file", file);
+    }
 
     try {
-      const res = await fetch("/api/v1/air-quality/query", {
+      const res = await fetch("/api/v1/agent/chat", {
         method: "POST",
         body: formData,
       });
@@ -101,17 +117,23 @@ function FileUpload() {
       }
 
       const data = await res.json();
-      console.log("Results:", data);
+      console.log("AI Response:", data.response);
+      setSessionId(data.session_id); // Save for next request
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      alert("Request failed: " + err.message);
     }
   };
 
   return (
     <form onSubmit={handleSubmit}>
+      <textarea
+        name="message"
+        placeholder="Ask about the document..."
+        required
+      />
       <input type="file" name="file" accept=".pdf,.csv,.xlsx,.xls" />
-      <small>Max 8MB</small>
-      <button type="submit">Upload & Analyze</button>
+      <small>Max 8MB (optional)</small>
+      <button type="submit">Send</button>
     </form>
   );
 }
@@ -122,23 +144,30 @@ function FileUpload() {
 ```vue
 <template>
   <form @submit.prevent="upload">
+    <textarea
+      v-model="message"
+      placeholder="Ask about your document..."
+      required
+    />
     <input type="file" @change="handleFile" accept=".pdf,.csv,.xlsx,.xls" />
     <p v-if="error" class="error">{{ error }}</p>
-    <small>Max 8MB</small>
-    <button type="submit" :disabled="!file">Upload</button>
+    <small>Max 8MB (optional)</small>
+    <button type="submit">Send</button>
   </form>
 </template>
 
 <script setup>
 import { ref } from "vue";
 
+const message = ref("");
 const file = ref(null);
+const sessionId = ref(null);
 const error = ref("");
 const MAX_SIZE = 8 * 1024 * 1024;
 
 const handleFile = (e) => {
   const f = e.target.files[0];
-  if (f.size > MAX_SIZE) {
+  if (f && f.size > MAX_SIZE) {
     error.value = "File exceeds 8MB";
     return;
   }
@@ -148,16 +177,22 @@ const handleFile = (e) => {
 
 const upload = async () => {
   const formData = new FormData();
-  formData.append("city", "Kampala");
-  formData.append("document", file.value);
+  formData.append("message", message.value);
+  if (sessionId.value) {
+    formData.append("session_id", sessionId.value);
+  }
+  if (file.value) {
+    formData.append("file", file.value);
+  }
 
-  const res = await fetch("/api/v1/air-quality/query", {
+  const res = await fetch("/api/v1/agent/chat", {
     method: "POST",
     body: formData,
   });
 
   const data = await res.json();
-  console.log("Results:", data);
+  console.log("AI Response:", data.response);
+  sessionId.value = data.session_id; // Save for next request
 };
 </script>
 ```
@@ -165,17 +200,21 @@ const upload = async () => {
 ### cURL
 
 ```bash
-# Upload CSV
-curl -X POST "http://localhost:8000/api/v1/air-quality/query" \
-  -F "city=Nairobi" \
-  -F "document=@data.csv"
+# Upload CSV with analysis request
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=Analyze this air quality data and find PM2.5 patterns" \
+  -F "file=@data.csv"
 
-# Upload Excel with forecast
-curl -X POST "http://localhost:8000/api/v1/air-quality/query" \
-  -F "latitude=-1.2864" \
-  -F "longitude=36.8172" \
-  -F "include_forecast=true" \
-  -F "document=@report.xlsx"
+# Continue conversation with another file
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=Compare this with the previous data" \
+  -F "session_id=your-session-id-here" \
+  -F "file=@report2.xlsx"
+
+# Text-only follow-up
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What were the main findings?", "session_id": "your-session-id-here"}'
 ```
 
 ---

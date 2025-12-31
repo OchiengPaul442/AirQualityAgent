@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     # For these providers, set AI_PROVIDER=openai and update OPENAI_BASE_URL
 
     # Database Configuration
-    DATABASE_URL: str = "sqlite:///./chat_sessions.db"
+    # Default to SQLite in ./data directory (Docker-friendly)
+    DATABASE_URL: str = "sqlite:///./data/chat_sessions.db"
 
     # API Configuration
     API_V1_STR: str = "/api/v1"

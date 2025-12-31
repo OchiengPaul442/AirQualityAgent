@@ -566,9 +566,9 @@ You should understand and be able to explain these roles when relevant:
 
 **CONVERSATION CONTEXT AWARENESS**:
 - You have access to the conversation history in this session
-- Reference previous messages naturally: \"As we discussed earlier...\", \"Following up on your question about...\", \"Based on what you mentioned earlier...\"
+- Reference previous messages naturally: 'As we discussed earlier...', 'Following up on your question about...', 'Based on what you mentioned earlier...'
 - Track topics and locations mentioned in the session
-- If user asks \"What about yesterday?\" or \"How about there?\", use context to understand the reference
+- If user asks 'What about yesterday?' or 'How about there?', use context to understand the reference
 - Build on previous exchanges to provide coherent, contextual responses
 - Don't repeat information already shared unless specifically requested
 - Acknowledge when returning to earlier topics
@@ -611,7 +611,7 @@ You should understand and be able to explain these roles when relevant:
 1. Reference conversation history to understand context
 2. Use previous location/topic mentions
 3. Provide coherent response that builds on earlier discussion
-4. Acknowledge the continuity: \"Looking at yesterday's data for [location]...\"
+4. Acknowledge the continuity: 'Looking at yesterday's data for [location]...'
 
 Remember: You are not just a data retrieval tool. You are a knowledgeable companion helping people understand and address one of the world's most critical health and environmental challenges. Be helpful, be informative, be conversational, be contextually aware, and be proactive in anticipating what users need to know.
 
@@ -641,33 +641,65 @@ If you have the information, provide the final response directly.
 """
 
     async def process_message(
-        self, message: str, history: list[dict[str, str]] | None = None
+        self, message: str, history: list[dict[str, str]] | None = None, document_data: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Process a user message using the configured provider.
         Returns a dictionary with 'response', 'tools_used', and 'cached' flag.
+        
+        Args:
+            message: User's message/query
+            history: Conversation history
+            document_data: Optional document data from DocumentScanner if file was uploaded
         
         Cost optimization: Caches responses for identical queries to reduce API costs.
         """
         if history is None:
             history = []
         
+        # If document data is provided, enhance the message with document context
+        enhanced_message = message
+        if document_data and document_data.get("success"):
+            doc_content = document_data.get("content", "")
+            doc_filename = document_data.get("metadata", {}).get("filename", "uploaded file")
+            doc_metadata = document_data.get("metadata", {})
+            
+            # Truncate document content if it's too long (to avoid token limit)
+            max_doc_length = 15000  # characters
+            if len(doc_content) > max_doc_length:
+                doc_content = doc_content[:max_doc_length] + "\\n[... content truncated due to length ...]"
+            
+            # Create enhanced message with document context
+            enhanced_message = f'''User Question: {message}
+
+Document uploaded: {doc_filename}
+Document type: {doc_metadata.get('file_type', 'unknown')}
+
+Document Content:
+---
+{doc_content}
+---
+
+Please analyze the document above and answer the user's question based on its contents.'''
+        
         # Create cache key from message and recent history (last 3 messages)
+        # Don't cache when document is uploaded (always process fresh)
         cache_context = {
             "message": message,
             "history": history[-3:] if len(history) > 3 else history,
-            "provider": self.settings.AI_PROVIDER
+            "provider": self.settings.AI_PROVIDER,
+            "has_document": document_data is not None
         }
         cache_key = hashlib.md5(json.dumps(cache_context, sort_keys=True).encode()).hexdigest()
         
-        # Check cache first (only for non-data queries to keep data fresh)
-        # Cache educational/general queries but not city-specific data
+        # Check cache first (only for non-data queries and no document uploads)
+        # Cache educational/general queries but not city-specific data or document analysis
         is_data_query = any(keyword in message.lower() for keyword in [
             "kampala", "nairobi", "lagos", "accra", "dar", "current", "now", "today",
             "aqi in", "air quality in", "pollution in"
         ])
         
-        if not is_data_query:
+        if not is_data_query and not document_data:
             cached_response = self.cache.get("agent_responses", cache_key)
             if cached_response:
                 logger.info(f"Returning cached response for: {message[:50]}...")
@@ -676,11 +708,11 @@ If you have the information, provide the final response directly.
         
         try:
             if self.settings.AI_PROVIDER == "gemini":
-                result = await self._process_gemini_message(message, history)
+                result = await self._process_gemini_message(enhanced_message, history)
             elif self.settings.AI_PROVIDER == "ollama":
-                result = await self._process_ollama_message(message, history)
+                result = await self._process_ollama_message(enhanced_message, history)
             elif self.settings.AI_PROVIDER == "openai":
-                result = await self._process_openai_message(message, history)
+                result = await self._process_openai_message(enhanced_message, history)
             else:
                 return {
                     "response": f"Provider {self.settings.AI_PROVIDER} is not supported.",
@@ -688,15 +720,15 @@ If you have the information, provide the final response directly.
                     "cached": False
                 }
             
-            # Cache successful responses (educational queries only)
-            if not is_data_query and result.get("response"):
+            # Cache successful responses (educational queries only, not document uploads)
+            if not is_data_query and not document_data and result.get("response"):
                 self.cache.set("agent_responses", cache_key, result, ttl=3600)  # 1 hour
             
             result["cached"] = False
             return result
             
         except Exception as e:
-            logger.error(f"Error in agent processing: {e}")
+            logger.error(f"Error in agent processing: {e}", exc_info=True)
             return {
                 "response": f"I encountered an error processing your request: {str(e)}",
                 "tools_used": [],

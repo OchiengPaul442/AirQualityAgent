@@ -18,7 +18,7 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
 
       # Database
-      - DATABASE_URL=${DATABASE_URL:-sqlite:///./chat_sessions.db}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/chat_sessions.db}
 
       # Data Sources
       - WAQI_API_KEY=${WAQI_API_KEY}
@@ -35,7 +35,7 @@ services:
     depends_on:
       - redis
     volumes:
-      - ./chat_sessions.db:/app/chat_sessions.db
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - airquality-network

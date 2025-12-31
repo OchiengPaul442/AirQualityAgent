@@ -61,7 +61,7 @@ class DocumentScanner:
                 "filename": filename
             }
 
-def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
+    def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
         """Extract text from PDF file bytes"""
         try:
             import PyPDF2
@@ -105,7 +105,7 @@ def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
         """Extract data from CSV file bytes"""
         try:
             import pandas as pd
-            
+
             # Read CSV from bytes
             df = pd.read_csv(file_bytes, encoding='utf-8', on_bad_lines='skip')
             
@@ -162,7 +162,7 @@ def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
         """Extract data from Excel file bytes"""
         try:
             import pandas as pd
-            
+
             # Read all sheets from bytes
             excel_file = pd.ExcelFile(file_bytes)
             sheet_names = excel_file.sheet_names

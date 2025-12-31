@@ -1,13 +1,15 @@
 import logging
 import os
 import re
+import shutil
 import time
+import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -247,15 +249,35 @@ async def get_session_messages(
 
 
 @router.post("/agent/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
+async def chat(
+    http_request: Request,
+    message: str = Form(..., description="User message text"),
+    session_id: str | None = Form(None, description="Optional session ID for conversation continuity"),
+    file: UploadFile | None = File(None, description="Optional file upload (PDF, CSV, Excel)"),
+    db: Session = Depends(get_db)
+):
     """
-    Chat with the Air Quality AI Agent.
+    Chat with the Air Quality AI Agent with optional document upload.
     
     **Session Management:**
     - All conversations are automatically saved to the database
     - First request: Omit `session_id` - server creates and returns a new session ID
     - Subsequent requests: ALWAYS include the returned `session_id` to maintain conversation context
     - Session closure: Call `DELETE /sessions/{session_id}` when user closes chat or starts new conversation
+    
+    **Document Upload (Optional):**
+    - Upload PDF, CSV, or Excel files along with your message
+    - Supported formats: .pdf, .csv, .xlsx, .xls
+    - Max file size: 8MB
+    - Files processed in memory (not saved to disk)
+    - Agent analyzes document and responds to your query
+    
+    **Request Format:**
+    - Content-Type: multipart/form-data
+    - Fields:
+      - message (required): Your question or instruction
+      - session_id (optional): Session ID from previous chat
+      - file (optional): Document file to analyze
     
     **IMPORTANT - Session Persistence:**
     - The agent references previous messages in the session for context-aware responses
@@ -268,82 +290,170 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
     - Token usage is tracked and returned in the response
     
     **Example Flow:**
-    ```javascript
-    // First message - no session_id
-    POST /agent/chat
-    {"message": "What's the air quality in Kampala?"}
-    // Response includes: {"session_id": "abc-123", ...}
+    ```bash
+    # First message - no session_id
+    curl -X POST http://localhost:8000/api/v1/agent/chat \\
+      -F "message=What's the air quality in Kampala?"
     
-    // Continue conversation - include session_id
-    POST /agent/chat
-    {"message": "What about yesterday?", "session_id": "abc-123"}
+    # Response includes: {"session_id": "abc-123", ...}
     
-    // Close session when done
-    DELETE /sessions/abc-123
+    # Continue conversation with session_id
+    curl -X POST http://localhost:8000/api/v1/agent/chat \\
+      -F "message=What about yesterday?" \\
+      -F "session_id=abc-123"
+    
+    # Upload document with query
+    curl -X POST http://localhost:8000/api/v1/agent/chat \\
+      -F "message=Analyze this air quality data and summarize the trends" \\
+      -F "session_id=abc-123" \\
+      -F "file=@/path/to/data.csv"
+    
+    # Close session when done
+    curl -X DELETE http://localhost:8000/api/v1/sessions/abc-123
     ```
     """
+    document_data = None
+    document_filename = None
+    MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB limit
+    
     try:
         # Rate limiting
         client_ip = http_request.client.host
         if not check_rate_limit(client_ip):
             raise HTTPException(
                 status_code=429, 
-                detail="Rate limit exceeded. Please try again in a moment."
+                detail='Rate limit exceeded. Please try again in a moment.'
             )
         
         # Generate or use provided session ID
-        # Fix: Check for None or empty string to ensure session persistence
-        session_id = request.session_id if request.session_id and request.session_id.strip() else str(uuid.uuid4())
+        session_id = session_id if session_id and session_id.strip() else str(uuid.uuid4())
+        
+        # Handle document upload if provided (in-memory processing)
+        if file and file.filename:
+            document_filename = file.filename
+            
+            # Validate file type
+            allowed_extensions = {'.pdf', '.csv', '.xlsx', '.xls'}
+            file_ext = os.path.splitext(file.filename)[1].lower()
+            
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'Unsupported file type: {file_ext}. Allowed: PDF, CSV, Excel (.xlsx, .xls)'
+                )
+            
+            try:
+                # Read file content in memory with size validation
+                file_content = BytesIO()
+                chunk_size = 1024 * 1024  # 1MB chunks
+                total_size = 0
+                
+                # Stream file in chunks to avoid memory spike
+                while chunk := await file.read(chunk_size):
+                    total_size += len(chunk)
+                    if total_size > MAX_FILE_SIZE:
+                        # Clean up memory before raising error
+                        file_content.close()
+                        del file_content
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f'File size exceeds 8MB limit. Please upload a smaller file.'
+                        )
+                    file_content.write(chunk)
+                
+                # Reset position for reading
+                file_content.seek(0)
+                
+                # Process document in memory
+                from src.tools.document_scanner import DocumentScanner
+                scanner = DocumentScanner()
+                document_data = scanner.scan_document_from_bytes(
+                    file_content, 
+                    file.filename
+                )
+                
+                # Clean up file buffer immediately after processing
+                file_content.close()
+                del file_content
+                
+                if not document_data.get('success'):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f'Failed to process document: {document_data.get('error', 'Unknown error')}'
+                    )
+                    
+            except HTTPException:
+                raise  # Re-raise HTTP exceptions
+            except Exception as e:
+                logger.error(f'Document processing failed: {str(e)}', exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f'Failed to process document: {str(e)}'
+                ) from e
         
         # Get conversation history BEFORE adding new message
-        # This ensures the agent sees the full context of previous exchanges
         history_objs = get_recent_session_history(db, session_id, max_messages=20)
         
-        # Convert to format expected by agent - explicitly convert to str to avoid type issues
+        # Convert to format expected by agent
         history: list[dict[str, str]] = [
-            {"role": str(m.role), "content": str(m.content)} 
+            {'role': str(m.role), 'content': str(m.content)} 
             for m in history_objs
         ]
         
         # Save user message to database AFTER getting history
-        add_message(db, session_id, "user", request.message)
+        add_message(db, session_id, 'user', message)
         
         # Initialize Agent Service
         agent = get_agent()
 
         # Process message with timing for cost tracking
         start_time = time.time()
-        result = await agent.process_message(request.message, history)
+        result = await agent.process_message(message, history, document_data=document_data)
         processing_time = time.time() - start_time
 
-        final_response = sanitize_response(result["response"])
-        tools_used = result.get("tools_used", [])
+        final_response = sanitize_response(result['response'])
+        tools_used = result.get('tools_used', [])
+        
+        # Add document processing tool to tools_used if document was processed
+        if document_data:
+            if 'document_scanner' not in tools_used:
+                tools_used.append('document_scanner')
         
         # Save assistant response to database
-        add_message(db, session_id, "assistant", final_response)
+        add_message(db, session_id, 'assistant', final_response)
         
         # Estimate tokens for cost tracking
-        tokens_used = len(request.message.split()) + len(final_response.split())
+        tokens_used = len(message.split()) + len(final_response.split())
         for msg in history:
-            tokens_used += len(msg["content"].split())
+            tokens_used += len(msg['content'].split())
+        if document_data:
+            # Add document content to token count
+            doc_content = document_data.get('content', '')
+            tokens_used += len(doc_content.split())
         tokens_used = int(tokens_used * 1.3)  # Rough multiplier for actual tokens
         
         # Get total message count for this session
         all_messages = get_recent_session_history(db, session_id, max_messages=1000)
         message_count = len(all_messages)
         
+        # Clean up document data from memory
+        if document_data:
+            del document_data
+        
         return ChatResponse(
             response=final_response, 
             session_id=session_id, 
             tools_used=tools_used,
             tokens_used=tokens_used,
-            cached=result.get("cached", False),
-            message_count=message_count
+            cached=result.get('cached', False),
+            message_count=message_count,
+            document_processed=document_filename is not None,
+            document_filename=document_filename
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Chat endpoint error: {str(e)}", exc_info=True)
+        logger.error(f'Chat endpoint error: {str(e)}', exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -379,7 +489,6 @@ async def query_air_quality(
     - document: Optional file upload (multipart/form-data, max 8MB)
     
     **Example Response:**
-    ```json
     {
         "waqi": { ... },
         "airqo": { ... },
@@ -393,7 +502,6 @@ async def query_air_quality(
             "metadata": { ... }
         }
     }
-    ```
     """
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
@@ -611,19 +719,3 @@ async def disconnect_mcp_server(name: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """Upload a file for the agent to scan"""
-    try:
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-
-        file_path = os.path.join(upload_dir, file.filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        return {"filename": file.filename, "file_path": os.path.abspath(file_path)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e

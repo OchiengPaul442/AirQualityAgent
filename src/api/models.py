@@ -18,6 +18,13 @@ class ChatRequest(BaseModel):
     - Omit session_id to start a new conversation (server generates ID)
     - All messages are automatically saved to the database
     - Close the session via DELETE /sessions/{session_id} when done
+    
+    Document Upload (Optional):
+    - Upload a file (PDF, CSV, Excel) along with your message
+    - Use multipart/form-data to send both message and file
+    - Agent will analyze the document and respond to your query
+    - Max file size: 8MB
+    - Files are processed in memory (not saved to disk)
     """
     message: str = Field(..., description="Current user message")
     session_id: str | None = Field(
@@ -34,6 +41,8 @@ class ChatResponse(BaseModel):
     tokens_used: int | None = Field(None, description="Approximate tokens used (for cost tracking)")
     cached: bool = Field(False, description="Whether response was served from cache")
     message_count: int | None = Field(None, description="Total messages in this session")
+    document_processed: bool = Field(False, description="Whether a document was uploaded and processed")
+    document_filename: str | None = Field(None, description="Name of the uploaded document if any")
 
 
 class HealthCheck(BaseModel):

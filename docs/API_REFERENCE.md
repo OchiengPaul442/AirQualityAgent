@@ -59,11 +59,23 @@ Check if the service is running.
 
 ## Chat with Agent
 
-Send a message to the AI agent and receive a response with automatic conversation saving.
+Send a message to the AI agent and receive a response with automatic conversation saving. **Now supports document upload** for file analysis.
 
 **Endpoint:** `POST /api/v1/agent/chat`
 
 ### Request
+
+**Content-Type:** `multipart/form-data` (when uploading file) or `application/json` (text only)
+
+**Form Fields:**
+
+| Field        | Type   | Required | Description                                                  |
+| ------------ | ------ | -------- | ------------------------------------------------------------ |
+| `message`    | string | Yes      | User's question or request                                   |
+| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new. |
+| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB         |
+
+**Without File (JSON):**
 
 ```json
 {
@@ -72,45 +84,82 @@ Send a message to the AI agent and receive a response with automatic conversatio
 }
 ```
 
-**Parameters:**
+**With File (multipart/form-data):**
 
-| Field        | Type   | Required | Description                                                  |
-| ------------ | ------ | -------- | ------------------------------------------------------------ |
-| `message`    | string | Yes      | User's question or request                                   |
-| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new. |
+```bash
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=Analyze this air quality data and find trends" \
+  -F "session_id=10a28e5c-9dc2-4e1f-9e21-8109d27ba9df" \
+  -F "file=@/path/to/data.csv"
+```
 
 ### Response
 
 ```json
 {
-  "response": "The air quality in Nairobi is currently Good (AQI: 45)...",
+  "response": "Based on the uploaded data, I found the following trends...",
   "session_id": "10a28e5c-9dc2-4e1f-9e21-8109d27ba9df",
-  "tools_used": ["airqo_api", "waqi_api"],
-  "tokens_used": 245,
+  "tools_used": ["document_scanner", "airqo_api"],
+  "tokens_used": 345,
   "cached": false,
-  "message_count": 6
+  "message_count": 6,
+  "document_processed": true,
+  "document_filename": "data.csv"
 }
 ```
 
 **Response Fields:**
 
-| Field           | Type    | Description                                                |
-| --------------- | ------- | ---------------------------------------------------------- |
-| `response`      | string  | AI agent's response                                        |
-| `session_id`    | string  | Session identifier (save this for continuing conversation) |
-| `tools_used`    | array   | APIs/tools called during processing                        |
-| `tokens_used`   | integer | Approximate tokens consumed (for cost tracking)            |
-| `cached`        | boolean | Whether response was served from cache                     |
-| `message_count` | integer | Total messages in this session                             |
+| Field                | Type    | Description                                                |
+| -------------------- | ------- | ---------------------------------------------------------- |
+| `response`           | string  | AI agent's response                                        |
+| `session_id`         | string  | Session identifier (save this for continuing conversation) |
+| `tools_used`         | array   | APIs/tools called during processing                        |
+| `tokens_used`        | integer | Approximate tokens consumed (for cost tracking)            |
+| `cached`             | boolean | Whether response was served from cache                     |
+| `message_count`      | integer | Total messages in this session                             |
+| `document_processed` | boolean | Whether a document was uploaded and processed              |
+| `document_filename`  | string  | Name of uploaded file (if any)                             |
 
 ### Key Features
 
 ✅ **Automatic Saving**: All messages are automatically saved to database  
 ✅ **Context Aware**: Remembers last 20 messages from the session  
+✅ **Document Upload**: Upload PDF, CSV, or Excel files for analysis (max 8MB)  
+✅ **In-Memory Processing**: Files processed in memory, never stored on disk  
 ✅ **Cost Optimized**: Limited context window reduces token usage  
-✅ **Caching**: Identical queries are cached for 5 minutes
+✅ **Caching**: Identical queries are cached for 1 hour
 
-📖 **See [SESSION_MANAGEMENT.md](./SESSION_MANAGEMENT.md) for detailed examples**
+### Supported Document Formats
+
+| Type  | Extensions      | Max Size | Best For         |
+| ----- | --------------- | -------- | ---------------- |
+| PDF   | `.pdf`          | 8MB      | Reports, papers  |
+| CSV   | `.csv`          | 8MB      | Time-series data |
+| Excel | `.xlsx`, `.xls` | 8MB      | Multi-sheet data |
+
+### Document Upload Example
+
+```python
+import requests
+
+# Upload document with query
+with open('air_quality_data.csv', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/v1/agent/chat',
+        data={
+            'message': 'Analyze this data and summarize the PM2.5 trends',
+            'session_id': 'your-session-id'
+        },
+        files={'file': f}
+    )
+
+result = response.json()
+print(result['response'])
+print(f"Document: {result['document_filename']}")
+```
+
+📖 **See [SESSION_MANAGEMENT.md](./SESSION_MANAGEMENT.md) and [DOCUMENT_UPLOAD_GUIDE.md](./DOCUMENT_UPLOAD_GUIDE.md) for detailed examples**
 
 ---
 

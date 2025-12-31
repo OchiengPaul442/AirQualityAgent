@@ -56,8 +56,10 @@ ENV PATH="/opt/venv/bin:$PATH" \
 COPY src/ /app/src/
 COPY pyproject.toml /app/
 
-# Create non-root user for security
+# Create non-root user for security and data directory for SQLite
 RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/data && \
+    chmod 777 /app/data && \
     chown -R appuser:appuser /app && \
     # Clean up any remaining temp files
     rm -rf /tmp/* /var/tmp/* /root/.cache
@@ -70,8 +72,9 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Run the application with optimized settings - use full path to uvicorn
-CMD ["/opt/venv/bin/uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--no-access-log"]
+# Run the application with single worker to avoid SQLite locking issues
+# Use --workers 1 for SQLite, or increase if using PostgreSQL/MySQL
+CMD ["/opt/venv/bin/uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "75"]
 
