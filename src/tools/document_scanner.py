@@ -61,6 +61,31 @@ class DocumentScanner:
                 "filename": filename
             }
 
+    def scan_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Read and extract text/data from a file on disk
+        
+        Args:
+            file_path: Path to the file to scan
+            
+        Returns:
+            Dictionary with content, file type, metadata, or error
+        """
+        try:
+            with open(file_path, "rb") as f:
+                file_bytes = BytesIO(f.read())
+            return self.scan_document_from_bytes(file_bytes, os.path.basename(file_path))
+        except FileNotFoundError:
+            return {
+                "error": f"File not found: {file_path}",
+                "filename": os.path.basename(file_path)
+            }
+        except Exception as e:
+            return {
+                "error": f"Error reading file: {str(e)}",
+                "filename": os.path.basename(file_path)
+            }
+
     def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
         """Extract text from PDF file bytes"""
         try:

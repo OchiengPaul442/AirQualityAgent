@@ -233,16 +233,16 @@ class TestDocumentScanner(unittest.TestCase):
         self.scanner = DocumentScanner()
 
     def test_scan_text_file(self):
-        """Test scanning a text file"""
-        # Create a temporary test file
-        test_content = "This is a test document about air quality monitoring."
-        test_file = "test_doc.txt"
+        """Test scanning a CSV file"""
+        # Create a temporary test CSV file
+        test_content = "name,value\nair quality,good\npm25,15"
+        test_file = "test_doc.csv"
         
         with open(test_file, "w") as f:
             f.write(test_content)
         
         try:
-            result = self.scanner.scan_document(test_file)
+            result = self.scanner.scan_file(test_file)
             self.assertIn("content", result)
             self.assertIn("air quality", result["content"].lower())
         finally:
@@ -251,7 +251,7 @@ class TestDocumentScanner(unittest.TestCase):
 
     def test_scan_nonexistent_file(self):
         """Test scanning a file that doesn't exist"""
-        result = self.scanner.scan_document("nonexistent_file.txt")
+        result = self.scanner.scan_file("nonexistent_file.txt")
         self.assertIn("error", result)
 
 
