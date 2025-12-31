@@ -1,7 +1,7 @@
 # =============================================================================
 # Air Quality Agent - Production Requirements
 # Python 3.10+ compatible
-# Last updated: December 30, 2024
+# Last updated: December 31, 2025
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -47,7 +47,7 @@ pydantic-settings==2.7.0           # Settings management
 # -----------------------------------------------------------------------------
 requests==2.32.3                   # HTTP library
 beautifulsoup4==4.12.3             # HTML/XML parsing
-lxml==5.3.0                        # XML/HTML parser
+lxml>=6.0.0                        # XML/HTML parser (updated for ddgs compatibility)
 trafilatura==2.0.0                 # Web content extraction
 duckduckgo-search==7.1.0           # DuckDuckGo search API
 
