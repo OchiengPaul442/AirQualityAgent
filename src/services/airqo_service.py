@@ -41,6 +41,27 @@ class AirQoService:
         """Get request headers"""
         return {"Content-Type": "application/json"}
 
+    def _sanitize_token(self, data: Any) -> Any:
+        """Remove API tokens from response data to prevent leakage"""
+        if isinstance(data, dict):
+            sanitized = {}
+            for key, value in data.items():
+                if key == "token":
+                    sanitized[key] = "[REDACTED]"
+                elif isinstance(value, str) and self.api_token and self.api_token in value:
+                    # Replace token in URLs and strings
+                    sanitized[key] = value.replace(self.api_token, "[REDACTED]")
+                elif isinstance(value, (dict, list)):
+                    sanitized[key] = self._sanitize_token(value)
+                else:
+                    sanitized[key] = value
+            return sanitized
+        elif isinstance(data, list):
+            return [self._sanitize_token(item) for item in data]
+        elif isinstance(data, str) and self.api_token and self.api_token in data:
+            return data.replace(self.api_token, "[REDACTED]")
+        return data
+
     def _make_request(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
         """
         Make authenticated request to AirQo API
@@ -63,7 +84,8 @@ class AirQoService:
         # Check Redis cache
         cached_data = self.cache_service.get_api_response("airqo", endpoint, request_params)
         if cached_data is not None:
-            return cached_data
+            # Ensure cached data is also sanitized (in case it was cached before sanitization was added)
+            return self._sanitize_token(cached_data)
 
         try:
             response = self.session.get(
@@ -72,11 +94,14 @@ class AirQoService:
             response.raise_for_status()
             data = response.json()
 
-            # Cache the result in Redis
+            # Sanitize token from response before caching and returning
+            sanitized_data = self._sanitize_token(data)
+
+            # Cache the sanitized result in Redis
             self.cache_service.set_api_response(
-                "airqo", endpoint, request_params, data, self.cache_ttl
+                "airqo", endpoint, request_params, sanitized_data, self.cache_ttl
             )
-            return data
+            return sanitized_data
 
         except requests.exceptions.RequestException as e:
             # Log the full error for debugging

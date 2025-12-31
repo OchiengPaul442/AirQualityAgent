@@ -33,6 +33,27 @@ class WAQIService:
         self.cache_service = get_cache()
         self.cache_ttl = settings.CACHE_TTL_SECONDS
 
+    def _sanitize_token(self, data: Any) -> Any:
+        """Remove API tokens from response data to prevent leakage"""
+        if isinstance(data, dict):
+            sanitized = {}
+            for key, value in data.items():
+                if key == "token":
+                    sanitized[key] = "[REDACTED]"
+                elif isinstance(value, str) and self.api_key and self.api_key in value:
+                    # Replace token in URLs and strings
+                    sanitized[key] = value.replace(self.api_key, "[REDACTED]")
+                elif isinstance(value, (dict, list)):
+                    sanitized[key] = self._sanitize_token(value)
+                else:
+                    sanitized[key] = value
+            return sanitized
+        elif isinstance(data, list):
+            return [self._sanitize_token(item) for item in data]
+        elif isinstance(data, str) and self.api_key and self.api_key in data:
+            return data.replace(self.api_key, "[REDACTED]")
+        return data
+
     def _make_request(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
         """
         Make request to WAQI API
@@ -54,7 +75,8 @@ class WAQIService:
         # Check Redis cache
         cached_data = self.cache_service.get_api_response("waqi", endpoint, params)
         if cached_data is not None:
-            return cached_data
+            # Ensure cached data is also sanitized
+            return self._sanitize_token(cached_data)
 
         try:
             response = self.session.get(url, params=params, timeout=30)
@@ -64,9 +86,12 @@ class WAQIService:
             if data.get("status") != "ok":
                 raise Exception(f"WAQI API error: {data.get('data', 'Unknown error')}")
 
-            # Cache the result in Redis
-            self.cache_service.set_api_response("waqi", endpoint, params, data, self.cache_ttl)
-            return data
+            # Sanitize token from response before caching and returning
+            sanitized_data = self._sanitize_token(data)
+
+            # Cache the sanitized result in Redis
+            self.cache_service.set_api_response("waqi", endpoint, params, sanitized_data, self.cache_ttl)
+            return sanitized_data
 
         except requests.exceptions.RequestException as e:
             raise Exception(f"WAQI API request failed: {str(e)}") from e
