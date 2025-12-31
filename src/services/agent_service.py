@@ -468,6 +468,7 @@ For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
 - Search directly without apologies - just present the findings
 - Include source URLs and dates in your response
 - Keep responses concise and actionable
+- Format results as: "Source: [Title] (URL) - [Brief summary]"
 
 ## Health Recommendations by AQI:
 
@@ -1199,7 +1200,7 @@ Be professional, empathetic, and solution-oriented."""
             function_declarations=[
                 types.FunctionDeclaration(
                     name="search_web",
-                    description="Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs.",
+                    description="Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs. Format responses with sources: 'Source: [Title] (URL) - [Summary]'",
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
@@ -1588,7 +1589,7 @@ Be professional, empathetic, and solution-oriented."""
             "type": "function",
             "function": {
                 "name": "search_web",
-                "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs.",
+                "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs. Format responses with sources: 'Source: [Title] (URL) - [Summary]'",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1836,7 +1837,7 @@ Be professional, empathetic, and solution-oriented."""
                 "type": "function",
                 "function": {
                     "name": "search_web",
-                    "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs.",
+                    "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs. Format responses with sources: 'Source: [Title] (URL) - [Summary]'",
                     "parameters": {
                         "type": "object",
                         "properties": {
