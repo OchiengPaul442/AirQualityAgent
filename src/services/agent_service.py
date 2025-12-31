@@ -238,6 +238,8 @@ class AgentService:
                 self.openai_tools.extend(weather_tools)
             else:
                 self.openai_tools.append(weather_tools)
+            
+            # Search tool returns a single dict
             self.openai_tools.append(self._get_openai_search_tool())
             self.openai_tools.append(self._get_openai_scrape_tool())
             self.openai_tools.append(self._get_openai_document_scanner_tool())
@@ -461,8 +463,11 @@ For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
 3. If WAQI fails, THEN try OpenMeteo with coordinates
 4. NEVER skip AirQo for African locations - it has the best local coverage
 
-**If ALL tools fail**: Provide helpful alternatives without mentioning technical failures
-Example: "I couldn't retrieve live data for [location] right now. You can check airnow.gov or aqicn.org for current readings, or try again in a few minutes."
+**WEB SEARCH (When APIs Fail or For General News/Research):**
+- Use `search_web` tool when APIs don't have data OR when user asks for news, research, policies
+- Search directly without apologies - just present the findings
+- Include source URLs and dates in your response
+- Keep responses concise and actionable
 
 ## Health Recommendations by AQI:
 
@@ -1194,18 +1199,18 @@ Be professional, empathetic, and solution-oriented."""
             function_declarations=[
                 types.FunctionDeclaration(
                     name="search_web",
-                    description="Search the web for information.",
+                    description="Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs.",
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
                             "query": types.Schema(
                                 type=types.Type.STRING,
-                                description="The search query",
+                                description="Topic or location to search news for (e.g., 'Beijing air quality', 'WHO pollution standards', 'carbon emissions policy')",
                             )
                         },
-                        required=["query"],
+                        required=["topic"],
                     ),
-                )
+                ),
             ]
         )
 
@@ -1583,10 +1588,15 @@ Be professional, empathetic, and solution-oriented."""
             "type": "function",
             "function": {
                 "name": "search_web",
-                "description": "Search the web for information.",
+                "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"query": {"type": "string", "description": "The search query"}},
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Web search query"
+                        }
+                    },
                     "required": ["query"],
                 },
             },
@@ -1826,13 +1836,13 @@ Be professional, empathetic, and solution-oriented."""
                 "type": "function",
                 "function": {
                     "name": "search_web",
-                    "description": "Search the web for information.",
+                    "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "The search query",
+                                "description": "Web search query",
                             },
                         },
                         "required": ["query"],
@@ -2199,6 +2209,10 @@ Be professional, empathetic, and solution-oriented."""
             elif function_name == "get_city_weather":
                 city = args.get("city")
                 return await loop.run_in_executor(None, self.weather.get_current_weather, city)
+            elif function_name == "get_weather_forecast":
+                city = args.get("city")
+                days = args.get("days", 7)
+                return await loop.run_in_executor(None, lambda: self.weather.get_weather_forecast(city, days))
             elif function_name == "search_web":
                 query = args.get("query")
                 return await loop.run_in_executor(None, self.search.search, query)

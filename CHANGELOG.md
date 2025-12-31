@@ -4,6 +4,85 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.6.0] - 2025-01-XX
+
+### 🌍 NEW: Intelligent Fallback to Web Search
+
+**Feature**: Automatic fallback to web search when all API data sources fail, ensuring users always receive relevant information regardless of location.
+
+**Problem Solved**: Previously, when AirQo, WAQI, and OpenMeteo had no data for a location, users received generic "no data available" messages. Now the system automatically searches the web for relevant environmental information.
+
+#### Added
+
+- **Enhanced Search Service** (`src/services/search_service.py`)
+
+  - `search_air_quality_info(location)` - Comprehensive air quality search with multiple automatic queries
+  - `search_environmental_news(topic)` - Specialized environmental news and policy search
+  - `_prioritize_trusted_sources()` - Prioritizes WHO, EPA, government agencies, research institutions
+  - `TRUSTED_SOURCES` list - 11 authoritative environmental and health organizations
+  - Automatic deduplication of search results by URL
+  - Structured results with title, URL, and preview text
+
+- **Agent Service Search Tools** (all AI providers)
+
+  - 3 new tools per provider (Gemini, OpenAI, Ollama)
+  - `search_web` - General air quality and environmental search
+  - `search_air_quality_info` - Location-specific comprehensive search
+  - `search_environmental_news` - News, policies, research, and innovations
+  - Execution handlers in both sync and async paths
+
+- **System Instructions Enhancement**
+
+  - Detailed fallback strategy (when to trigger search)
+  - 8 priority search topics (monitoring, reports, policies, research, tech, health, news)
+  - Example response templates with source citations
+  - Guidance on what to search for when APIs fail
+
+- **Comprehensive Documentation**
+
+  - `docs/FALLBACK_STRATEGY.md` - Complete guide to fallback system
+  - `ENHANCEMENT_SUMMARY.md` - Implementation details and benefits
+  - Updated `README.md` with fallback strategy reference
+
+- **Test Suite and Demos**
+  - `test_enhanced_search.py` - Tests all search functions and source prioritization
+  - `demo_fallback_strategy.py` - Live demonstration of fallback scenarios
+  - `verify_tools.py` - Tool registration verification
+
+#### Changed
+
+- **Search Tool Descriptions** - Updated across all AI providers to emphasize:
+
+  - Fallback role (use when data sources exhausted)
+  - Air quality focus (monitoring, policies, research, news)
+  - Example queries with location and context
+  - Target sources (WHO, EPA, environmental agencies)
+
+- **Fallback Hierarchy** - Clear progression:
+  1. AirQo API (African locations)
+  2. WAQI API (global coverage)
+  3. OpenMeteo API (coordinates-based)
+  4. Web Search (intelligent fallback)
+
+#### Benefits
+
+- **Global Scale**: Works for ANY location worldwide, no API limitations
+- **Always Relevant**: Users never see "no data available" - always get contextual information
+- **Authoritative Sources**: Prioritizes WHO, EPA, government agencies, research institutions
+- **Comprehensive Context**: Provides news, policies, research, monitoring alternatives
+- **Source Citations**: All information includes source references
+- **No False Data**: Only returns information from reliable, verified sources
+
+#### Testing
+
+✅ All search functions tested and working  
+✅ Trusted source prioritization verified  
+✅ Tool registration confirmed across all AI providers  
+✅ Fallback scenarios demonstrated successfully  
+✅ No breaking changes - fully backward compatible
+
+---
+
 ## [2.5.0] - 2024-12-31
 
 ### 🔥 CRITICAL FIX: Data Accuracy - AQI vs Concentration

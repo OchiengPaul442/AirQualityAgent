@@ -31,6 +31,7 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 | **[Data Accuracy Guide](docs/DATA_ACCURACY_AQI_VS_CONCENTRATION.md)** | ⚠️ **CRITICAL**: AQI vs Concentration explained |
 | **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)**                | Configure AI response style                     |
 | **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**                  | PDF/CSV/Excel file analysis                     |
+| **[Fallback Strategy](docs/FALLBACK_STRATEGY.md)**                    | 🆕 Intelligent web search fallback              |
 | [Architecture](docs/ARCHITECTURE.md)                                  | System design                                   |
 | [Deployment](docs/DEPLOYMENT.md)                                      | Production deployment                           |
 
@@ -60,8 +61,12 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
   - Real-time, historical, and forecast data (up to 7 days)
   - European and US AQI indices
   - Comprehensive pollutant data: PM2.5, PM10, NO2, O3, SO2, CO, dust, UV index
-- **Weather Service**: Contextual weather information
-- **Search Service**: Real-time web search with intelligent fallback
+- **Weather Service**: Current weather and up to 16-day forecasts
+- **Search Service**: 🆕 **Intelligent fallback** - Web search with air quality focus
+  - Automatically triggered when all APIs fail
+  - Prioritizes trusted sources (WHO, EPA, government agencies)
+  - Specialized air quality info search
+  - Environmental news and policy search
 - **Document Scanner**: Extract and analyze PDF, CSV, and Excel files
 - **Robust Scraper**: Web content extraction
 
