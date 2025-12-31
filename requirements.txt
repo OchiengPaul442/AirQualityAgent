@@ -56,6 +56,9 @@ duckduckgo-search==7.1.0           # DuckDuckGo search API
 # -----------------------------------------------------------------------------
 PyPDF2==3.0.1                      # PDF reading and manipulation
 python-multipart==0.0.20           # Form data parsing
+pandas==2.2.3                      # Data analysis (CSV/Excel support)
+openpyxl==3.1.5                    # Excel file support (.xlsx)
+xlrd==2.0.1                        # Excel file support (.xls)
 
 # -----------------------------------------------------------------------------
 # Development & Code Quality (optional - remove for production)

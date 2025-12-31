@@ -37,6 +37,7 @@ from src.services.openmeteo_service import OpenMeteoService
 from src.services.search_service import SearchService
 from src.services.waqi_service import WAQIService
 from src.services.weather_service import WeatherService
+from src.tools.document_scanner import DocumentScanner
 from src.tools.robust_scraper import RobustScraper
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class AgentService:
         self.weather = WeatherService()
         self.scraper = RobustScraper()
         self.search = SearchService()
+        self.document_scanner = DocumentScanner()
         self.settings = settings
         self.client = None
         self.mcp_clients = {}  # Store connected MCP clients
@@ -94,6 +96,7 @@ class AgentService:
                 self._get_gemini_weather_tool(),
                 self._get_gemini_search_tool(),
                 self._get_gemini_scrape_tool(),
+                self._get_gemini_document_scanner_tool(),
             ]
         except Exception as e:
             logger.error(f"Failed to setup Gemini: {e}")
@@ -132,6 +135,7 @@ class AgentService:
             self.openai_tools.append(self._get_openai_weather_tool())
             self.openai_tools.append(self._get_openai_search_tool())
             self.openai_tools.append(self._get_openai_scrape_tool())
+            self.openai_tools.append(self._get_openai_document_scanner_tool())
 
         except Exception as e:
             logger.error(f"Failed to setup OpenAI: {e}")
@@ -356,6 +360,7 @@ You must detect the user's expertise level and adapt your response:
 3. For coordinates or when city name fails: Use Open-Meteo (get_openmeteo_current_air_quality)
 4. For forecasts: Use Open-Meteo for detailed hourly forecasts
 5. For historical analysis: Use Open-Meteo (get_openmeteo_historical)
+6. For document analysis: Use scan_document when user uploads PDF, CSV, or Excel files
 
 **Examples of Automatic Search Triggers**:
 - "latest WHO guidelines" → search_web automatically
@@ -363,6 +368,68 @@ You must detect the user's expertise level and adapt your response:
 - "current AirQo programs" → search_web automatically
 - "new research on PM2.5" → search_web automatically
 - User mentions wanting current/recent/latest information → search_web automatically
+
+6A. PROFESSIONAL ERROR HANDLING - CRITICAL RULES
+
+**NEVER Expose Internal Tool Failures**:
+- NEVER say "The tools I have access to..." or mention specific tool failures
+- NEVER say "the API returned no data" or similar technical details
+- NEVER expose that your data sources are failing or unavailable
+- NEVER say "at this moment the specific forecast isn't returning a complete response"
+- NEVER describe your internal troubleshooting process to users
+
+**When Primary Data Sources Fail - Multi-Source Strategy**:
+1. **First**: Silently try ALL alternative data sources (WAQI → AirQo → Open-Meteo)
+2. **Second**: Use web search to find latest information from reliable sources
+3. **Third**: Provide professional response with helpful alternatives
+
+**Professional Response Pattern When Data Unavailable**:
+✅ GOOD: "I've checked available data sources for [location]. While I don't have real-time readings at this moment, I can provide you with:
+- General air quality information for this region based on recent trends
+- Links to local environmental monitoring agencies
+- Health protection recommendations
+- Alternative monitoring resources you can check directly
+
+Would you like me to search for the latest reports from environmental agencies, or shall I provide general air quality guidance for your area?"
+
+❌ BAD: "The tools I have access to can retrieve air quality data for various locations globally, but at this moment the specific forecast you're looking for isn't returning a complete response."
+
+**For Forecasts - Comprehensive Multi-Source Checking**:
+When forecast is requested, you MUST check ALL sources before reporting unavailability:
+1. **First**: Try Open-Meteo forecast (get_openmeteo_forecast) - global CAMS data, 7-day forecasts
+2. **Second**: Try WAQI forecast (get_station_forecast) - included in city feed data
+3. **Third**: Try AirQo forecast for African cities (get_forecast with site_id lookup)
+4. **Fourth**: Use web search for "air quality forecast [city] [year]"
+5. **Finally**: If ALL fail, provide professional response:
+
+✅ GOOD: "Based on recent monitoring data and seasonal patterns for [location], I can provide general air quality guidance. For the most current forecast, I recommend checking [local agency website]. In the meantime, here are typical air quality patterns for this time of year..."
+
+❌ BAD: "The forecast isn't available right now" or "My forecast tools aren't working"
+
+**Document Analysis Support**:
+When user uploads a document (PDF, CSV, Excel):
+- Use scan_document tool to extract and analyze content
+- Integrate findings with air quality data when relevant
+- Handle document parsing errors professionally without exposing technical details
+- Example: "I've analyzed your uploaded [file type]. Let me help you understand this air quality data..."
+
+**Response Quality Standards - Be Helpful, Not Technical**:
+✅ GOOD: "I've checked multiple data sources and recent environmental reports. Here's what I found about [location]..."
+❌ BAD: "The API endpoint returned a 404 error and the forecast tool isn't working"
+
+✅ GOOD: "Based on recent agency reports and historical monitoring data..."
+❌ BAD: "My tools aren't returning complete responses at this moment"
+
+✅ GOOD: "While real-time data isn't available for this specific location, I can share recent regional trends and connect you with local monitoring resources..."
+❌ BAD: "The tools I have access to failed to retrieve the data"
+
+**Always Provide Value**:
+- Even without real-time data, offer general air quality education
+- Provide links to official monitoring agencies (WHO, EPA, local agencies)
+- Offer health protection recommendations based on typical conditions
+- Suggest alternative data sources users can check themselves
+- Use web search to find latest news, official reports, and agency updates
+- Reference your comprehensive knowledge base on air quality science and health impacts
 
 6B. RESEARCH & POLICY DEVELOPMENT PROTOCOLS
 
@@ -1427,6 +1494,47 @@ Be professional, empathetic, and solution-oriented."""
             },
         }
 
+    def _get_gemini_document_scanner_tool(self):
+        """Tool definition for Gemini to scan documents"""
+        return types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="scan_document",
+                    description="Scan and extract text/data from uploaded documents. Supports PDF, CSV, and Excel (.xlsx, .xls) files. Use this when user uploads a document for analysis.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "file_path": types.Schema(
+                                type=types.Type.STRING,
+                                description="Absolute path to the document file to scan",
+                            )
+                        },
+                        required=["file_path"],
+                    ),
+                )
+            ]
+        )
+
+    def _get_openai_document_scanner_tool(self):
+        """Tool definition for OpenAI to scan documents"""
+        return {
+            "type": "function",
+            "function": {
+                "name": "scan_document",
+                "description": "Scan and extract text/data from uploaded documents. Supports PDF, CSV, and Excel (.xlsx, .xls) files. Use this when user uploads a document for analysis.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "Absolute path to the document file to scan"
+                        }
+                    },
+                    "required": ["file_path"],
+                },
+            },
+        }
+
     # ------------------------------------------------------------------------
     # OLLAMA IMPLEMENTATION
     # ------------------------------------------------------------------------
@@ -1793,10 +1901,7 @@ Be professional, empathetic, and solution-oriented."""
                 return self.scraper.scrape(url)
             elif function_name == "scan_document":
                 file_path = args.get("file_path")
-                from src.tools.document_scanner import DocumentScannerTool
-
-                tool = DocumentScannerTool(file_path=file_path)
-                return tool.handle()
+                return self.document_scanner.scan_document(file_path)
             else:
                 return {
                     "error": f"Unknown function {function_name}",
@@ -1924,10 +2029,7 @@ Be professional, empathetic, and solution-oriented."""
                 return await loop.run_in_executor(None, self.scraper.scrape, url)
             elif function_name == "scan_document":
                 file_path = args.get("file_path")
-                from src.tools.document_scanner import DocumentScannerTool
-
-                tool = DocumentScannerTool(file_path=file_path)
-                return await loop.run_in_executor(None, tool.handle)
+                return await loop.run_in_executor(None, self.document_scanner.scan_document, file_path)
             else:
                 return {
                     "error": f"Unknown function {function_name}",

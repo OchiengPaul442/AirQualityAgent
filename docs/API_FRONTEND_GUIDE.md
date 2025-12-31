@@ -1,7 +1,7 @@
 # Air Quality Agent API: Comprehensive Frontend Integration Guide
 
-**Last Updated:** December 31, 2025  
-**API Version:** 2.1.1
+**Last Updated:** January 1, 2026  
+**API Version:** 2.2.0
 
 ---
 
@@ -27,11 +27,12 @@ The Air Quality Agent API provides a unified, intelligent interface for accessin
 
 ✅ **Multi-Source Data Aggregation** - WAQI, AirQo, and Open-Meteo in one API  
 ✅ **AI-Powered Chat** - Natural language queries with automatic tool calling  
+✅ **Document Upload & Analysis** - In-memory PDF/CSV/Excel processing (max 8MB)  
 ✅ **Forecast Support** - Up to 7-day air quality forecasts  
 ✅ **Global Coverage** - City-based and coordinate-based queries  
 ✅ **Automatic Session Management** - Persistent conversation history  
 ✅ **MCP Integration** - Connect external data sources and tools  
-✅ **Cost Optimized** - Smart caching and context limiting  
+✅ **Cost Optimized** - Smart caching, no disk storage, efficient memory use  
 ✅ **Production Ready** - Rate limiting, error handling, security
 
 ---
@@ -95,8 +96,11 @@ interface AirQualityQueryRequest {
   include_forecast?: boolean; // Include forecast data (default: false)
   forecast_days?: number; // Number of forecast days 1-7 (default: 5)
   timezone?: string; // Timezone (default: "auto")
+  document?: File; // Optional: PDF/CSV/Excel file (max 8MB, multipart/form-data)
 }
 ```
+
+**Note:** When uploading a document, use `Content-Type: multipart/form-data` instead of JSON.
 
 #### Routing Logic
 
@@ -364,6 +368,48 @@ export class AirQualityAPI {
         throw new Error(error.detail.message);
       }
       throw new Error(`HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  // Upload document with optional air quality query
+  static async uploadDocument(
+    file: File,
+    options?: {
+      city?: string;
+      latitude?: number;
+      longitude?: number;
+      include_forecast?: boolean;
+    }
+  ): Promise<AirQualityResponse> {
+    // Client-side validation
+    const MAX_SIZE = 8 * 1024 * 1024; // 8MB
+    if (file.size > MAX_SIZE) {
+      throw new Error("File exceeds 8MB limit");
+    }
+
+    const formData = new FormData();
+    formData.append("document", file);
+    if (options?.city) formData.append("city", options.city);
+    if (options?.latitude)
+      formData.append("latitude", options.latitude.toString());
+    if (options?.longitude)
+      formData.append("longitude", options.longitude.toString());
+    if (options?.include_forecast) formData.append("include_forecast", "true");
+
+    const response = await fetch(`${API_BASE}/air-quality/query`, {
+      method: "POST",
+      // No Content-Type header - FormData sets it automatically with boundary
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 413) {
+        throw new Error("File too large (max 8MB)");
+      }
+      const error = await response.json();
+      throw new Error(error.detail || `HTTP ${response.status}`);
     }
 
     return await response.json();
@@ -646,6 +692,74 @@ export const AirQualityDashboard: React.FC = () => {
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+// DocumentUpload.tsx - Document upload with in-memory processing (max 8MB)
+import React, { useState, useRef } from "react";
+import { AirQualityAPI } from "./api";
+
+export const DocumentUpload: React.FC = () => {
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_SIZE = 8 * 1024 * 1024; // 8MB
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    // Client-side validation
+    if (selectedFile.size > MAX_SIZE) {
+      setError("File exceeds 8MB limit");
+      setFile(null);
+      return;
+    }
+
+    setError(null);
+    setFile(selectedFile);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await AirQualityAPI.uploadDocument(file, {
+        city: "Kampala",
+        include_forecast: true,
+      });
+
+      setResult(result);
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="document-upload">
+      <h3>Document Analysis</h3>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.csv,.xlsx,.xls"
+        onChange={handleFileChange}
+      />
+      <button onClick={handleUpload} disabled={!file || loading}>
+        {loading ? "Analyzing..." : "Upload (Max 8MB)"}
+      </button>
+      {error && <div className="error">{error}</div>}
+      {result?.document && <pre>{result.document.content}</pre>}
     </div>
   );
 };

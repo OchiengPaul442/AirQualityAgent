@@ -4,7 +4,94 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
-## [2.1.2] - 2025-12-31
+## [2.2.0] - 2025-01-01
+
+### 🎯 Major Enhancements: In-Memory Document Processing & Professional Intelligence
+
+#### Added
+
+- **Document Upload and Analysis (In-Memory)** 🆕
+
+  - Upload PDF, CSV, or Excel files to `/air-quality/query` endpoint
+  - **8MB file size limit** with streaming validation (1MB chunks)
+  - **Zero disk storage** - all processing in RAM with immediate cleanup
+  - Enhanced `DocumentScanner` with pandas-powered CSV/Excel analysis
+  - Support for multi-sheet Excel files (.xlsx, .xls)
+  - Automatic data preview and statistics for uploaded files
+  - Cost-optimized: No disk I/O, efficient memory management
+  - AI agent intelligently analyzes document content with air quality data
+  - Tool integration for Gemini, OpenAI, and Ollama providers
+
+- **Professional Error Handling** ✨
+
+  - Completely revamped system instructions to never expose internal failures
+  - Multi-source cascade fallback strategy for all queries
+  - Web search integration when primary data sources fail
+  - Professional, helpful responses instead of technical error messages
+  - Comprehensive guidance with agency links and alternative resources
+
+- **Multi-Source Forecast Intelligence** 🔍
+  - Automatic checking of Open-Meteo → WAQI → AirQo for forecasts
+  - Web search as final fallback for forecast data
+  - WAQI forecast support via `get_station_forecast` method
+  - AirQo forecast support via `get_forecast` method with site_id lookup
+  - Never reports unavailability without trying ALL sources
+
+#### Enhanced
+
+- **Document Processing Architecture**
+
+  - Changed from temp file storage to in-memory BytesIO processing
+  - Streaming upload with chunk validation prevents memory spikes
+  - Explicit memory cleanup (close() and del) after processing
+  - 8MB limit enforced during upload, not after
+  - FastAPI best practices implementation
+
+- **System Instructions** (Section 6A added)
+
+  - Critical rules for professional error handling
+  - Multi-source forecast checking strategy
+  - Document analysis support instructions
+  - Response quality standards with examples
+
+- **Document Scanner** (`src/tools/document_scanner.py`)
+
+  - PDF: 10KB content limit, page count metadata
+  - CSV: 50-row preview with column statistics
+  - Excel: Multi-sheet support with 20-row previews per sheet
+  - Structured output with metadata for AI analysis
+
+- **API Endpoint** (`/air-quality/query`)
+  - Optional file upload via multipart/form-data
+  - File type validation (PDF, CSV, Excel only)
+  - Professional error messages for unsupported types
+  - Document content included in response
+
+#### Dependencies
+
+- Added `pandas==2.2.3` for CSV/Excel analysis
+- Added `openpyxl==3.1.5` for Excel .xlsx support
+- Added `xlrd==2.0.1` for Excel .xls support
+
+#### Documentation
+
+- **New**: `docs/DOCUMENT_UPLOAD_GUIDE.md` - Comprehensive upload guide with examples
+- **New**: `docs/ENHANCEMENTS_SUMMARY.md` - Complete enhancement details
+- **Updated**: README.md with new features and links
+- **Updated**: System instructions with professional error handling
+
+#### Code Quality
+
+- ✅ Zero memory leaks - proper file cleanup
+- ✅ Context managers for all file operations
+- ✅ Type hints throughout
+- ✅ Comprehensive error handling
+- ✅ Professional logging
+- ✅ No infinite loops or bad practices
+
+---
+
+## [2.1.2] - 2024-12-31
 
 ### 🚀 Enhanced Forecast Support & Comprehensive Frontend Guide
 

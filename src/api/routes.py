@@ -1,11 +1,10 @@
 import logging
 import os
 import re
-import shutil
 import time
-import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
+from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -349,9 +348,12 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 
 
 @router.post("/air-quality/query")
-async def query_air_quality(request: AirQualityQueryRequest):
+async def query_air_quality(
+    request: AirQualityQueryRequest,
+    document: UploadFile = File(None)
+):
     """
-    Unified air quality data query endpoint with intelligent multi-source fallback.
+    Unified air quality data query endpoint with intelligent multi-source fallback and document analysis.
     
     **Data Source Strategy:**
     - Queries WAQI and AirQo by city name
@@ -360,12 +362,21 @@ async def query_air_quality(request: AirQualityQueryRequest):
     - Supports forecast data (Open-Meteo only)
     - Gracefully handles failures
     
+    **Document Analysis:**
+    - Upload PDF, CSV, or Excel files for in-memory analysis
+    - AI agent analyzes document content with air quality data
+    - Supported formats: .pdf, .csv, .xlsx, .xls
+    - Max file size: 8MB
+    - Files processed in memory (not saved to disk)
+    - Efficient streaming approach for cost optimization
+    
     **Request Parameters:**
     - city: City name (for WAQI and AirQo)
     - latitude/longitude: Coordinates (for Open-Meteo)
     - include_forecast: Set to true to include forecast data
     - forecast_days: Number of forecast days (1-7, default: 5)
     - timezone: Timezone for Open-Meteo (default: auto)
+    - document: Optional file upload (multipart/form-data, max 8MB)
     
     **Example Response:**
     ```json
@@ -375,14 +386,81 @@ async def query_air_quality(request: AirQualityQueryRequest):
         "openmeteo": {
             "current": { ... },
             "forecast": { ... }
+        },
+        "document": {
+            "filename": "data.csv",
+            "content": "...",
+            "metadata": { ... }
         }
     }
     ```
     """
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
+    MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB limit
 
     try:
+        # Handle document upload if provided (in-memory processing)
+        if document and document.filename:
+            # Validate file type
+            allowed_extensions = {".pdf", ".csv", ".xlsx", ".xls"}
+            file_ext = os.path.splitext(document.filename)[1].lower()
+            
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file type: {file_ext}. Allowed: PDF, CSV, Excel (.xlsx, .xls)"
+                )
+            
+            try:
+                # Read file content in memory with size validation
+                file_content = BytesIO()
+                chunk_size = 1024 * 1024  # 1MB chunks
+                total_size = 0
+                
+                # Stream file in chunks to avoid memory spike
+                while chunk := await document.read(chunk_size):
+                    total_size += len(chunk)
+                    if total_size > MAX_FILE_SIZE:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"File size exceeds 8MB limit. Please upload a smaller file."
+                        )
+                    file_content.write(chunk)
+                
+                # Reset position for reading
+                file_content.seek(0)
+                
+                # Process document in memory
+                from src.tools.document_scanner import DocumentScanner
+                scanner = DocumentScanner()
+                document_data = scanner.scan_document_from_bytes(
+                    file_content, 
+                    document.filename
+                )
+                
+                if document_data.get("success"):
+                    results["document"] = {
+                        "filename": document.filename,
+                        "file_type": document_data.get("file_type"),
+                        "content": document_data.get("content"),
+                        "metadata": document_data.get("metadata"),
+                        "truncated": document_data.get("truncated", False)
+                    }
+                else:
+                    errors["document"] = document_data.get("error", "Failed to process document")
+                    
+            except HTTPException:
+                raise  # Re-raise HTTP exceptions
+            except Exception as e:
+                logger.error(f"Document processing failed: {str(e)}")
+                errors["document"] = f"Failed to process document: {str(e)}"
+            finally:
+                # Explicitly release memory
+                if 'file_content' in locals():
+                    file_content.close()
+                    del file_content
+
         # Try WAQI API for city-based queries
         if "waqi" in settings.ENABLED_DATA_SOURCES and request.city:
             try:

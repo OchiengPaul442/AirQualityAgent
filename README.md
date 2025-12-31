@@ -8,8 +8,11 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 **Latest Updates (v2.0):**
 
+- ✅ **Professional Error Handling**: Never exposes internal tool failures
+- ✅ **Multi-Source Forecasts**: Checks Open-Meteo, WAQI, AirQo, and web search
+- ✅ **Document Upload & Analysis**: PDF, CSV, Excel file support
+- ✅ **Intelligent Fallbacks**: Web search when primary sources fail
 - ✅ Simplified session management (automatic saving)
-- ✅ Intelligent failure handling for air quality APIs
 - ✅ Cost-optimized with 20-message context window
 - ✅ Production-ready error handling and logging
 - ✅ Comprehensive documentation with examples
@@ -18,15 +21,17 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 ## 📚 Documentation
 
-| Guide                                                  | Description                                |
-| ------------------------------------------------------ | ------------------------------------------ |
-| **[Getting Started](docs/GETTING_STARTED.md)**         | Quick setup and first steps                |
-| **[API Reference](docs/API_REFERENCE.md)**             | Complete API documentation                 |
-| **[Session Management](docs/SESSION_MANAGEMENT.md)**   | 🆕 How to manage conversations             |
-| **[Air Quality API](docs/AIR_QUALITY_API.md)**         | 🆕 Multi-source data with failure handling |
-| **[Refactoring Summary](docs/REFACTORING_SUMMARY.md)** | 🆕 What changed and why                    |
-| [Architecture](docs/ARCHITECTURE.md)                   | System design and components               |
-| [Deployment](docs/DEPLOYMENT.md)                       | Production deployment guide                |
+| Guide                                                      | Description                             |
+| ---------------------------------------------------------- | --------------------------------------- |
+| **[Getting Started](docs/GETTING_STARTED.md)**             | Quick setup and first steps             |
+| **[API Reference](docs/API_REFERENCE.md)**                 | Complete API documentation              |
+| **[Document Upload Guide](docs/DOCUMENT_UPLOAD_GUIDE.md)** | 🆕 PDF/CSV/Excel file analysis          |
+| **[Enhancements Summary](docs/ENHANCEMENTS_SUMMARY.md)**   | 🆕 Latest improvements and features     |
+| **[Session Management](docs/SESSION_MANAGEMENT.md)**       | How to manage conversations             |
+| **[Air Quality API](docs/AIR_QUALITY_API.md)**             | Multi-source data with failure handling |
+| **[Refactoring Summary](docs/REFACTORING_SUMMARY.md)**     | What changed and why                    |
+| [Architecture](docs/ARCHITECTURE.md)                       | System design and components            |
+| [Deployment](docs/DEPLOYMENT.md)                           | Production deployment guide             |
 
 ---
 
@@ -37,6 +42,7 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 - **Environmental Consultant**: Real-time air quality data and health recommendations
 - **Senior Researcher**: Comprehensive research documents with citations
 - **Policy Advisor**: Evidence-based policy development for regional contexts
+- **Document Analyst**: Upload and analyze PDF, CSV, and Excel files
 
 ### AI Providers
 
@@ -46,16 +52,16 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 ### Data Sources
 
-- **WAQI** (World Air Quality Index): Global coverage, 30,000+ stations
-- **AirQo**: East Africa focus with detailed local data
+- **WAQI** (World Air Quality Index): Global coverage, 30,000+ stations with forecasts
+- **AirQo**: East Africa focus with detailed local data and forecasts
 - **Open-Meteo**: Free global air quality data from CAMS (no API key required)
   - 11km resolution (Europe) and 25km resolution (Global)
   - Real-time, historical, and forecast data (up to 7 days)
   - European and US AQI indices
   - Comprehensive pollutant data: PM2.5, PM10, NO2, O3, SO2, CO, dust, UV index
 - **Weather Service**: Contextual weather information
-- **Search Service**: Real-time web search
-- **Document Scanner**: Extract text from PDFs and images
+- **Search Service**: Real-time web search with intelligent fallback
+- **Document Scanner**: Extract and analyze PDF, CSV, and Excel files
 - **Robust Scraper**: Web content extraction
 
 ### Model Context Protocol (MCP)
