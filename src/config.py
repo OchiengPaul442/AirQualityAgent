@@ -46,6 +46,27 @@ class Settings(BaseSettings):
     # Cache Configuration
     CACHE_TTL_SECONDS: int = 3600
 
+    # AI Response Configuration
+    # Temperature: Controls response creativity/randomness (0.0-1.0)
+    # - 0.0-0.3: Highly focused, deterministic, best for factual/technical content
+    # - 0.4-0.7: Balanced, professional, suitable for general audiences
+    # - 0.8-1.0: Creative, varied, better for exploratory discussions
+    AI_RESPONSE_TEMPERATURE: float = 0.5
+    
+    # Top-p (nucleus sampling): Controls diversity (0.0-1.0)
+    # - Lower values (0.7-0.9): More focused, consistent responses
+    # - Higher values (0.95-1.0): More diverse vocabulary and phrasing
+    AI_RESPONSE_TOP_P: float = 0.9
+    
+    # Response Style: Preset configurations for different audiences
+    # Options: executive, technical, general, simple, policy
+    # - executive: Concise, data-driven, action-oriented for senior leaders
+    # - technical: Detailed, precise, includes technical terminology
+    # - general: Professional but accessible for all audiences
+    # - simple: Clear, straightforward language for public understanding
+    # - policy: Formal, evidence-based for government/policy makers
+    AI_RESPONSE_STYLE: str = "general"
+
     # Redis Configuration
     REDIS_ENABLED: bool = False
     REDIS_HOST: str = "localhost"

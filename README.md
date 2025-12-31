@@ -8,6 +8,7 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 **Latest Updates (v2.0):**
 
+- ✅ **Configurable Response Styles**: Tailor AI responses for executives, policymakers, researchers, or public
 - ✅ **Professional Error Handling**: Never exposes internal tool failures
 - ✅ **Multi-Source Forecasts**: Checks Open-Meteo, WAQI, AirQo, and web search
 - ✅ **Document Upload & Analysis**: PDF, CSV, Excel file support
@@ -21,17 +22,14 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 ## 📚 Documentation
 
-| Guide                                                      | Description                             |
-| ---------------------------------------------------------- | --------------------------------------- |
-| **[Getting Started](docs/GETTING_STARTED.md)**             | Quick setup and first steps             |
-| **[API Reference](docs/API_REFERENCE.md)**                 | Complete API documentation              |
-| **[Document Upload Guide](docs/DOCUMENT_UPLOAD_GUIDE.md)** | 🆕 PDF/CSV/Excel file analysis          |
-| **[Enhancements Summary](docs/ENHANCEMENTS_SUMMARY.md)**   | 🆕 Latest improvements and features     |
-| **[Session Management](docs/SESSION_MANAGEMENT.md)**       | How to manage conversations             |
-| **[Air Quality API](docs/AIR_QUALITY_API.md)**             | Multi-source data with failure handling |
-| **[Refactoring Summary](docs/REFACTORING_SUMMARY.md)**     | What changed and why                    |
-| [Architecture](docs/ARCHITECTURE.md)                       | System design and components            |
-| [Deployment](docs/DEPLOYMENT.md)                           | Production deployment guide             |
+| Guide                                                  | Description                    |
+| ------------------------------------------------------ | ------------------------------ |
+| **[Getting Started](docs/GETTING_STARTED.md)**         | Quick setup and first steps    |
+| **[API Reference](docs/API_REFERENCE.md)**             | Complete API documentation     |
+| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)** | 🆕 Configure AI response style |
+| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**   | PDF/CSV/Excel file analysis    |
+| [Architecture](docs/ARCHITECTURE.md)                   | System design                  |
+| [Deployment](docs/DEPLOYMENT.md)                       | Production deployment          |
 
 ---
 

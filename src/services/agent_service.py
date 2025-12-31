@@ -58,6 +58,7 @@ class AgentService:
         self.mcp_clients = {}  # Store connected MCP clients
         self.cache = get_cache()  # Response caching
         self._setup_model()
+        self._configure_response_params()
 
     async def connect_mcp_server(self, name: str, command: str, args: list[str]):
         """Connect to an external MCP server"""
@@ -80,6 +81,55 @@ class AgentService:
             logger.warning(
                 f"Provider {self.settings.AI_PROVIDER} not explicitly supported in setup."
             )
+
+    def _configure_response_params(self):
+        """
+        Configure AI response parameters based on settings.
+        Applies style presets and custom temperature/top_p values.
+        """
+        # Style presets override individual settings
+        style_presets = {
+            "executive": {
+                "temperature": 0.3,
+                "top_p": 0.85,
+                "instruction_suffix": "\\n\\nIMPORTANT: Provide concise, data-driven responses. Lead with key insights and actionable recommendations. Use bullet points. Avoid repetition and unnecessary elaboration."
+            },
+            "technical": {
+                "temperature": 0.4,
+                "top_p": 0.88,
+                "instruction_suffix": "\\n\\nIMPORTANT: Use precise technical terminology. Include specific measurements, standards, and methodologies. Provide detailed explanations with scientific accuracy."
+            },
+            "general": {
+                "temperature": 0.45,
+                "top_p": 0.9,
+                "instruction_suffix": "\\n\\nIMPORTANT: Adapt to your audience automatically. Be professional yet clear. Match detail level to query complexity. Never repeat phrases. Be concise."
+            },
+            "simple": {
+                "temperature": 0.6,
+                "top_p": 0.92,
+                "instruction_suffix": "\\n\\nIMPORTANT: Use simple, everyday language. Explain concepts clearly as if speaking to someone without technical background. Use analogies and examples from daily life."
+            },
+            "policy": {
+                "temperature": 0.35,
+                "top_p": 0.87,
+                "instruction_suffix": "\\n\\nIMPORTANT: Maintain formal, evidence-based tone suitable for government officials and policy makers. Include citations, comparative analysis, and specific policy recommendations."
+            }
+        }
+        
+        # Get style preset or use custom values
+        style = self.settings.AI_RESPONSE_STYLE.lower()
+        if style in style_presets:
+            preset = style_presets[style]
+            self.response_temperature = preset["temperature"]
+            self.response_top_p = preset["top_p"]
+            self.style_instruction = preset["instruction_suffix"]
+            logger.info(f"Applied '{style}' response style preset (temp={self.response_temperature}, top_p={self.response_top_p})")
+        else:
+            # Use custom values from config
+            self.response_temperature = self.settings.AI_RESPONSE_TEMPERATURE
+            self.response_top_p = self.settings.AI_RESPONSE_TOP_P
+            self.style_instruction = "\\n\\nIMPORTANT: Provide clear, professional responses suitable for all audiences. Avoid repetition."
+            logger.info(f"Using custom response parameters (temp={self.response_temperature}, top_p={self.response_top_p})")
 
     def _setup_gemini(self):
         """Configure Gemini model"""
@@ -141,7 +191,7 @@ class AgentService:
             logger.error(f"Failed to setup OpenAI: {e}")
 
     def _get_system_instruction(self) -> str:
-        return """
+        base_instruction = """
 1. IDENTITY & ROLE DEFINITION
 You are the Air Quality AI Agent, a sophisticated multi-role environmental intelligence system and knowledge base. Your primary identities:
 
@@ -638,7 +688,11 @@ Remember: You are not just a data retrieval tool. You are a knowledgeable compan
 Do NOT output your internal thought process. Do NOT say "Okay, I will..." or "Let me figure this out...".
 If you need information, call the appropriate tool immediately.
 If you have the information, provide the final response directly.
+Do NOT repeat the same phrases or information multiple times.
+Be concise, clear, and professional at all times.
 """
+        # Append style-specific instructions
+        return base_instruction + self.style_instruction
 
     async def process_message(
         self, message: str, history: list[dict[str, str]] | None = None, document_data: dict[str, Any] | None = None
@@ -757,7 +811,7 @@ Please analyze the document above and answer the user's question based on its co
             config=types.GenerateContentConfig(
                 tools=self.gemini_tools,
                 system_instruction=self._get_system_instruction(),
-                temperature=0.7,
+                temperature=self.response_temperature,
             ),
             history=chat_history,
         )
@@ -838,8 +892,8 @@ Please analyze the document above and answer the user's question based on its co
             tools=self.openai_tools,
             tool_choice="auto",
             max_tokens=2048,
-            temperature=0.7,
-            top_p=0.95,
+            temperature=self.response_temperature,
+            top_p=self.response_top_p,
         )
 
         # Handle tool calls
@@ -913,8 +967,8 @@ Please analyze the document above and answer the user's question based on its co
                     model=self.settings.AI_MODEL,
                     messages=messages,
                     max_tokens=2048,
-                    temperature=0.7,
-                    top_p=0.95,
+                    temperature=self.response_temperature,
+                    top_p=self.response_top_p,
                 )
                 response_text = final_response.choices[0].message.content
                 logger.info(
@@ -963,8 +1017,8 @@ Be professional, empathetic, and solution-oriented."""
                         {"role": "user", "content": fallback_prompt},
                     ],
                     max_tokens=2048,
-                    temperature=0.7,
-                    top_p=0.95,
+                    temperature=self.response_temperature,
+                    top_p=self.response_top_p,
                 )
                 response_text = direct_response.choices[0].message.content
                 logger.info(
@@ -1589,8 +1643,8 @@ Be professional, empathetic, and solution-oriented."""
             messages=messages,
             tools=self._get_ollama_tools(),
             options={
-                "temperature": 0.7,
-                "top_p": 0.95,
+                "temperature": self.response_temperature,
+                "top_p": self.response_top_p,
                 "num_predict": 2048,
             },
         )
@@ -1653,8 +1707,8 @@ Be professional, empathetic, and solution-oriented."""
                 model=self.settings.AI_MODEL,
                 messages=messages,
                 options={
-                    "temperature": 0.7,
-                    "top_p": 0.95,
+                    "temperature": self.response_temperature,
+                    "top_p": self.response_top_p,
                     "num_predict": 2048,
                 },
             )
