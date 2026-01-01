@@ -714,7 +714,7 @@ Please analyze the document above and answer the user's question based on its co
                 message=message[:100],
             )
             return {
-                "response": f"I encountered an error processing your request. Please try again or rephrase your question. Error: {str(e)[:100]}",
+                "response": "I encountered an error processing your request. Please try again or rephrase your question.",
                 "tools_used": [],
                 "cached": False,
             }
@@ -739,7 +739,7 @@ Please analyze the document above and answer the user's question based on its co
         chat = self.client.chats.create(
             model=self.settings.AI_MODEL,
             config=types.GenerateContentConfig(
-                tools=self.gemini_tools,
+                tools=self.gemini_tools if self.settings.AI_MODEL in ['gemini-1.5-pro', 'gemini-1.5-flash'] else None,
                 system_instruction=self._get_system_instruction(),
                 temperature=self.response_temperature,
             ),
@@ -751,8 +751,9 @@ Please analyze the document above and answer the user's question based on its co
 
         tools_used = []
 
-        # Handle function calls - support parallel execution with safeguards
-        if response.candidates and response.candidates[0].content.parts:
+        # Handle function calls - only if tools are enabled for this model
+        if (self.settings.AI_MODEL in ['gemini-1.5-pro', 'gemini-1.5-flash'] and 
+            response.candidates and response.candidates[0].content.parts):
             function_calls = []
 
             # Collect all function calls first
