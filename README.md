@@ -24,16 +24,14 @@ The Air Quality AI Agent is a sophisticated, scalable AI system designed for air
 
 ## 📚 Documentation
 
-| Guide                                                                 | Description                                     |
-| --------------------------------------------------------------------- | ----------------------------------------------- |
-| **[Getting Started](docs/GETTING_STARTED.md)**                        | Quick setup and first steps                     |
-| **[API Reference](docs/API_REFERENCE.md)**                            | Complete API documentation                      |
-| **[Data Accuracy Guide](docs/DATA_ACCURACY_AQI_VS_CONCENTRATION.md)** | ⚠️ **CRITICAL**: AQI vs Concentration explained |
-| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)**                | Configure AI response style                     |
-| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**                  | PDF/CSV/Excel file analysis                     |
-| **[Fallback Strategy](docs/FALLBACK_STRATEGY.md)**                    | 🆕 Intelligent web search fallback              |
-| [Architecture](docs/ARCHITECTURE.md)                                  | System design                                   |
-| [Deployment](docs/DEPLOYMENT.md)                                      | Production deployment                           |
+| Guide                                                  | Description                 |
+| ------------------------------------------------------ | --------------------------- |
+| **[Getting Started](docs/GETTING_STARTED.md)**         | Quick setup and first steps |
+| **[API Reference](docs/API_REFERENCE.md)**             | Complete API documentation  |
+| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)** | Configure AI response style |
+| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**   | PDF/CSV/Excel file analysis |
+| [Architecture](docs/ARCHITECTURE.md)                   | System design               |
+| [Deployment](docs/DEPLOYMENT.md)                       | Production deployment       |
 
 ---
 
