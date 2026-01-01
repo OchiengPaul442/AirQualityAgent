@@ -56,17 +56,16 @@ def check_rate_limit(client_ip: str) -> bool:
     """
     now = datetime.now()
     cutoff = now - timedelta(seconds=RATE_LIMIT_WINDOW)
-    
+
     # Clean old requests
     _rate_limit_store[client_ip] = [
-        req_time for req_time in _rate_limit_store[client_ip] 
-        if req_time > cutoff
+        req_time for req_time in _rate_limit_store[client_ip] if req_time > cutoff
     ]
-    
+
     # Check limit
     if len(_rate_limit_store[client_ip]) >= RATE_LIMIT_REQUESTS:
         return False
-    
+
     # Add current request
     _rate_limit_store[client_ip].append(now)
     return True
@@ -110,27 +109,48 @@ async def health_check():
 async def list_sessions(limit: int = 50, db: Session = Depends(get_db)):
     """
     List all chat sessions ordered by most recent first.
-    
+
     Args:
         limit: Maximum number of sessions to return (default: 50, max: 200)
-        
+
     Returns:
         List of sessions with id, created_at, and message count
     """
-    limit = min(limit, 200)  # Cap at 200
-    sessions = get_all_sessions(db, limit)
-    
-    result = []
-    for s in sessions:
-        message_count = len(s.messages)
-        result.append({
-            "id": s.id, 
-            "created_at": s.created_at,
-            "message_count": message_count,
-            "updated_at": s.updated_at
-        })
-    
-    return result
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+
+    try:
+        limit = min(limit, 200)  # Cap at 200
+        sessions = get_all_sessions(db, limit)
+
+        result = []
+        for s in sessions:
+            message_count = len(s.messages)
+            result.append(
+                {
+                    "id": s.id,
+                    "created_at": s.created_at,
+                    "message_count": message_count,
+                    "updated_at": s.updated_at,
+                }
+            )
+
+        return result
+    except SQLAlchemyTimeoutError as e:
+        logger.error(f"Database timeout while listing sessions: {e}")
+        raise HTTPException(
+            status_code=503, detail="The database is currently busy. Please try again in a moment."
+        )
+    except OperationalError as e:
+        logger.error(f"Database operational error while listing sessions: {e}")
+        raise HTTPException(
+            status_code=503, detail="Unable to connect to the database. Please try again later."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error listing sessions: {e}")
+        raise HTTPException(
+            status_code=500, detail="An unexpected error occurred while retrieving sessions."
+        )
 
 
 @router.post("/sessions/new")
@@ -138,19 +158,19 @@ async def create_new_session(db: Session = Depends(get_db)):
     """
     Create a new chat session explicitly.
     Use this when user clicks 'New Chat' button in the frontend.
-    
+
     Returns:
         New session ID that should be used for subsequent messages
     """
     new_session_id = str(uuid.uuid4())
     from src.db.repository import create_session
-    
+
     session = create_session(db, new_session_id)
-    
+
     return {
         "session_id": session.id,
         "created_at": session.created_at,
-        "message": "New session created successfully. Use this session_id for your chat messages."
+        "message": "New session created successfully. Use this session_id for your chat messages.",
     }
 
 
@@ -158,33 +178,50 @@ async def create_new_session(db: Session = Depends(get_db)):
 async def get_session_details(session_id: str, db: Session = Depends(get_db)):
     """
     Get detailed information about a specific session including all messages.
-    
+
     Args:
         session_id: Session identifier
-        
+
     Returns:
         Session details with full message history
     """
-    session = get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    messages = get_recent_session_history(db, session_id, max_messages=1000)
-    
-    return {
-        "id": session.id,
-        "created_at": session.created_at,
-        "updated_at": session.updated_at,
-        "message_count": len(messages),
-        "messages": [
-            {
-                "role": m.role, 
-                "content": m.content, 
-                "timestamp": m.timestamp
-            } 
-            for m in messages
-        ]
-    }
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+
+    try:
+        session = get_session(db, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        messages = get_recent_session_history(db, session_id, max_messages=1000)
+
+        return {
+            "id": session.id,
+            "created_at": session.created_at,
+            "updated_at": session.updated_at,
+            "message_count": len(messages),
+            "messages": [
+                {"role": m.role, "content": m.content, "timestamp": m.timestamp} for m in messages
+            ],
+        }
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except SQLAlchemyTimeoutError as e:
+        logger.error(f"Database timeout while fetching session {session_id}: {e}")
+        raise HTTPException(
+            status_code=503, detail="The database is currently busy. Please try again in a moment."
+        )
+    except OperationalError as e:
+        logger.error(f"Database operational error for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=503, detail="Unable to connect to the database. Please try again later."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error fetching session {session_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail="An unexpected error occurred while retrieving the session."
+        )
 
 
 @router.delete("/sessions/{session_id}")
@@ -192,69 +229,82 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     """
     Delete a chat session and all its messages.
     Call this when the user closes a session in the frontend.
-    
+
     Args:
         session_id: Session identifier to delete
-        
+
     Returns:
         Confirmation message
     """
     deleted = delete_session(db, session_id)
-    
+
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     return {
         "status": "success",
         "message": f"Session {session_id} and all its messages have been deleted",
-        "session_id": session_id
+        "session_id": session_id,
     }
 
 
 @router.get("/sessions/{session_id}/messages")
 async def get_session_messages(
-    session_id: str, 
-    limit: int = 100, 
-    offset: int = 0,
-    db: Session = Depends(get_db)
+    session_id: str, limit: int = 100, offset: int = 0, db: Session = Depends(get_db)
 ):
     """
     Get paginated message history for a session.
-    
+
     Args:
         session_id: Session identifier
         limit: Maximum messages to return (default: 100)
         offset: Number of messages to skip (default: 0)
-        
+
     Returns:
         Paginated list of messages
     """
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+
     from src.db.repository import get_session_history
-    
-    messages = get_session_history(db, session_id, limit=limit, offset=offset)
-    
-    return {
-        "session_id": session_id,
-        "count": len(messages),
-        "offset": offset,
-        "messages": [
-            {
-                "role": m.role, 
-                "content": m.content, 
-                "timestamp": m.timestamp
-            } 
-            for m in messages
-        ]
-    }
+
+    try:
+        messages = get_session_history(db, session_id, limit=limit, offset=offset)
+
+        return {
+            "session_id": session_id,
+            "count": len(messages),
+            "offset": offset,
+            "messages": [
+                {"role": m.role, "content": m.content, "timestamp": m.timestamp} for m in messages
+            ],
+        }
+    except SQLAlchemyTimeoutError as e:
+        logger.error(f"Database timeout while fetching messages for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=503, detail="The database is currently busy. Please try again in a moment."
+        )
+    except OperationalError as e:
+        logger.error(f"Database operational error for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=503, detail="Unable to connect to the database. Please try again later."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error fetching messages for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail="An unexpected error occurred while retrieving messages."
+        )
 
 
 @router.post("/agent/chat", response_model=ChatResponse)
 async def chat(
     http_request: Request,
     message: str = Form(..., description="User message text"),
-    session_id: str | None = Form(None, description="Optional session ID for conversation continuity"),
+    session_id: str | None = Form(
+        None, description="Optional session ID for conversation continuity"
+    ),
     file: UploadFile | None = File(None, description="Optional file upload (PDF, CSV, Excel)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Chat with the Air Quality AI Agent with optional document upload.
@@ -315,39 +365,38 @@ async def chat(
     document_data = None
     document_filename = None
     MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB limit
-    
+
     try:
         # Rate limiting
         client_ip = http_request.client.host
         if not check_rate_limit(client_ip):
             raise HTTPException(
-                status_code=429, 
-                detail='Rate limit exceeded. Please try again in a moment.'
+                status_code=429, detail="Rate limit exceeded. Please try again in a moment."
             )
-        
+
         # Generate or use provided session ID
         session_id = session_id if session_id and session_id.strip() else str(uuid.uuid4())
-        
+
         # Handle document upload if provided (in-memory processing)
         if file and file.filename:
             document_filename = file.filename
-            
+
             # Validate file type
-            allowed_extensions = {'.pdf', '.csv', '.xlsx', '.xls'}
+            allowed_extensions = {".pdf", ".csv", ".xlsx", ".xls"}
             file_ext = os.path.splitext(file.filename)[1].lower()
-            
+
             if file_ext not in allowed_extensions:
                 raise HTTPException(
                     status_code=400,
-                    detail=f'Unsupported file type: {file_ext}. Allowed: PDF, CSV, Excel (.xlsx, .xls)'
+                    detail=f"Unsupported file type: {file_ext}. Allowed: PDF, CSV, Excel (.xlsx, .xls)",
                 )
-            
+
             try:
                 # Read file content in memory with size validation
                 file_content = BytesIO()
                 chunk_size = 1024 * 1024  # 1MB chunks
                 total_size = 0
-                
+
                 # Stream file in chunks to avoid memory spike
                 while chunk := await file.read(chunk_size):
                     total_size += len(chunk)
@@ -357,52 +406,58 @@ async def chat(
                         del file_content
                         raise HTTPException(
                             status_code=413,
-                            detail=f'File size exceeds 8MB limit. Please upload a smaller file.'
+                            detail=f"File size exceeds 8MB limit. Please upload a smaller file.",
                         )
                     file_content.write(chunk)
-                
+
                 # Reset position for reading
                 file_content.seek(0)
-                
+
                 # Process document in memory
                 from src.tools.document_scanner import DocumentScanner
+
                 scanner = DocumentScanner()
-                document_data = scanner.scan_document_from_bytes(
-                    file_content, 
-                    file.filename
-                )
-                
+                document_data = scanner.scan_document_from_bytes(file_content, file.filename)
+
                 # Clean up file buffer immediately after processing
                 file_content.close()
                 del file_content
-                
-                if not document_data.get('success'):
+
+                if not document_data.get("success"):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Failed to process document: {document_data.get('error', 'Unknown error')}"
+                        detail=f"Failed to process document: {document_data.get('error', 'Unknown error')}",
                     )
-                    
+
             except HTTPException:
                 raise  # Re-raise HTTP exceptions
             except Exception as e:
-                logger.error(f'Document processing failed: {str(e)}', exc_info=True)
+                logger.error(f"Document processing failed: {str(e)}", exc_info=True)
                 raise HTTPException(
-                    status_code=500,
-                    detail=f'Failed to process document: {str(e)}'
+                    status_code=500, detail=f"Failed to process document: {str(e)}"
                 ) from e
-        
+
         # Get conversation history BEFORE adding new message
-        history_objs = get_recent_session_history(db, session_id, max_messages=20)
-        
+        try:
+            history_objs = get_recent_session_history(db, session_id, max_messages=20)
+        except Exception as db_error:
+            logger.warning(
+                f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
+            )
+            history_objs = []
+
         # Convert to format expected by agent
         history: list[dict[str, str]] = [
-            {'role': str(m.role), 'content': str(m.content)} 
-            for m in history_objs
+            {"role": str(m.role), "content": str(m.content)} for m in history_objs
         ]
-        
+
         # Save user message to database AFTER getting history
-        add_message(db, session_id, 'user', message)
-        
+        try:
+            add_message(db, session_id, "user", message)
+        except Exception as db_error:
+            logger.error(f"Failed to save user message to database: {db_error}")
+            # Continue processing even if db save fails
+
         # Initialize Agent Service
         agent = get_agent()
 
@@ -411,67 +466,86 @@ async def chat(
         result = await agent.process_message(message, history, document_data=document_data)
         processing_time = time.time() - start_time
 
-        final_response = sanitize_response(result['response'])
-        tools_used = result.get('tools_used', [])
-        
+        final_response = sanitize_response(result["response"])
+        tools_used = result.get("tools_used", [])
+
         # Add document processing tool to tools_used if document was processed
         if document_data:
-            if 'document_scanner' not in tools_used:
-                tools_used.append('document_scanner')
-        
+            if "document_scanner" not in tools_used:
+                tools_used.append("document_scanner")
+
         # Save assistant response to database
-        add_message(db, session_id, 'assistant', final_response)
-        
+        try:
+            add_message(db, session_id, "assistant", final_response)
+        except Exception as db_error:
+            logger.error(f"Failed to save assistant response to database: {db_error}")
+            # Continue to return response to user even if db save fails
+
         # Estimate tokens for cost tracking
         tokens_used = len(message.split()) + len(final_response.split())
         for msg in history:
-            tokens_used += len(msg['content'].split())
+            tokens_used += len(msg["content"].split())
         if document_data:
             # Add document content to token count
-            doc_content = document_data.get('content', '')
+            doc_content = document_data.get("content", "")
             tokens_used += len(doc_content.split())
         tokens_used = int(tokens_used * 1.3)  # Rough multiplier for actual tokens
-        
+
         # Get total message count for this session
-        all_messages = get_recent_session_history(db, session_id, max_messages=1000)
-        message_count = len(all_messages)
-        
+        try:
+            all_messages = get_recent_session_history(db, session_id, max_messages=1000)
+            message_count = len(all_messages)
+        except Exception as db_error:
+            logger.warning(f"Failed to get message count: {db_error}")
+            message_count = len(history) + 2  # Estimate based on history + new messages
+
         # Clean up document data from memory
         if document_data:
             del document_data
-        
+
         return ChatResponse(
-            response=final_response, 
-            session_id=session_id, 
+            response=final_response,
+            session_id=session_id,
             tools_used=tools_used,
             tokens_used=tokens_used,
-            cached=result.get('cached', False),
+            cached=result.get("cached", False),
             message_count=message_count,
             document_processed=document_filename is not None,
-            document_filename=document_filename
+            document_filename=document_filename,
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f'Chat endpoint error: {str(e)}', exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        # Log error with context for monitoring
+        from src.utils.error_logger import get_error_logger
+
+        error_logger = get_error_logger()
+        error_data = error_logger.log_error(
+            e,
+            context={
+                "endpoint": "/agent/chat",
+                "session_id": session_id,
+                "message_length": len(message),
+                "has_document": document_filename is not None,
+                "error_category": "chat_processing",
+            },
+            user_message="Unable to process your message. Please try again.",
+        )
+        raise HTTPException(status_code=500, detail=error_data["message"]) from e
 
 
 @router.post("/air-quality/query")
-async def query_air_quality(
-    request: AirQualityQueryRequest,
-    document: UploadFile = File(None)
-):
+async def query_air_quality(request: AirQualityQueryRequest, document: UploadFile = File(None)):
     """
     Unified air quality data query endpoint with intelligent multi-source fallback and document analysis.
-    
+
     **Data Source Strategy:**
     - Queries WAQI and AirQo by city name
     - Queries Open-Meteo if coordinates provided
     - Returns all successful responses
     - Supports forecast data (Open-Meteo only)
     - Gracefully handles failures
-    
+
     **Document Analysis:**
     - Upload PDF, CSV, or Excel files for in-memory analysis
     - AI agent analyzes document content with air quality data
@@ -479,7 +553,7 @@ async def query_air_quality(
     - Max file size: 8MB
     - Files processed in memory (not saved to disk)
     - Efficient streaming approach for cost optimization
-    
+
     **Request Parameters:**
     - city: City name (for WAQI and AirQo)
     - latitude/longitude: Coordinates (for Open-Meteo)
@@ -487,7 +561,7 @@ async def query_air_quality(
     - forecast_days: Number of forecast days (1-7, default: 5)
     - timezone: Timezone for Open-Meteo (default: auto)
     - document: Optional file upload (multipart/form-data, max 8MB)
-    
+
     **Example Response:**
     {
         "waqi": { ... },
@@ -513,51 +587,49 @@ async def query_air_quality(
             # Validate file type
             allowed_extensions = {".pdf", ".csv", ".xlsx", ".xls"}
             file_ext = os.path.splitext(document.filename)[1].lower()
-            
+
             if file_ext not in allowed_extensions:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unsupported file type: {file_ext}. Allowed: PDF, CSV, Excel (.xlsx, .xls)"
+                    detail=f"Unsupported file type: {file_ext}. Allowed: PDF, CSV, Excel (.xlsx, .xls)",
                 )
-            
+
             try:
                 # Read file content in memory with size validation
                 file_content = BytesIO()
                 chunk_size = 1024 * 1024  # 1MB chunks
                 total_size = 0
-                
+
                 # Stream file in chunks to avoid memory spike
                 while chunk := await document.read(chunk_size):
                     total_size += len(chunk)
                     if total_size > MAX_FILE_SIZE:
                         raise HTTPException(
                             status_code=413,
-                            detail=f"File size exceeds 8MB limit. Please upload a smaller file."
+                            detail=f"File size exceeds 8MB limit. Please upload a smaller file.",
                         )
                     file_content.write(chunk)
-                
+
                 # Reset position for reading
                 file_content.seek(0)
-                
+
                 # Process document in memory
                 from src.tools.document_scanner import DocumentScanner
+
                 scanner = DocumentScanner()
-                document_data = scanner.scan_document_from_bytes(
-                    file_content, 
-                    document.filename
-                )
-                
+                document_data = scanner.scan_document_from_bytes(file_content, document.filename)
+
                 if document_data.get("success"):
                     results["document"] = {
                         "filename": document.filename,
                         "file_type": document_data.get("file_type"),
                         "content": document_data.get("content"),
                         "metadata": document_data.get("metadata"),
-                        "truncated": document_data.get("truncated", False)
+                        "truncated": document_data.get("truncated", False),
                     }
                 else:
                     errors["document"] = document_data.get("error", "Failed to process document")
-                    
+
             except HTTPException:
                 raise  # Re-raise HTTP exceptions
             except Exception as e:
@@ -565,7 +637,7 @@ async def query_air_quality(
                 errors["document"] = f"Failed to process document: {str(e)}"
             finally:
                 # Explicitly release memory
-                if 'file_content' in locals():
+                if "file_content" in locals():
                     file_content.close()
                     del file_content
 
@@ -600,16 +672,16 @@ async def query_air_quality(
             try:
                 openmeteo = OpenMeteoService()
                 openmeteo_result = {}
-                
+
                 # Get current air quality (always)
                 current_data = openmeteo.get_current_air_quality(
                     latitude=request.latitude,
                     longitude=request.longitude,
-                    timezone=request.timezone
+                    timezone=request.timezone,
                 )
                 if current_data:
                     openmeteo_result["current"] = current_data
-                
+
                 # Get forecast if requested
                 if request.include_forecast:
                     forecast_days = request.forecast_days or 5
@@ -617,11 +689,11 @@ async def query_air_quality(
                         latitude=request.latitude,
                         longitude=request.longitude,
                         forecast_days=forecast_days,
-                        timezone=request.timezone
+                        timezone=request.timezone,
                     )
                     if forecast_data:
                         openmeteo_result["forecast"] = forecast_data
-                
+
                 if openmeteo_result:
                     results["openmeteo"] = sanitize_response(openmeteo_result)
             except Exception as e:
@@ -639,8 +711,8 @@ async def query_air_quality(
             detail={
                 "message": f"No air quality data found for {location}",
                 "errors": errors,
-                "suggestion": "Try a different location or provide coordinates for Open-Meteo"
-            }
+                "suggestion": "Try a different location or provide coordinates for Open-Meteo",
+            },
         )
 
     except HTTPException:
@@ -654,10 +726,10 @@ async def query_air_quality(
 async def connect_mcp_server(request: MCPConnectionRequest):
     """
     Connect to an external MCP server.
-    
+
     Example:
     {
-        "name": "postgres-server", 
+        "name": "postgres-server",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://..."]
     }
@@ -665,7 +737,7 @@ async def connect_mcp_server(request: MCPConnectionRequest):
     try:
         agent = get_agent()
         await agent.connect_mcp_server(request.name, request.command, request.args)
-        
+
         # Try to get available tools from the MCP client
         tools = []
         if request.name in agent.mcp_clients:
@@ -676,12 +748,8 @@ async def connect_mcp_server(request: MCPConnectionRequest):
                 tools = []
             except Exception:
                 pass
-        
-        return MCPConnectionResponse(
-            status="connected",
-            name=request.name,
-            available_tools=tools
-        )
+
+        return MCPConnectionResponse(status="connected", name=request.name, available_tools=tools)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to connect MCP server: {str(e)}")
 
@@ -691,13 +759,7 @@ async def list_mcp_connections():
     """List all connected MCP servers"""
     try:
         agent = get_agent()
-        connections = [
-            {
-                "name": name,
-                "status": "connected"
-            }
-            for name in agent.mcp_clients.keys()
-        ]
+        connections = [{"name": name, "status": "connected"} for name in agent.mcp_clients.keys()]
         return MCPListResponse(connections=connections)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

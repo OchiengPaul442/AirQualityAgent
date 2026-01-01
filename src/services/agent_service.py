@@ -62,7 +62,7 @@ class AgentService:
             "total_tokens": 0,
             "total_cost": 0.0,
             "requests_today": 0,
-            "last_reset": datetime.now().date()
+            "last_reset": datetime.now().date(),
         }
         self._setup_model()
         self._configure_response_params()
@@ -72,25 +72,22 @@ class AgentService:
         # Reset daily counters if it's a new day
         today = datetime.now().date()
         if self._cost_tracker["last_reset"] != today:
-            self._cost_tracker.update({
-                "total_tokens": 0,
-                "total_cost": 0.0,
-                "requests_today": 0,
-                "last_reset": today
-            })
-        
+            self._cost_tracker.update(
+                {"total_tokens": 0, "total_cost": 0.0, "requests_today": 0, "last_reset": today}
+            )
+
         # Cost limits (adjustable)
         MAX_DAILY_COST = 10.0  # $10 per day
         MAX_DAILY_REQUESTS = 100  # 100 requests per day
-        
+
         if self._cost_tracker["total_cost"] >= MAX_DAILY_COST:
             logger.warning(f"Daily cost limit reached: ${self._cost_tracker['total_cost']}")
             return False
-        
+
         if self._cost_tracker["requests_today"] >= MAX_DAILY_REQUESTS:
             logger.warning(f"Daily request limit reached: {self._cost_tracker['requests_today']}")
             return False
-        
+
         return True
 
     def _track_cost(self, tokens_used: int, estimated_cost: float):
@@ -98,8 +95,10 @@ class AgentService:
         self._cost_tracker["total_tokens"] += tokens_used
         self._cost_tracker["total_cost"] += estimated_cost
         self._cost_tracker["requests_today"] += 1
-        
-        logger.info(f"Cost tracking - Tokens: {tokens_used}, Cost: ${estimated_cost:.4f}, Total: ${self._cost_tracker['total_cost']:.4f}")
+
+        logger.info(
+            f"Cost tracking - Tokens: {tokens_used}, Cost: ${estimated_cost:.4f}, Total: ${self._cost_tracker['total_cost']:.4f}"
+        )
 
     def _get_cost_status(self) -> dict:
         """Get current cost tracking status"""
@@ -137,49 +136,53 @@ class AgentService:
             "executive": {
                 "temperature": 0.3,
                 "top_p": 0.85,
-                "instruction_suffix": "\\n\\nIMPORTANT: Provide concise, data-driven responses. Lead with key insights and actionable recommendations. Use bullet points. Avoid repetition and unnecessary elaboration."
+                "instruction_suffix": "\\n\\nIMPORTANT: Provide concise, data-driven responses. Lead with key insights and actionable recommendations. Use bullet points. Avoid repetition and unnecessary elaboration.",
             },
             "technical": {
                 "temperature": 0.4,
                 "top_p": 0.88,
-                "instruction_suffix": "\\n\\nIMPORTANT: Use precise technical terminology. Include specific measurements, standards, and methodologies. Provide detailed explanations with scientific accuracy."
+                "instruction_suffix": "\\n\\nIMPORTANT: Use precise technical terminology. Include specific measurements, standards, and methodologies. Provide detailed explanations with scientific accuracy.",
             },
             "general": {
                 "temperature": 0.45,
                 "top_p": 0.9,
-                "instruction_suffix": "\\n\\nIMPORTANT: Adapt to your audience automatically. Be professional yet clear. Match detail level to query complexity. Never repeat phrases. Be concise."
+                "instruction_suffix": "\\n\\nIMPORTANT: Adapt to your audience automatically. Be professional yet clear. Match detail level to query complexity. Never repeat phrases. Be concise.",
             },
             "simple": {
                 "temperature": 0.6,
                 "top_p": 0.92,
-                "instruction_suffix": "\\n\\nIMPORTANT: Use simple, everyday language. Explain concepts clearly as if speaking to someone without technical background. Use analogies and examples from daily life."
+                "instruction_suffix": "\\n\\nIMPORTANT: Use simple, everyday language. Explain concepts clearly as if speaking to someone without technical background. Use analogies and examples from daily life.",
             },
             "policy": {
                 "temperature": 0.35,
                 "top_p": 0.87,
-                "instruction_suffix": "\\n\\nIMPORTANT: Maintain formal, evidence-based tone suitable for government officials and policy makers. Include citations, comparative analysis, and specific policy recommendations."
-            }
+                "instruction_suffix": "\\n\\nIMPORTANT: Maintain formal, evidence-based tone suitable for government officials and policy makers. Include citations, comparative analysis, and specific policy recommendations.",
+            },
         }
-        
+
         # Get style preset configuration
         style = self.settings.AI_RESPONSE_STYLE.lower()
-        
+
         # Priority: Explicit .env values > Style presets > Defaults
         # If user sets values in .env, always use those regardless of style preset
         # The style preset only affects the instruction suffix
-        
+
         if style in style_presets:
             # Use .env temperature/top_p values but get instruction from preset
             self.response_temperature = self.settings.AI_RESPONSE_TEMPERATURE
             self.response_top_p = self.settings.AI_RESPONSE_TOP_P
             self.style_instruction = style_presets[style]["instruction_suffix"]
-            logger.info(f"Applied '{style}' style with custom params from .env (temp={self.response_temperature}, top_p={self.response_top_p})")
+            logger.info(
+                f"Applied '{style}' style with custom params from .env (temp={self.response_temperature}, top_p={self.response_top_p})"
+            )
         else:
             # Unknown style - use .env values and default instruction
             self.response_temperature = self.settings.AI_RESPONSE_TEMPERATURE
             self.response_top_p = self.settings.AI_RESPONSE_TOP_P
             self.style_instruction = "\\n\\nIMPORTANT: Provide clear, professional responses suitable for all audiences. Avoid repetition."
-            logger.info(f"Using response parameters from .env (temp={self.response_temperature}, top_p={self.response_top_p})")
+            logger.info(
+                f"Using response parameters from .env (temp={self.response_temperature}, top_p={self.response_top_p})"
+            )
 
     def _setup_gemini(self):
         """Configure Gemini model"""
@@ -238,7 +241,7 @@ class AgentService:
                 self.openai_tools.extend(weather_tools)
             else:
                 self.openai_tools.append(weather_tools)
-            
+
             # Search tool returns a single dict
             self.openai_tools.append(self._get_openai_search_tool())
             self.openai_tools.append(self._get_openai_scrape_tool())
@@ -539,36 +542,41 @@ For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
         return base_instruction + self.style_instruction
 
     async def process_message(
-        self, message: str, history: list[dict[str, str]] | None = None, document_data: dict[str, Any] | None = None
+        self,
+        message: str,
+        history: list[dict[str, str]] | None = None,
+        document_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process a user message using the configured provider.
         Returns a dictionary with 'response', 'tools_used', and 'cached' flag.
-        
+
         Args:
             message: User message/query
             history: Conversation history
             document_data: Optional document data from DocumentScanner if file was uploaded
-        
+
         Cost optimization: Caches responses for identical queries to reduce API costs.
         """
         if history is None:
             history = []
-        
+
         # If document data is provided, enhance the message with document context
         enhanced_message = message
         if document_data and document_data.get("success"):
             doc_content = document_data.get("content", "")
             doc_filename = document_data.get("metadata", {}).get("filename", "uploaded file")
             doc_metadata = document_data.get("metadata", {})
-            
+
             # Truncate document content if it's too long (to avoid token limit)
             max_doc_length = 15000  # characters
             if len(doc_content) > max_doc_length:
-                doc_content = doc_content[:max_doc_length] + "\\n[... content truncated due to length ...]"
-            
+                doc_content = (
+                    doc_content[:max_doc_length] + "\\n[... content truncated due to length ...]"
+                )
+
             # Create enhanced message with document context
-            enhanced_message = f'''User Question: {message}
+            enhanced_message = f"""User Question: {message}
 
 Document uploaded: {doc_filename}
 Document type: {doc_metadata.get('file_type', 'unknown')}
@@ -578,32 +586,44 @@ Document Content:
 {doc_content}
 ---
 
-Please analyze the document above and answer the user's question based on its contents.'''
-        
+Please analyze the document above and answer the user's question based on its contents."""
+
         # Create cache key from message and recent history (last 3 messages)
         # Don't cache when document is uploaded (always process fresh)
         cache_context = {
             "message": message,
             "history": history[-3:] if len(history) > 3 else history,
             "provider": self.settings.AI_PROVIDER,
-            "has_document": document_data is not None
+            "has_document": document_data is not None,
         }
         cache_key = hashlib.md5(json.dumps(cache_context, sort_keys=True).encode()).hexdigest()
-        
+
         # Check cache first (only for non-data queries and no document uploads)
         # Cache educational/general queries but not city-specific data or document analysis
-        is_data_query = any(keyword in message.lower() for keyword in [
-            "kampala", "nairobi", "lagos", "accra", "dar", "current", "now", "today",
-            "aqi in", "air quality in", "pollution in"
-        ])
-        
+        is_data_query = any(
+            keyword in message.lower()
+            for keyword in [
+                "kampala",
+                "nairobi",
+                "lagos",
+                "accra",
+                "dar",
+                "current",
+                "now",
+                "today",
+                "aqi in",
+                "air quality in",
+                "pollution in",
+            ]
+        )
+
         if not is_data_query and not document_data:
             cached_response = self.cache.get("agent_responses", cache_key)
             if cached_response:
                 logger.info(f"Returning cached response for: {message[:50]}...")
                 cached_response["cached"] = True
                 return cached_response
-        
+
         try:
             if self.settings.AI_PROVIDER == "gemini":
                 result = await self._process_gemini_message(enhanced_message, history)
@@ -615,22 +635,63 @@ Please analyze the document above and answer the user's question based on its co
                 return {
                     "response": f"Provider {self.settings.AI_PROVIDER} is not supported.",
                     "tools_used": [],
-                    "cached": False
+                    "cached": False,
                 }
-            
+
             # Cache successful responses (educational queries only, not document uploads)
             if not is_data_query and not document_data and result.get("response"):
                 self.cache.set("agent_responses", cache_key, result, ttl=3600)  # 1 hour
-            
+
             result["cached"] = False
             return result
-            
+
+        except TimeoutError as e:
+            logger.error(f"Timeout in AI processing: {e}")
+            from src.utils.error_logger import get_error_logger
+
+            error_logger = get_error_logger()
+            error_logger.log_ai_error(
+                e,
+                model=self.settings.AI_MODEL,
+                provider=self.settings.AI_PROVIDER,
+                message_length=len(message),
+            )
+            return {
+                "response": "I'm taking longer than expected to process your request. The AI service may be slow. Please try again or simplify your question.",
+                "tools_used": [],
+                "cached": False,
+            }
+        except ConnectionError as e:
+            logger.error(f"Connection error in AI processing: {e}")
+            from src.utils.error_logger import get_error_logger
+
+            error_logger = get_error_logger()
+            error_logger.log_ai_error(
+                e,
+                model=self.settings.AI_MODEL,
+                provider=self.settings.AI_PROVIDER,
+                error_type="connection",
+            )
+            return {
+                "response": "Unable to connect to the AI service. Please check your connection and try again.",
+                "tools_used": [],
+                "cached": False,
+            }
         except Exception as e:
             logger.error(f"Error in agent processing: {e}", exc_info=True)
+            from src.utils.error_logger import get_error_logger
+
+            error_logger = get_error_logger()
+            error_logger.log_ai_error(
+                e,
+                model=self.settings.AI_MODEL,
+                provider=self.settings.AI_PROVIDER,
+                message=message[:100],
+            )
             return {
-                "response": f"I encountered an error processing your request: {str(e)}",
+                "response": f"I encountered an error processing your request. Please try again or rephrase your question. Error: {str(e)[:100]}",
                 "tools_used": [],
-                "cached": False
+                "cached": False,
             }
 
     # ------------------------------------------------------------------------
@@ -668,19 +729,21 @@ Please analyze the document above and answer the user's question based on its co
         # Handle function calls - support parallel execution with safeguards
         if response.candidates and response.candidates[0].content.parts:
             function_calls = []
-            
+
             # Collect all function calls first
             for part in response.candidates[0].content.parts:
                 if part.function_call:
                     function_calls.append(part.function_call)
-            
+
             if function_calls:
                 # SAFETY: Limit concurrent function calls to prevent resource exhaustion
                 MAX_CONCURRENT_FUNCTIONS = 5
                 if len(function_calls) > MAX_CONCURRENT_FUNCTIONS:
-                    logger.warning(f"Too many function calls ({len(function_calls)}), limiting to {MAX_CONCURRENT_FUNCTIONS}")
+                    logger.warning(
+                        f"Too many function calls ({len(function_calls)}), limiting to {MAX_CONCURRENT_FUNCTIONS}"
+                    )
                     function_calls = function_calls[:MAX_CONCURRENT_FUNCTIONS]
-                
+
                 # SAFETY: Prevent duplicate function calls
                 seen_functions = set()
                 unique_function_calls = []
@@ -691,11 +754,12 @@ Please analyze the document above and answer the user's question based on its co
                         unique_function_calls.append(fc)
                     else:
                         logger.info(f"Skipping duplicate function call: {fc.name}")
-                
+
                 function_calls = unique_function_calls
-                
+
                 # Execute all function calls in parallel with safeguards
                 import asyncio
+
                 async def execute_function_call_async(function_call):
                     function_name = function_call.name
                     function_args = function_call.args
@@ -706,51 +770,57 @@ Please analyze the document above and answer the user's question based on its co
                     # Execute tool with timeout protection
                     try:
                         # Create a task with timeout
-                        func_task = asyncio.create_task(self._execute_tool_async(function_name, function_args))
-                        tool_result = await asyncio.wait_for(func_task, timeout=30.0)  # 30 second timeout
+                        func_task = asyncio.create_task(
+                            self._execute_tool_async(function_name, function_args)
+                        )
+                        tool_result = await asyncio.wait_for(
+                            func_task, timeout=30.0
+                        )  # 30 second timeout
                     except asyncio.TimeoutError:
                         logger.error(f"Function {function_name} timed out after 30 seconds")
                         tool_result = {"error": f"Function {function_name} timed out"}
                     except Exception as e:
                         logger.error(f"Function {function_name} failed with exception: {e}")
                         tool_result = {"error": f"Function execution failed: {str(e)}"}
-                    
+
                     # Check if tool execution failed
                     if isinstance(tool_result, dict) and "error" in tool_result:
                         logger.warning(f"Tool {function_name} failed: {tool_result['error']}")
                         # Provide context to AI about the error so it can respond appropriately
                         error_context = {
                             "error": tool_result["error"],
-                            "message": f"The tool '{function_name}' encountered an error. Please provide an informative response to the user explaining what went wrong and suggest alternatives if possible."
+                            "message": f"The tool '{function_name}' encountered an error. Please provide an informative response to the user explaining what went wrong and suggest alternatives if possible.",
                         }
                         tool_result = error_context
 
-                    return {
-                        "function_call": function_call,
-                        "result": tool_result
-                    }
-                
+                    return {"function_call": function_call, "result": tool_result}
+
                 # Execute all function calls concurrently with semaphore
-                semaphore = asyncio.Semaphore(MAX_CONCURRENT_FUNCTIONS)  # Limit concurrent executions
-                
+                semaphore = asyncio.Semaphore(
+                    MAX_CONCURRENT_FUNCTIONS
+                )  # Limit concurrent executions
+
                 async def execute_with_semaphore(function_call):
                     async with semaphore:
                         return await execute_function_call_async(function_call)
-                
+
                 try:
                     function_tasks = [execute_with_semaphore(fc) for fc in function_calls]
                     function_results = await asyncio.gather(*function_tasks, return_exceptions=True)
                 except Exception as e:
                     logger.error(f"Parallel function execution failed: {e}")
-                    function_results = [{"function_call": fc, "result": {"error": "Parallel execution failed"}} for fc in function_calls]
-                
+                    function_results = [
+                        {"function_call": fc, "result": {"error": "Parallel execution failed"}}
+                        for fc in function_calls
+                    ]
+
                 # Handle any exceptions that occurred during function execution
                 for i, result in enumerate(function_results):
                     if isinstance(result, Exception):
                         logger.error(f"Function execution failed with exception: {result}")
                         function_results[i] = {
                             "function_call": function_calls[i] if i < len(function_calls) else None,
-                            "result": {"error": f"Function execution failed: {str(result)}"}
+                            "result": {"error": f"Function execution failed: {str(result)}"},
                         }
 
                 # Send all function results back to model in one message
@@ -759,19 +829,17 @@ Please analyze the document above and answer the user's question based on its co
                     function_responses.append(
                         types.Part(
                             function_response=types.FunctionResponse(
-                                name=func_result["function_call"].name, 
-                                response={"result": func_result["result"]}
+                                name=func_result["function_call"].name,
+                                response={"result": func_result["result"]},
                             )
                         )
                     )
 
-                response = chat.send_message(
-                    types.Content(parts=function_responses)
-                )
+                response = chat.send_message(types.Content(parts=function_responses))
 
         # Ensure we have a valid response
         final_response = response.text if response.text else ""
-        
+
         if not final_response or not final_response.strip():
             logger.warning("Gemini returned empty response. Providing fallback message.")
             final_response = "I apologize, but I wasn't able to retrieve the requested information at this time. This could be due to data unavailability or connectivity issues with the data sources. Please try:\n\n1. Asking about a different location\n2. Rephrasing your question\n3. Checking back in a few moments\n\nIs there anything else I can help you with?"
@@ -809,13 +877,15 @@ Please analyze the document above and answer the user's question based on its co
         # Handle tool calls - support parallel execution with safeguards
         if response.choices[0].message.tool_calls:
             tool_calls = response.choices[0].message.tool_calls
-            
+
             # SAFETY: Limit concurrent tool calls to prevent resource exhaustion
             MAX_CONCURRENT_TOOLS = 5
             if len(tool_calls) > MAX_CONCURRENT_TOOLS:
-                logger.warning(f"Too many tool calls ({len(tool_calls)}), limiting to {MAX_CONCURRENT_TOOLS}")
+                logger.warning(
+                    f"Too many tool calls ({len(tool_calls)}), limiting to {MAX_CONCURRENT_TOOLS}"
+                )
                 tool_calls = tool_calls[:MAX_CONCURRENT_TOOLS]
-            
+
             # SAFETY: Prevent duplicate tool calls to avoid redundant API calls
             seen_tools = set()
             unique_tool_calls = []
@@ -826,12 +896,13 @@ Please analyze the document above and answer the user's question based on its co
                     unique_tool_calls.append(tc)
                 else:
                     logger.info(f"Skipping duplicate tool call: {tc.function.name}")
-            
+
             tool_calls = unique_tool_calls
             tool_results = []
-            
+
             # Execute all tools in parallel with timeout protection
             import asyncio
+
             async def execute_tool_async(tool_call):
                 function_name = tool_call.function.name
                 try:
@@ -857,51 +928,55 @@ Please analyze the document above and answer the user's question based on its co
                 # Execute tool with timeout to prevent hanging
                 try:
                     # Create a task with timeout
-                    tool_task = asyncio.create_task(self._execute_tool_async(function_name, function_args))
-                    tool_result = await asyncio.wait_for(tool_task, timeout=30.0)  # 30 second timeout
+                    tool_task = asyncio.create_task(
+                        self._execute_tool_async(function_name, function_args)
+                    )
+                    tool_result = await asyncio.wait_for(
+                        tool_task, timeout=30.0
+                    )  # 30 second timeout
                 except asyncio.TimeoutError:
                     logger.error(f"Tool {function_name} timed out after 30 seconds")
                     tool_result = {"error": f"Tool {function_name} timed out"}
                 except Exception as e:
                     logger.error(f"Tool {function_name} failed with exception: {e}")
                     tool_result = {"error": f"Tool execution failed: {str(e)}"}
-                
+
                 # Check if tool execution failed
                 if isinstance(tool_result, dict) and "error" in tool_result:
                     logger.warning(f"Tool {function_name} failed: {tool_result['error']}")
                     # Provide context to AI about the error so it can respond appropriately
                     error_context = {
                         "error": tool_result["error"],
-                        "message": f"The tool '{function_name}' encountered an error. Please provide an informative response to the user explaining what went wrong and suggest alternatives if possible."
+                        "message": f"The tool '{function_name}' encountered an error. Please provide an informative response to the user explaining what went wrong and suggest alternatives if possible.",
                     }
                     tool_result = error_context
 
-                return {
-                    "tool_call": tool_call,
-                    "result": tool_result
-                }
-            
+                return {"tool_call": tool_call, "result": tool_result}
+
             # Execute all tools concurrently with semaphore to limit resource usage
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_TOOLS)  # Limit concurrent executions
-            
+
             async def execute_with_semaphore(tool_call):
                 async with semaphore:
                     return await execute_tool_async(tool_call)
-            
+
             try:
                 tool_tasks = [execute_with_semaphore(tc) for tc in tool_calls]
                 tool_results = await asyncio.gather(*tool_tasks, return_exceptions=True)
             except Exception as e:
                 logger.error(f"Parallel tool execution failed: {e}")
-                tool_results = [{"tool_call": tc, "result": {"error": "Parallel execution failed"}} for tc in tool_calls]
-            
+                tool_results = [
+                    {"tool_call": tc, "result": {"error": "Parallel execution failed"}}
+                    for tc in tool_calls
+                ]
+
             # Handle any exceptions that occurred during tool execution
             for i, result in enumerate(tool_results):
                 if isinstance(result, Exception):
                     logger.error(f"Tool execution failed with exception: {result}")
                     tool_results[i] = {
                         "tool_call": tool_calls[i] if i < len(tool_calls) else None,
-                        "result": {"error": f"Tool execution failed: {str(result)}"}
+                        "result": {"error": f"Tool execution failed: {str(result)}"},
                     }
 
             # Add all tool responses to messages
@@ -923,7 +998,7 @@ Please analyze the document above and answer the user's question based on its co
                     ],
                 }
             )
-            
+
             # Add all tool results
             for tool_result in tool_results:
                 messages.append(
@@ -997,7 +1072,7 @@ Be professional, empathetic, and solution-oriented."""
                 logger.info(
                     f"Fallback response generated. Length: {len(response_text) if response_text else 0}"
                 )
-                
+
                 # If still no response, use a default message
                 if not response_text or not response_text.strip():
                     response_text = "I apologize, but I'm unable to retrieve the specific air quality data you requested at this moment. This could be due to:\n\n• The location not being covered by our monitoring networks\n• Temporary connectivity issues with data sources\n• The monitoring station being offline\n\nPlease try:\n1. A nearby major city (e.g., capital cities usually have monitoring stations)\n2. Rephrasing your question\n3. Checking back in a few moments\n\nI can also help you with general air quality information, health recommendations, or data from other locations."
@@ -1592,12 +1667,7 @@ Be professional, empathetic, and solution-oriented."""
                 "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs. Format responses with sources: 'Source: [Title] (URL) - [Summary]'",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Web search query"
-                        }
-                    },
+                    "properties": {"query": {"type": "string", "description": "Web search query"}},
                     "required": ["query"],
                 },
             },
@@ -1650,7 +1720,7 @@ Be professional, empathetic, and solution-oriented."""
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "Absolute path to the document file to scan"
+                            "description": "Absolute path to the document file to scan",
                         }
                     },
                     "required": ["file_path"],
@@ -1986,7 +2056,7 @@ Be professional, empathetic, and solution-oriented."""
                     return {
                         "success": False,
                         "message": f"Could not retrieve AirQo data for {city}. The location may not have AirQo monitoring coverage.",
-                        "error": str(e)
+                        "error": str(e),
                     }
             elif function_name == "get_airqo_history":
                 from datetime import datetime
@@ -2073,7 +2143,7 @@ Be professional, empathetic, and solution-oriented."""
             else:
                 return {
                     "error": f"Unknown function {function_name}",
-                    "guidance": "This tool is not available. Please inform the user and suggest alternative approaches."
+                    "guidance": "This tool is not available. Please inform the user and suggest alternative approaches.",
                 }
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
@@ -2081,7 +2151,7 @@ Be professional, empathetic, and solution-oriented."""
             return {
                 "error": str(e),
                 "error_type": type(e).__name__,
-                "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source."
+                "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source.",
             }
 
     async def _execute_tool_async(self, function_name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -2120,7 +2190,7 @@ Be professional, empathetic, and solution-oriented."""
                     return {
                         "success": False,
                         "message": f"Could not retrieve AirQo data for {city}. The location may not have AirQo monitoring coverage.",
-                        "error": str(e)
+                        "error": str(e),
                     }
             elif function_name == "get_airqo_history":
                 from datetime import datetime
@@ -2163,7 +2233,9 @@ Be professional, empathetic, and solution-oriented."""
                 longitude = args.get("longitude")
                 return await loop.run_in_executor(
                     None,
-                    lambda: self.airqo.get_air_quality_by_location(latitude=latitude, longitude=longitude),
+                    lambda: self.airqo.get_air_quality_by_location(
+                        latitude=latitude, longitude=longitude
+                    ),
                 )
             elif function_name == "get_openmeteo_current_air_quality":
                 latitude = args.get("latitude")
@@ -2213,7 +2285,9 @@ Be professional, empathetic, and solution-oriented."""
             elif function_name == "get_weather_forecast":
                 city = args.get("city")
                 days = args.get("days", 7)
-                return await loop.run_in_executor(None, lambda: self.weather.get_weather_forecast(city, days))
+                return await loop.run_in_executor(
+                    None, lambda: self.weather.get_weather_forecast(city, days)
+                )
             elif function_name == "search_web":
                 query = args.get("query")
                 return await loop.run_in_executor(None, self.search.search, query)
@@ -2222,11 +2296,13 @@ Be professional, empathetic, and solution-oriented."""
                 return await loop.run_in_executor(None, self.scraper.scrape, url)
             elif function_name == "scan_document":
                 file_path = args.get("file_path")
-                return await loop.run_in_executor(None, self.document_scanner.scan_document, file_path)
+                return await loop.run_in_executor(
+                    None, self.document_scanner.scan_document, file_path
+                )
             else:
                 return {
                     "error": f"Unknown function {function_name}",
-                    "guidance": "This tool is not available. Please inform the user and suggest alternative approaches."
+                    "guidance": "This tool is not available. Please inform the user and suggest alternative approaches.",
                 }
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
@@ -2234,5 +2310,5 @@ Be professional, empathetic, and solution-oriented."""
             return {
                 "error": str(e),
                 "error_type": type(e).__name__,
-                "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source."
+                "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source.",
             }

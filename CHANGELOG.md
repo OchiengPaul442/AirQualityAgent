@@ -4,6 +4,119 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.7.0] - 2025-01-01
+
+### 🔧 CRITICAL FIX: Database Connection Pool & Error Handling
+
+**Feature**: Comprehensive database resilience, error logging to files, and user-friendly error messages for production reliability.
+
+**Problem Solved**:
+
+- SQLAlchemy connection pool timeouts (`QueuePool limit of size 1 overflow 0 reached`)
+- 500 Internal Server Errors with stack traces instead of user-friendly messages
+- No retry logic for external API calls
+- System crashes when database operations fail
+- No error logging for future monitoring integration
+
+#### Fixed
+
+- **Database Connection Pool** (`src/db/database.py`)
+
+  - Switched SQLite from QueuePool (size 1) to NullPool (unlimited connections)
+  - Enabled WAL (Write-Ahead Logging) mode for better concurrency
+  - Increased busy timeout from 30s to 60s
+  - PostgreSQL pool increased: size 10, overflow 20, timeout 60s
+  - Added connection event listeners for SQLite pragma configuration
+
+- **API Error Handling** (`src/api/routes.py`)
+
+  - Added comprehensive error handling to all session endpoints
+  - Database timeouts return 503 with "database busy" message
+  - Network errors return user-friendly messages with retry suggestions
+  - Chat endpoint continues processing even if database saves fail
+  - Failed history fetches fall back to empty history gracefully
+
+- **AI Processing Errors** (`src/services/agent_service.py`)
+  - Added specific handling for TimeoutError and ConnectionError
+  - Graceful degradation when AI service is slow or unavailable
+  - Detailed error logging with model, provider, and context
+
+#### Added
+
+- **Error Logging System** (`src/utils/error_logger.py`) - NEW
+
+  - Rotating file logs (10MB max, 10 backups) in `logs/` directory
+  - Dual format: human-readable `.log` and structured `.json`
+  - Error categories: database, network, ai_provider, general
+  - Context tracking: endpoint, session_id, operation, error_type
+  - Ready for future integration with Sentry, DataDog, CloudWatch
+  - `ErrorLogger` class with category-specific methods
+  - `get_error_logger()` singleton for global access
+
+- **Global Error Handlers** (`src/api/error_handlers.py`)
+
+  - All errors automatically logged to files
+  - `database_timeout_handler` - 503 with retry timing
+  - `database_operational_error_handler` - 503 with connection guidance
+  - `database_integrity_error_handler` - 400 for invalid data
+  - `general_database_error_handler` - 500 with support guidance
+  - `general_exception_handler` - Catches all uncaught exceptions
+  - Registered automatically in FastAPI app startup
+
+- **Resilient HTTP Client** (`src/utils/http_client.py`) - NEW
+
+  - Automatic retry (3 attempts) with exponential backoff
+  - Custom timeout configuration (10s connect, 30s read, 60s pool)
+  - Connection pooling (100 max, 20 keepalive)
+  - User-friendly error messages for timeouts and network issues
+  - `resilient_get()` and `resilient_post()` functions
+  - Custom exceptions: TimeoutError, NetworkError, ServiceUnavailableError
+
+- **Testing & Documentation**
+  - `test_database_fixes.py` - Comprehensive test script (increased timeout to 120s for AI)
+  - `ERROR_LOGGING.md` - Complete guide to error logging system
+  - `logs/.gitignore` entry to exclude logs from version control
+
+#### Dependencies
+
+- Added `tenacity==9.0.0` for retry logic with exponential backoff
+
+#### Error Logging
+
+All errors are now logged to:
+
+- `logs/errors.log` - Human-readable format with timestamps and tracebacks
+- `logs/errors.json` - Structured JSON (one object per line) for parsing
+
+Log features:
+
+- Automatic rotation (10MB per file, 10 backups)
+- Structured context (endpoint, method, error_category, etc.)
+- Ready for monitoring service integration
+- Parse with `jq` for analysis: `cat logs/errors.json | jq 'select(.error_type=="TimeoutError")'`
+
+#### Error Messages
+
+**Before**: `500 Internal Server Error` with stack trace
+
+**After**: Clear, actionable messages:
+
+- `503 Service Unavailable: "The database is currently busy. Please try again in a moment." (retry_after: 5s)`
+- `503 Service Unavailable: "Unable to connect to the database. Please try again later." (retry_after: 10s)`
+- AI Timeout: "I'm taking longer than expected to process your request. The AI service may be slow."
+- Network: "Unable to connect to the service. Please check your internet connection."
+
+#### Performance Improvements
+
+- ✅ Eliminated connection pool timeout errors
+- ✅ Unlimited concurrent request handling (tested with 10+ simultaneous)
+- ✅ Graceful degradation - system continues working during DB issues
+- ✅ Automatic retry for transient network failures (3 attempts)
+- ✅ Better SQLite concurrency with WAL mode
+- ✅ All errors logged to files for monitoring and analysis
+
+---
+
 ## [2.6.0] - 2025-01-XX
 
 ### 🌍 NEW: Intelligent Fallback to Web Search

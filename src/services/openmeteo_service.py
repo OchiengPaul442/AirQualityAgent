@@ -30,7 +30,7 @@ class OpenMeteoService:
     def __init__(self):
         """
         Initialize Open-Meteo service
-        
+
         Note: No API key required for non-commercial use up to 10,000 calls/day
         """
         from ..config import get_settings

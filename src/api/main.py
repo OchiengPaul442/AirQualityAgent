@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.api.error_handlers import register_error_handlers
 from src.api.routes import router
 from src.config import get_settings
 from src.db.database import Base, engine, ensure_database_directory
@@ -25,25 +26,28 @@ async def lifespan(app: FastAPI):
     try:
         # Ensure database directory exists with proper permissions
         ensure_database_directory()
-        
+
         # Create tables if they don't exist
         Base.metadata.create_all(bind=engine, checkfirst=True)
         logger.info("✓ Database tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         # Don't crash the app, continue with degraded functionality
-    
+
     yield
-    
+
     # Shutdown: Cleanup resources
     logger.info("Shutting down...")
 
 
 app = FastAPI(
-    title=settings.PROJECT_NAME, 
+    title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
+
+# Register global error handlers for better error messages
+register_error_handlers(app)
 
 app.include_router(router, prefix=settings.API_V1_STR)
 

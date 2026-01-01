@@ -40,6 +40,8 @@ ENV/
 
 # Logs
 *.log
+logs/
+errors.json
 
 # Reports
 reports/

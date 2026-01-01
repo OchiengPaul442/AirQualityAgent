@@ -27,6 +27,7 @@ ollama==0.6.1                      # Local LLM support (updated for httpx 0.28+)
 mcp==1.2.0                         # MCP server/client implementation
 httpx==0.28.1                      # Async HTTP client
 httpx-sse==0.4.0                   # Server-sent events support
+tenacity==9.0.0                    # Retry logic for resilient operations
 
 # -----------------------------------------------------------------------------
 # Database & Caching

@@ -225,10 +225,12 @@ class AirQoService:
                 else:
                     return {
                         "success": False,
-                        "message": f"No monitoring sites found for '{search_query}' to generate forecast."
+                        "message": f"No monitoring sites found for '{search_query}' to generate forecast.",
                     }
             else:
-                raise ValueError("Either site_id, device_id, city, or search must be provided for forecast.")
+                raise ValueError(
+                    "Either site_id, device_id, city, or search must be provided for forecast."
+                )
 
         data = self._make_request(f"predict/{endpoint_type}", params)
         return format_air_quality_data(data, source="airqo")
@@ -251,7 +253,9 @@ class AirQoService:
 
         return self._make_request(f"devices/metadata/{entity_type}", params)
 
-    def get_sites_summary(self, search: str | None = None, limit: int = 80, fetch_all: bool = True) -> dict[str, Any]:
+    def get_sites_summary(
+        self, search: str | None = None, limit: int = 80, fetch_all: bool = True
+    ) -> dict[str, Any]:
         """
         Get sites summary - returns detailed site information including online status.
         This is more comprehensive than metadata/sites.
@@ -271,36 +275,37 @@ class AirQoService:
 
         # Get first page
         response = self._make_request("devices/sites/summary", params)
-        
+
         # If fetch_all is False or no pagination info, return first page only
         if not fetch_all or not response.get("success"):
             return response
-        
+
         # Collect all sites from first page
         all_sites = response.get("sites", [])
         meta = response.get("meta", {})
-        
+
         # Check for pagination and fetch remaining pages
         max_pages = 50  # Safety limit to prevent infinite loops
         pages_fetched = 1
-        
+
         while meta.get("nextPage") and pages_fetched < max_pages:
             try:
                 # Extract next page URL
                 next_url = meta["nextPage"]
-                
+
                 # Parse the next page URL to extract skip parameter
                 import urllib.parse
+
                 parsed = urllib.parse.urlparse(next_url)
                 next_params = urllib.parse.parse_qs(parsed.query)
-                
+
                 # Update skip parameter for next page
                 if "skip" in next_params:
                     params["skip"] = int(next_params["skip"][0])
-                    
+
                     # Fetch next page
                     next_response = self._make_request("devices/sites/summary", params)
-                    
+
                     if next_response.get("success") and next_response.get("sites"):
                         all_sites.extend(next_response["sites"])
                         meta = next_response.get("meta", {})
@@ -310,20 +315,22 @@ class AirQoService:
                         break
                 else:
                     break
-                    
+
             except Exception as e:
                 logger.warning(f"Error fetching next page: {e}")
                 break
-        
+
         # Update response with all collected sites
         response["sites"] = all_sites
         if meta:
             response["meta"]["totalResults"] = len(all_sites)
             response["meta"]["pagesFetched"] = pages_fetched
-        
+
         return response
 
-    def get_grids_summary(self, search: str | None = None, limit: int = 80, fetch_all: bool = True) -> dict[str, Any]:
+    def get_grids_summary(
+        self, search: str | None = None, limit: int = 80, fetch_all: bool = True
+    ) -> dict[str, Any]:
         """
         Get grids summary - returns grids with their associated sites.
         Each grid contains a list of sites with their details.
@@ -343,36 +350,37 @@ class AirQoService:
 
         # Get first page
         response = self._make_request("devices/grids/summary", params)
-        
+
         # If fetch_all is False or no pagination info, return first page only
         if not fetch_all or not response.get("success"):
             return response
-        
+
         # Collect all grids from first page
         all_grids = response.get("grids", [])
         meta = response.get("meta", {})
-        
+
         # Check for pagination and fetch remaining pages
         max_pages = 50  # Safety limit to prevent infinite loops
         pages_fetched = 1
-        
+
         while meta.get("nextPage") and pages_fetched < max_pages:
             try:
                 # Extract next page URL
                 next_url = meta["nextPage"]
-                
+
                 # Parse the next page URL to extract skip parameter
                 import urllib.parse
+
                 parsed = urllib.parse.urlparse(next_url)
                 next_params = urllib.parse.parse_qs(parsed.query)
-                
+
                 # Update skip parameter for next page
                 if "skip" in next_params:
                     params["skip"] = int(next_params["skip"][0])
-                    
+
                     # Fetch next page
                     next_response = self._make_request("devices/grids/summary", params)
-                    
+
                     if next_response.get("success") and next_response.get("grids"):
                         all_grids.extend(next_response["grids"])
                         meta = next_response.get("meta", {})
@@ -382,17 +390,17 @@ class AirQoService:
                         break
                 else:
                     break
-                    
+
             except Exception as e:
                 logger.warning(f"Error fetching next page: {e}")
                 break
-        
+
         # Update response with all collected grids
         response["grids"] = all_grids
         if meta:
             response["meta"]["totalResults"] = len(all_grids)
             response["meta"]["pagesFetched"] = pages_fetched
-        
+
         return response
 
     def get_site_id_by_name(self, name: str, limit: int = 80) -> Optional[Union[str, List[str]]]:
@@ -416,11 +424,11 @@ class AirQoService:
 
             # Use sites/summary endpoint with search parameter
             response = self.get_sites_summary(search=name, limit=limit)
-            
+
             if response.get("success") and response.get("sites"):
                 sites = response["sites"]
                 site_ids = [site.get("_id") for site in sites if site.get("_id")]
-                
+
                 if site_ids:
                     # Cache the first result
                     self.cache_service.set("airqo", cache_key, site_ids[0], 3600)
@@ -432,7 +440,9 @@ class AirQoService:
             print(f"Error finding site ID for '{name}': {e}")
             return None
 
-    def get_air_quality_by_location(self, latitude: float, longitude: float, limit_sites: int = 3) -> dict[str, Any]:
+    def get_air_quality_by_location(
+        self, latitude: float, longitude: float, limit_sites: int = 3
+    ) -> dict[str, Any]:
         """
         Enhanced method to get air quality data for coordinates using AirQo's site-based approach.
         This method prioritizes AirQo data for African locations by:
@@ -506,7 +516,9 @@ class AirQoService:
 
                 if grid_ids:
                     # Get measurements for first available grid
-                    grid_data = self._make_request(f"devices/measurements/grids/{grid_ids[0]}/recent")
+                    grid_data = self._make_request(
+                        f"devices/measurements/grids/{grid_ids[0]}/recent"
+                    )
 
                     if grid_data.get("success"):
                         grid_data["coordinates"] = {"lat": latitude, "lon": longitude}
@@ -520,10 +532,10 @@ class AirQoService:
             return {
                 "success": False,
                 "message": f"No AirQo monitoring sites or grids found near coordinates ({latitude:.4f}, {longitude:.4f}). "
-                          f"AirQo primarily covers East African countries. The coordinates may be outside the coverage area.",
+                f"AirQo primarily covers East African countries. The coordinates may be outside the coverage area.",
                 "coordinates": {"lat": latitude, "lon": longitude},
                 "city_attempted": city_name,
-                "search_method": "none_found"
+                "search_method": "none_found",
             }
 
         except Exception as e:
@@ -531,7 +543,7 @@ class AirQoService:
                 "success": False,
                 "message": f"Error retrieving AirQo data for coordinates ({latitude:.4f}, {longitude:.4f}): {str(e)}",
                 "coordinates": {"lat": latitude, "lon": longitude},
-                "error": str(e)
+                "error": str(e),
             }
 
     def get_recent_measurements(
@@ -585,33 +597,33 @@ class AirQoService:
             try:
                 # Use sites/summary endpoint to find matching sites
                 sites_response = self.get_sites_summary(search=search_query, limit=80)
-                
+
                 if sites_response.get("success") and sites_response.get("sites"):
                     sites = sites_response["sites"]
-                    
+
                     # Extract site IDs from matching sites
                     site_ids = [site.get("_id") for site in sites if site.get("_id")]
-                    
+
                     if site_ids:
                         # Use the readings/recent endpoint with multiple site_ids
                         # This endpoint accepts comma-separated site_ids
                         params = {"site_id": ",".join(site_ids[:5])}  # Limit to first 5 sites
                         data = self._make_request("devices/readings/recent", params)
-                        
+
                         # Add search context to help AI understand the data
                         if data.get("success"):
                             data["search_location"] = search_query
                             data["sites_queried"] = len(site_ids[:5])
-                        
+
                         return format_air_quality_data(data, source="airqo")
-                
+
                 # If no sites found, return helpful error with coverage info
                 return {
                     "success": False,
                     "message": f"AirQo monitoring network does not have active stations in '{search_query}'. AirQo covers major East African cities including Kampala, Gulu, Mbale, Jinja, Nairobi, Dar es Salaam, and Kigali. Try checking WAQI or OpenMeteo for this location.",
                     "location_searched": search_query,
                     "sites": [],
-                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources."
+                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources.",
                 }
             except Exception as e:
                 logger.error(f"Error searching AirQo sites for {search_query}: {e}")
@@ -620,10 +632,12 @@ class AirQoService:
                     "message": f"Error searching for AirQo monitoring sites in '{search_query}': {str(e)}",
                     "location_searched": search_query,
                     "error": str(e),
-                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources."
+                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources.",
                 }
 
-        raise ValueError("Must provide site_id, device_id, grid_id, cohort_id, city, or search parameter.")
+        raise ValueError(
+            "Must provide site_id, device_id, grid_id, cohort_id, city, or search parameter."
+        )
 
     def search_sites_by_location(self, location: str, limit: int = 80) -> dict[str, Any]:
         """
@@ -639,20 +653,20 @@ class AirQoService:
         """
         try:
             response = self.get_sites_summary(search=location, limit=limit)
-            
+
             if response.get("success") and response.get("sites"):
                 return response
-            
+
             return {
                 "success": False,
                 "message": f"No monitoring sites found for '{location}'",
-                "sites": []
+                "sites": [],
             }
         except Exception as e:
             return {
                 "success": False,
                 "message": f"Error searching for sites: {str(e)}",
-                "sites": []
+                "sites": [],
             }
 
     def get_sites(self, country: str | None = None, city: str | None = None) -> dict[str, Any]:
@@ -696,12 +710,7 @@ class AirQoService:
         """
         try:
             url = "https://nominatim.openstreetmap.org/reverse"
-            params = {
-                "lat": latitude,
-                "lon": longitude,
-                "format": "json",
-                "zoom": 10  # City level
-            }
+            params = {"lat": latitude, "lon": longitude, "format": "json", "zoom": 10}  # City level
             headers = {"User-Agent": "AirQoAgent/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             if response.status_code == 200:
@@ -709,11 +718,13 @@ class AirQoService:
                 if data and "address" in data:
                     address = data["address"]
                     # Try to get city name from various possible fields, preferring cleaner names
-                    city = (address.get("city") or
-                           address.get("town") or
-                           address.get("village") or
-                           address.get("municipality") or
-                           address.get("county"))
+                    city = (
+                        address.get("city")
+                        or address.get("town")
+                        or address.get("village")
+                        or address.get("municipality")
+                        or address.get("county")
+                    )
                     # Clean up the city name by removing qualifiers like "Capital City"
                     if city:
                         city = city.replace(" Capital City", "").replace(" City", "").strip()

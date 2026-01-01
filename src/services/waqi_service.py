@@ -90,7 +90,9 @@ class WAQIService:
             sanitized_data = self._sanitize_token(data)
 
             # Cache the sanitized result in Redis
-            self.cache_service.set_api_response("waqi", endpoint, params, sanitized_data, self.cache_ttl)
+            self.cache_service.set_api_response(
+                "waqi", endpoint, params, sanitized_data, self.cache_ttl
+            )
             return sanitized_data
 
         except requests.exceptions.RequestException as e:
@@ -117,7 +119,7 @@ class WAQIService:
         """
         data = self._make_request(f"feed/{city}/")
         formatted = format_air_quality_data(data, source="waqi")
-        
+
         # Add explicit warning about data type
         if "data" in formatted:
             formatted["data"]["_important_note"] = (
@@ -125,7 +127,7 @@ class WAQIService:
                 "Concentrations in µg/m³ are estimated using EPA AQI breakpoint conversions. "
                 "For exact concentration measurements, consider using AirQo or OpenMeteo data sources."
             )
-        
+
         return formatted
 
     def get_station_by_coords(self, lat: float, lon: float) -> dict[str, Any]:
@@ -144,13 +146,13 @@ class WAQIService:
         """
         data = self._make_request(f"feed/geo:{lat};{lon}/")
         formatted = format_air_quality_data(data, source="waqi")
-        
+
         if "data" in formatted:
             formatted["data"]["_important_note"] = (
                 "WAQI provides AQI index values (0-500 scale), not raw pollutant concentrations. "
                 "Concentrations in µg/m³ are estimated using EPA AQI breakpoint conversions."
             )
-        
+
         return formatted
 
     def get_station_by_ip(self) -> dict[str, Any]:

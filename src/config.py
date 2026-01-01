@@ -51,12 +51,12 @@ class Settings(BaseSettings):
     # - 0.4-0.7: Balanced, professional, suitable for general audiences
     # - 0.8-1.0: Creative, varied, better for exploratory discussions
     AI_RESPONSE_TEMPERATURE: float = 0.5
-    
+
     # Top-p (nucleus sampling): Controls diversity (0.0-1.0)
     # - Lower values (0.7-0.9): More focused, consistent responses
     # - Higher values (0.95-1.0): More diverse vocabulary and phrasing
     AI_RESPONSE_TOP_P: float = 0.9
-    
+
     # Response Style: Preset configurations for different audiences
     # Options: executive, technical, general, simple, policy
     # - executive: Concise, data-driven, action-oriented for senior leaders
