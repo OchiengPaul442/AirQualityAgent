@@ -315,6 +315,91 @@ docker-compose logs redis
 - Check internet connectivity from container
 - Review rate limits with your provider
 
+### Database Connection Issues
+
+When running the application in Docker, you may encounter connection errors when trying to connect to a database running on your host machine (localhost).
+
+**Error Example:**
+
+```
+(psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: Connection refused
+```
+
+**Root Cause:** In Docker, `localhost` refers to the container itself, not your host machine. The container cannot reach host services using `localhost`.
+
+**Solutions:**
+
+#### Option 1: Connect to Host Database (Recommended)
+
+Use `host.docker.internal` instead of `localhost` to access services on your host machine:
+
+```bash
+# Override DATABASE_URL when running container
+docker run -p 8000:8000 --env-file .env \
+  -e DATABASE_URL="postgresql://user:password@host.docker.internal:5432/database" \
+  airqualityagent
+```
+
+Or update your `.env` file:
+
+```env
+DATABASE_URL=postgresql://user:password@host.docker.internal:5432/database
+```
+
+**Note:** Your application includes smart URL parsing that handles passwords containing `@` symbols, so you don't need to manually URL-encode them.
+
+#### Option 2: Use Built-in SQLite Database
+
+If you don't need to connect to an external database, use the default SQLite database which is self-contained within the container:
+
+```env
+# Comment out or remove DATABASE_URL to use SQLite
+# DATABASE_URL=postgresql://...
+```
+
+The application will automatically use `sqlite:///./data/chat_sessions.db` when no `DATABASE_URL` is specified.
+
+#### Option 3: Add Database to Docker Compose
+
+For development, add your database as a service in `docker-compose.yml`:
+
+```yaml
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airquality
+      POSTGRES_PASSWORD: secure_password
+      POSTGRES_DB: airquality_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - airquality-network
+
+  airquality-agent:
+    # ... existing config
+    environment:
+      - DATABASE_URL=postgresql://airquality:secure_password@postgres:5432/airquality_db
+    depends_on:
+      - postgres
+```
+
+**Testing Connection:**
+
+```bash
+# Test database connectivity from container
+docker exec -it airquality-agent python -c "
+import os
+from sqlalchemy import create_engine
+engine = create_engine(os.getenv('DATABASE_URL'))
+try:
+    with engine.connect() as conn:
+        print('✓ Database connection successful')
+except Exception as e:
+    print(f'✗ Database connection failed: {e}')
+"
+```
+
 ## Best Practices
 
 1. **Always use `.env` for secrets** - Never commit API keys to version control
