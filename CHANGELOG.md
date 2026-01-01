@@ -4,6 +4,46 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.7.1] - 2026-01-02
+
+### 🎨 CRITICAL FIX: Markdown Formatting in AI Responses
+
+**Feature**: Comprehensive markdown formatting improvements for professional, properly rendered responses.
+
+**Problem Solved**:
+
+- Raw markdown syntax (e.g., `| -------- | -------- |`) showing in frontend responses
+- Inconsistent table formatting across different queries
+- Missing formatting guidance for complex data presentations
+- Tables not rendering properly due to escaped markdown in system instructions
+
+#### Fixed
+
+- **System Instructions** (`src/services/agent_service.py`)
+
+  - Removed code block wrapping from markdown table examples
+  - Added comprehensive markdown reference with 10 element types
+  - Added critical formatting rules to prevent raw syntax display
+  - Added markdown rendering warnings with ❌ and ✅ examples
+  - Enhanced data presentation examples for all query types
+
+- **Response Formatting**
+  - Single location queries: Proper tables with AQI, pollutants, and recommendations
+  - Multiple location comparisons: Formatted comparison tables
+  - Document analysis: Statistics tables with data quality sections
+  - Added bad vs. good examples showing what to avoid and what to do
+
+#### Added
+
+- **Markdown Formatting Guide** (`docs/MARKDOWN_FORMATTING_FIX.md`) - NEW
+  - Complete documentation of formatting improvements
+  - Testing recommendations for validation
+  - Rollback instructions if needed
+
+**Impact**: All AI responses now use properly formatted markdown with tables, headers, bold text, and lists rendering correctly in the frontend without visible markdown syntax.
+
+---
+
 ## [2.7.0] - 2025-01-01
 
 ### 🔧 CRITICAL FIX: Database Connection Pool & Error Handling
