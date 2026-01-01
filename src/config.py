@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 from dotenv import load_dotenv
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 # Load environment variables from .env.local or .env
@@ -30,6 +31,13 @@ class Settings(BaseSettings):
     # Database Configuration
     # Default to SQLite in ./data directory (Docker-friendly)
     DATABASE_URL: str = "sqlite:///./data/chat_sessions.db"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def validate_database_url(cls, v):
+        if not v or v.strip() == "":
+            return "sqlite:///./data/chat_sessions.db"
+        return v
 
     # API Configuration
     API_V1_STR: str = "/api/v1"
