@@ -13,6 +13,7 @@ Added `markdown_formatter.py` utility to ensure all AI responses have profession
 #### Added
 
 - **`src/utils/markdown_formatter.py`** - Automatic formatting for lists, tables, headers, and spacing
+- **Professional source citation formatting** - ChatGPT-style source references with numbered lists, bold titles, and clickable links
 - Integrated into `agent_service._clean_response()` for all agent responses
 
 #### Fixed

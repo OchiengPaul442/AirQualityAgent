@@ -7,6 +7,7 @@ similar to ChatGPT output quality. It handles:
 - Professional table rendering
 - Correct header hierarchy
 - Clean line breaks and spacing
+- Professional source citation formatting (ChatGPT-style)
 - Consistent formatting throughout
 
 Based on best practices from leading AI assistants and markdown standards.
@@ -26,8 +27,9 @@ class MarkdownFormatter:
     3. Headers have proper spacing (blank line before and after)
     4. Parentheses and brackets that are incorrectly split across lines are fixed
     5. Emoji numbering is converted to regular numbering for professional appearance
-    6. No excessive line breaks or awkward spacing
-    7. Consistent bullet points and numbering
+    6. Sources and citations are formatted professionally (ChatGPT-style)
+    7. No excessive line breaks or awkward spacing
+    8. Consistent bullet points and numbering
     """
 
     @staticmethod
@@ -51,6 +53,7 @@ class MarkdownFormatter:
         text = MarkdownFormatter._format_headers(text)
         text = MarkdownFormatter._format_lists(text)
         text = MarkdownFormatter._format_tables(text)
+        text = MarkdownFormatter._format_sources(text)
         text = MarkdownFormatter._format_bold_and_emphasis(text)
         text = MarkdownFormatter._clean_spacing(text)
         text = MarkdownFormatter._final_cleanup(text)
@@ -367,6 +370,90 @@ class MarkdownFormatter:
         return formatted_rows
 
     @staticmethod
+    def _format_sources(text: str) -> str:
+        """
+        Format source citations professionally, similar to ChatGPT's citation style.
+
+        Converts various source formats into professional citations:
+        - "Source: Title (URL) - Summary" -> Professional citation blocks
+        - Multiple sources get numbered references
+        - URLs become clickable links
+        - Maintains academic/professional appearance
+        """
+        lines = text.split('\n')
+        formatted_lines = []
+        sources_section_started = False
+        current_sources = []
+
+        for i, line in enumerate(lines):
+            # Check if this is a source line (handle multi-line summaries)
+            stripped_line = line.strip()
+            source_match = re.match(r'^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$', stripped_line)
+
+            if source_match:
+                title, url, summary = source_match.groups()
+                title = title.strip()
+                url = url.strip()
+                summary = summary.strip() if summary else ""
+
+                # Check if summary continues on next lines (incomplete summary)
+                if summary and not summary.endswith('.') and not summary.endswith(')') and i + 1 < len(lines):
+                    # Look ahead to find continuation of summary
+                    next_line = lines[i + 1].strip()
+                    if next_line and not next_line.startswith('Source:') and not re.match(r'^(?:Source|source):', next_line, re.IGNORECASE):
+                        summary += ' ' + next_line
+                        lines[i + 1] = ''  # Mark as processed
+
+                # Create professional citation
+                if summary:
+                    citation = f"**{title}** - {summary} ([link]({url}))"
+                else:
+                    citation = f"**{title}** ([link]({url}))"
+
+                current_sources.append(citation)
+                continue  # Don't add the original line
+
+            # Check if we're starting a sources/references section
+            if re.match(r'^(?:Sources?|References?|Citations?)(?:\s*:)?\s*$', line.strip(), re.IGNORECASE):
+                sources_section_started = True
+                formatted_lines.append("")  # Add blank line before sources section
+                formatted_lines.append("### Sources & References")
+                formatted_lines.append("")
+                continue
+
+            # If we have accumulated sources and hit a non-source line, format them
+            if current_sources and not source_match and line.strip():
+                if not sources_section_started:
+                    # Add sources section if not already started
+                    formatted_lines.append("")
+                    formatted_lines.append("### Sources & References")
+                    formatted_lines.append("")
+
+                # Format sources as numbered list
+                for i, source in enumerate(current_sources, 1):
+                    formatted_lines.append(f"{i}. {source}")
+
+                formatted_lines.append("")  # Add blank line after sources
+                current_sources = []  # Reset sources
+                sources_section_started = False
+
+            formatted_lines.append(line)
+
+        # Handle any remaining sources at the end
+        if current_sources:
+            if not sources_section_started:
+                formatted_lines.append("")
+                formatted_lines.append("### Sources & References")
+                formatted_lines.append("")
+
+            for i, source in enumerate(current_sources, 1):
+                formatted_lines.append(f"{i}. {source}")
+
+            formatted_lines.append("")
+
+        return '\n'.join(formatted_lines)
+
+    @staticmethod
     def _format_bold_and_emphasis(text: str) -> str:
         """
         Ensure bold and emphasis markers are properly formatted.
@@ -374,7 +461,8 @@ class MarkdownFormatter:
         - Consistent use of ** for bold, * for italic
         """
         # Fix bold with extra spaces: ** text ** -> **text**
-        text = re.sub(r'\*\*\s+([^\*]+?)\s+\*\*', r'**\1**', text)
+        # Use negative lookahead to ensure no ** in the content
+        text = re.sub(r'\*\*\s+((?:(?!\*\*).)*?)\s+\*\*', r'**\1**', text)
         
         # Fix italic with extra spaces: * text * -> *text*
         text = re.sub(r'(?<!\*)\*\s+([^\*]+?)\s+\*(?!\*)', r'*\1*', text)
