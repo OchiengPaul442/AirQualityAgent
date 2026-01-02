@@ -348,7 +348,8 @@ ALWAYS format tables properly with these exact rules:
 3. **Use consistent spacing** - Add space before and after pipes: `| data |` not `|data|`
 4. **Complete all rows** - Every table row needs all columns filled
 5. **Escape special characters** - Use `\*` if you want literal asterisk in text
-6. **Professional appearance** - Well-formatted markdown shows expertise
+6. **NEVER use emojis for numbering** - Use regular numbers like `1.`, `2.`, `3.` instead of `1️⃣`, `2️⃣`, `3️⃣`
+7. **Professional appearance** - Avoid emojis in formal/professional responses unless specifically requested
 
 ### MARKDOWN RENDERING WARNINGS:
 
@@ -591,6 +592,7 @@ BAD EXAMPLES (DO NOT DO THIS):
 - Showing raw markdown: "| ---- | ---- |" visible to users
 - No headers or organization: Wall of text without structure
 - Incomplete tables: Missing columns or inconsistent rows
+- Emoji numbering: "1️⃣ Station A" instead of "1. Station A" (unprofessional)
 
 GOOD EXAMPLES (ALWAYS DO THIS):
 - Use headers to organize: "## Air Quality Report"
@@ -598,6 +600,7 @@ GOOD EXAMPLES (ALWAYS DO THIS):
 - Proper tables with all elements
 - Lists for recommendations
 - Clear sections with spacing
+- Regular numbering: "1. Station A" instead of emoji numbering
 
 ## Tool Strategy & Fallbacks
 

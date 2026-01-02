@@ -25,8 +25,9 @@ class MarkdownFormatter:
     2. Tables are properly formatted with aligned columns
     3. Headers have proper spacing (blank line before and after)
     4. Parentheses and brackets that are incorrectly split across lines are fixed
-    5. No excessive line breaks or awkward spacing
-    6. Consistent bullet points and numbering
+    5. Emoji numbering is converted to regular numbering for professional appearance
+    6. No excessive line breaks or awkward spacing
+    7. Consistent bullet points and numbering
     """
 
     @staticmethod
@@ -46,6 +47,7 @@ class MarkdownFormatter:
         # Apply formatting in specific order
         text = MarkdownFormatter._normalize_line_breaks(text)
         text = MarkdownFormatter._fix_broken_parentheses(text)
+        text = MarkdownFormatter._convert_emoji_numbering(text)
         text = MarkdownFormatter._format_headers(text)
         text = MarkdownFormatter._format_lists(text)
         text = MarkdownFormatter._format_tables(text)
@@ -138,6 +140,35 @@ class MarkdownFormatter:
                 i += 1
         
         return '\n'.join(fixed_lines)
+
+    @staticmethod
+    def _convert_emoji_numbering(text: str) -> str:
+        """
+        Convert emoji numbering to regular numbering for professional appearance.
+        
+        Converts:
+        - 1️⃣ → 1.
+        - 2️⃣ → 2.
+        - etc.
+        """
+        # Define emoji numbers and their regular counterparts
+        emoji_numbers = {
+            '1️⃣': '1.',
+            '2️⃣': '2.',
+            '3️⃣': '3.',
+            '4️⃣': '4.',
+            '5️⃣': '5.',
+            '6️⃣': '6.',
+            '7️⃣': '7.',
+            '8️⃣': '8.',
+            '9️⃣': '9.',
+            '🔟': '10.',
+        }
+        
+        for emoji, regular in emoji_numbers.items():
+            text = text.replace(emoji, regular)
+        
+        return text
 
     @staticmethod
     def _format_headers(text: str) -> str:
