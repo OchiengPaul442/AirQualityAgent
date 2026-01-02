@@ -2128,12 +2128,15 @@ Be professional, empathetic, and solution-oriented."""
     def _clean_response(self, content: str) -> str:
         """
         Clean the model response by removing thinking content, tool calls, and formatting for natural presentation.
+        Now includes professional markdown formatting.
         """
         if not content:
             return content
 
         try:
             import re
+
+            from src.utils.markdown_formatter import format_markdown
 
             # Remove XML-like tool calling syntax
             content = re.sub(r"<tool_call>.*?</tool_call>", "", content, flags=re.DOTALL)
@@ -2187,6 +2190,13 @@ Be professional, empathetic, and solution-oriented."""
             # Clean up excessive newlines and whitespace
             content = re.sub(r"\n{3,}", "\n\n", content)
             content = content.strip()
+
+            # Apply professional markdown formatting
+            # This ensures lists, tables, headers are properly formatted
+            try:
+                content = format_markdown(content)
+            except Exception as fmt_error:
+                logger.warning(f"Markdown formatting failed, continuing with basic cleanup: {fmt_error}")
 
             # Return content or empty string (let fallback handle empty)
             return content

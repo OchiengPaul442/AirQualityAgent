@@ -4,6 +4,33 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.8.0] - 2026-01-03
+
+### 🎨 Professional Markdown Formatting Enhancement
+
+Added `markdown_formatter.py` utility to ensure all AI responses have professional, ChatGPT-quality formatting.
+
+#### Added
+
+- **`src/utils/markdown_formatter.py`** - Automatic formatting for lists, tables, headers, and spacing
+- Integrated into `agent_service._clean_response()` for all agent responses
+
+#### Fixed
+
+- Lists with awkward line breaks mid-item
+- Table columns misaligned without proper spacing
+- Inconsistent bullet characters (now always use `-`)
+- Missing blank lines before lists and headers
+- Excessive blank lines (max 2 consecutive)
+- Bold/italic markers with extra spaces
+
+#### Changed
+
+- Removed unused imports (`shutil` from routes.py)
+- Code cleanup and organization
+
+---
+
 ## [2.7.1] - 2026-01-02
 
 ### 🎨 CRITICAL FIX: Markdown Formatting in AI Responses
