@@ -24,8 +24,9 @@ class MarkdownFormatter:
     1. Lists have proper spacing (blank line before, no extra lines between items)
     2. Tables are properly formatted with aligned columns
     3. Headers have proper spacing (blank line before and after)
-    4. No excessive line breaks or awkward spacing
-    5. Consistent bullet points and numbering
+    4. Parentheses and brackets that are incorrectly split across lines are fixed
+    5. No excessive line breaks or awkward spacing
+    6. Consistent bullet points and numbering
     """
 
     @staticmethod
@@ -44,6 +45,7 @@ class MarkdownFormatter:
 
         # Apply formatting in specific order
         text = MarkdownFormatter._normalize_line_breaks(text)
+        text = MarkdownFormatter._fix_broken_parentheses(text)
         text = MarkdownFormatter._format_headers(text)
         text = MarkdownFormatter._format_lists(text)
         text = MarkdownFormatter._format_tables(text)
@@ -61,6 +63,81 @@ class MarkdownFormatter:
         # Remove trailing spaces from each line
         lines = [line.rstrip() for line in text.split('\n')]
         return '\n'.join(lines)
+
+    @staticmethod
+    def _fix_broken_parentheses(text: str) -> str:
+        """
+        Fix parentheses and brackets that are incorrectly split across lines.
+        
+        This handles cases where AI models generate text like:
+        "Station Name ("
+        "station_id"
+        ")"
+        
+        And converts it to:
+        "Station Name (station_id)"
+        """
+        lines = text.split('\n')
+        fixed_lines = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            
+            # Check if line ends with opening parenthesis/bracket but no closing match
+            if ('(' in line or '[' in line or '{' in line) and not (')' in line or ']' in line or '}' in line):
+                # Look ahead to find the closing parenthesis/bracket
+                opening_count = line.count('(') + line.count('[') + line.count('{')
+                closing_count = line.count(')') + line.count(']') + line.count('}')
+                
+                if opening_count > closing_count:
+                    # Find the line with the matching closing parenthesis/bracket
+                    combined_line = line
+                    j = i + 1
+                    
+                    while j < len(lines):
+                        next_line = lines[j].strip()
+                        # Join lines without extra spaces - let natural text flow handle spacing
+                        combined_line += next_line
+                        
+                        # Count parentheses in this line
+                        next_opening = next_line.count('(') + next_line.count('[') + next_line.count('{')
+                        next_closing = next_line.count(')') + next_line.count(']') + next_line.count('}')
+                        
+                        opening_count += next_opening
+                        closing_count += next_closing
+                        
+                        # If we have balanced parentheses, this is likely the end
+                        if opening_count <= closing_count:
+                            # Check if this completes the parentheses properly
+                            # If the current line contains only closing punctuation, we've found the end
+                            if next_line in [')', ']', '}'] or next_line.startswith((')', ']', '}')):
+                                fixed_lines.append(combined_line)
+                                i = j + 1
+                                break
+                            # If there's more content after this line, keep this line separate
+                            elif j + 1 < len(lines) and lines[j + 1].strip():
+                                fixed_lines.append(combined_line)
+                                i = j
+                                break
+                            else:
+                                # This is the complete combined line
+                                fixed_lines.append(combined_line)
+                                i = j + 1
+                                break
+                        j += 1
+                    else:
+                        # No matching closing found, add the current line as-is
+                        fixed_lines.append(line)
+                        i += 1
+                else:
+                    fixed_lines.append(line)
+                    i += 1
+            else:
+                fixed_lines.append(line)
+                i += 1
+        
+        return '\n'.join(fixed_lines)
 
     @staticmethod
     def _format_headers(text: str) -> str:
