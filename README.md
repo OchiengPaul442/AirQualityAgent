@@ -1,5 +1,7 @@
 # Air Quality AI Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 🌍 **Production-ready air quality monitoring and AI agent with industry-standard patterns**
 
 ## Overview
@@ -342,3 +344,19 @@ Format code using:
 black src/
 isort src/
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+The MIT License allows for:
+
+- ✅ Commercial use
+- ✅ Private use
+- ✅ Modification
+- ✅ Distribution
+- ✅ Sublicensing
+
+While requiring:
+
+- 📄 License and copyright notice preservation
