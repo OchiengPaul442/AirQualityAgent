@@ -8,12 +8,12 @@ All notable changes to the Air Quality AI Agent project.
 
 ### 🎨 Professional Markdown Formatting Enhancement
 
-Added `markdown_formatter.py` utility to ensure all AI responses have professional, ChatGPT-quality formatting.
+Added `markdown_formatter.py` utility to ensure all AI responses have professional formatting optimized for air quality research and environmental data presentation.
 
 #### Added
 
 - **`src/utils/markdown_formatter.py`** - Automatic formatting for lists, tables, headers, and spacing
-- **Professional source citation formatting** - ChatGPT-style source references with numbered lists, bold titles, and clickable links
+- **Professional source citation formatting** - Research-grade source references with numbered lists, bold titles, and clickable links for environmental data
 - Integrated into `agent_service._clean_response()` for all agent responses
 
 #### Fixed

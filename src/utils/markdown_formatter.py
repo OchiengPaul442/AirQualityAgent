@@ -1,16 +1,16 @@
 """
-Professional Markdown Formatter for AI Agent Responses
+Professional Markdown Formatter for Air Quality Agent Responses
 
 This module ensures all AI-generated responses follow professional markdown standards
-similar to ChatGPT output quality. It handles:
+optimized for air quality research and environmental data presentation. It handles:
 - Proper list formatting (numbered and bulleted)
-- Professional table rendering
-- Correct header hierarchy
+- Professional table rendering for air quality data
+- Correct header hierarchy for research reports
 - Clean line breaks and spacing
-- Professional source citation formatting (ChatGPT-style)
+- Professional source citation formatting for environmental research
 - Consistent formatting throughout
 
-Based on best practices from leading AI assistants and markdown standards.
+Based on established markdown standards and best practices for scientific communication.
 """
 
 import re
@@ -19,17 +19,17 @@ from typing import List
 
 class MarkdownFormatter:
     """
-    Formats AI agent responses to professional markdown standards.
+    Formats Air Quality Agent responses to professional markdown standards.
     
-    This formatter ensures:
+    This formatter ensures air quality research and environmental data presentations:
     1. Lists have proper spacing (blank line before, no extra lines between items)
-    2. Tables are properly formatted with aligned columns
-    3. Headers have proper spacing (blank line before and after)
+    2. Tables are properly formatted with aligned columns for data comparison
+    3. Headers have proper spacing (blank line before and after) for report structure
     4. Parentheses and brackets that are incorrectly split across lines are fixed
     5. Emoji numbering is converted to regular numbering for professional appearance
-    6. Sources and citations are formatted professionally (ChatGPT-style)
+    6. Sources and citations are formatted professionally for environmental research
     7. No excessive line breaks or awkward spacing
-    8. Consistent bullet points and numbering
+    8. Consistent bullet points and numbering for clear data presentation
     """
 
     @staticmethod
@@ -372,13 +372,13 @@ class MarkdownFormatter:
     @staticmethod
     def _format_sources(text: str) -> str:
         """
-        Format source citations professionally, similar to ChatGPT's citation style.
+        Format source citations professionally for environmental research.
 
-        Converts various source formats into professional citations:
+        Converts various source formats into professional citations for air quality research:
         - "Source: Title (URL) - Summary" -> Professional citation blocks
-        - Multiple sources get numbered references
-        - URLs become clickable links
-        - Maintains academic/professional appearance
+        - Multiple sources get numbered references for scientific credibility
+        - URLs become clickable links for easy access to environmental data
+        - Maintains academic/professional appearance suitable for air quality reports
         """
         lines = text.split('\n')
         formatted_lines = []
