@@ -115,8 +115,7 @@ async def scrape_webpage(url: str) -> dict[str, Any]:
 @mcp.tool()
 async def search_web(query: str) -> dict[str, Any]:
     """
-    Search the web for any information including air quality, health impacts, policies, research, news, or general questions.
-    Use this tool when you need current information, research data, or answers to general questions that require web search.
+    MANDATORY TOOL: Use this for ANY question requiring research, current information, health data, policy information, solutions, safety guidelines, or general knowledge. ALWAYS use this instead of saying 'data not available' or giving generic advice. Search for specific, accurate information from reliable sources.
     
     Args:
         query: The search query for any topic
