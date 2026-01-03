@@ -19,12 +19,17 @@ class SearchService:
     TRUSTED_SOURCES = [
         # Core air quality platforms
         "airqo.net",
+        "airqo.africa",
+        "airqo.org",
         "cleanairafrica.org",
         "aero-glyphs.vercel.app",
         "aqicn.org",
         "openaq.org",
         "iqair.com",
         "plumelabs.com",
+        "waqi.info",
+        "open-meteo.com",
+        "carbonintensity.org.uk",
         # Global health and environment organizations
         "who.int",
         "unep.org",

@@ -34,6 +34,7 @@ from src.config import get_settings
 from src.mcp.client import MCPClient
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
+from src.services.carbon_intensity_service import CarbonIntensityService
 from src.services.openmeteo_service import OpenMeteoService
 from src.services.search_service import SearchService
 from src.services.waqi_service import WAQIService
@@ -50,6 +51,7 @@ class AgentService:
         self.waqi = WAQIService()
         self.airqo = AirQoService()
         self.openmeteo = OpenMeteoService()
+        self.carbon_intensity = CarbonIntensityService()
         self.weather = WeatherService()
         self.scraper = RobustScraper()
         self.search = SearchService()
@@ -196,6 +198,7 @@ class AgentService:
                 self._get_gemini_waqi_tool(),
                 self._get_gemini_airqo_tool(),
                 self._get_gemini_openmeteo_tool(),
+                self._get_gemini_carbon_intensity_tool(),
                 self._get_gemini_weather_tool(),
                 self._get_gemini_search_tool(),
                 self._get_gemini_scrape_tool(),
@@ -235,6 +238,7 @@ class AgentService:
             self.openai_tools.extend(waqi_tools)
             self.openai_tools.extend(airqo_tools)
             self.openai_tools.extend(self._get_openai_openmeteo_tool())
+            self.openai_tools.extend(self._get_openai_carbon_intensity_tool())
             # Weather tools returns a list now
             weather_tools = self._get_openai_weather_tool()
             if isinstance(weather_tools, list):
@@ -1877,6 +1881,57 @@ Be professional, empathetic, and solution-oriented."""
             ]
         )
 
+    def _get_gemini_carbon_intensity_tool(self):
+        return types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="get_uk_carbon_intensity_current",
+                    description="Get current carbon intensity of electricity generation in Great Britain. Measures CO2 emissions per unit of electricity (gCO2/kWh). Related to air quality as CO2 contributes to climate change and air pollution.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={},
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_uk_carbon_intensity_today",
+                    description="Get carbon intensity data for today in Great Britain. Shows how 'clean' the electricity grid is throughout the day.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={},
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_uk_carbon_intensity_regional",
+                    description="Get regional carbon intensity data for England, Scotland, and Wales. Shows differences in electricity carbon emissions by region.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "region": types.Schema(
+                                type=types.Type.STRING,
+                                description="Region: 'england', 'scotland', 'wales', or omit for all regions",
+                            ),
+                        },
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_uk_generation_mix",
+                    description="Get current electricity generation mix by fuel type (gas, coal, nuclear, wind, solar, etc.) for Great Britain.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={},
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_uk_carbon_intensity_factors",
+                    description="Get carbon intensity factors for different fuel types used in electricity generation. Shows CO2 emissions per fuel type.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={},
+                    ),
+                ),
+            ]
+        )
+
     def _get_openai_openmeteo_tool(self):
         return [
             {
@@ -1963,6 +2018,70 @@ Be professional, empathetic, and solution-oriented."""
                             },
                         },
                         "required": ["latitude", "longitude", "start_date", "end_date"],
+                    },
+                },
+            },
+        ]
+
+    def _get_openai_carbon_intensity_tool(self):
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_uk_carbon_intensity_current",
+                    "description": "Get current carbon intensity of electricity generation in Great Britain. Measures CO2 emissions per unit of electricity (gCO2/kWh). Related to air quality as CO2 contributes to climate change and air pollution.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_uk_carbon_intensity_today",
+                    "description": "Get carbon intensity data for today in Great Britain. Shows how 'clean' the electricity grid is throughout the day.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_uk_carbon_intensity_regional",
+                    "description": "Get regional carbon intensity data for England, Scotland, and Wales. Shows differences in electricity carbon emissions by region.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "region": {
+                                "type": "string",
+                                "description": "Region: 'england', 'scotland', 'wales', or omit for all regions",
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_uk_generation_mix",
+                    "description": "Get current electricity generation mix by fuel type (gas, coal, nuclear, wind, solar, etc.) for Great Britain.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_uk_carbon_intensity_factors",
+                    "description": "Get carbon intensity factors for different fuel types used in electricity generation. Shows CO2 emissions per fuel type.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
                     },
                 },
             },
@@ -2500,6 +2619,17 @@ Be professional, empathetic, and solution-oriented."""
                     end_date=end_date,
                     timezone=timezone,
                 )
+            elif function_name == "get_uk_carbon_intensity_current":
+                return self.carbon_intensity.get_current_intensity()
+            elif function_name == "get_uk_carbon_intensity_today":
+                return self.carbon_intensity.get_intensity_today()
+            elif function_name == "get_uk_carbon_intensity_regional":
+                region = args.get("region")
+                return self.carbon_intensity.get_regional_intensity(region)
+            elif function_name == "get_uk_generation_mix":
+                return self.carbon_intensity.get_generation_mix()
+            elif function_name == "get_uk_carbon_intensity_factors":
+                return self.carbon_intensity.get_intensity_factors()
             elif function_name == "get_city_weather":
                 city = args.get("city")
                 return self.weather.get_current_weather(city)
