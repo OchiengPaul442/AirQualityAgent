@@ -6,6 +6,7 @@ optimized for air quality research and environmental data presentation. It handl
 - Proper list formatting (numbered and bulleted)
 - Professional table rendering for air quality data
 - Correct header hierarchy for research reports
+- Clean code block formatting with language detection and syntax highlighting
 - Clean line breaks and spacing
 - Professional source citation formatting for environmental research
 - Consistent formatting throughout
@@ -25,11 +26,12 @@ class MarkdownFormatter:
     1. Lists have proper spacing (blank line before, no extra lines between items)
     2. Tables are properly formatted with aligned columns for data comparison
     3. Headers have proper spacing (blank line before and after) for report structure
-    4. Parentheses and brackets that are incorrectly split across lines are fixed
-    5. Emoji numbering is converted to regular numbering for professional appearance
-    6. Sources and citations are formatted professionally for environmental research
-    7. No excessive line breaks or awkward spacing
-    8. Consistent bullet points and numbering for clear data presentation
+    4. Code blocks are properly formatted with language identifiers and clean syntax
+    5. Parentheses and brackets that are incorrectly split across lines are fixed
+    6. Emoji numbering is converted to regular numbering for professional appearance
+    7. Sources and citations are formatted professionally for environmental research
+    8. No excessive line breaks or awkward spacing
+    9. Consistent bullet points and numbering for clear data presentation
     """
 
     @staticmethod
@@ -53,6 +55,7 @@ class MarkdownFormatter:
         text = MarkdownFormatter._format_headers(text)
         text = MarkdownFormatter._format_lists(text)
         text = MarkdownFormatter._format_tables(text)
+        text = MarkdownFormatter._format_code_blocks(text)
         text = MarkdownFormatter._format_sources(text)
         text = MarkdownFormatter._format_bold_and_emphasis(text)
         text = MarkdownFormatter._clean_spacing(text)
@@ -417,6 +420,171 @@ class MarkdownFormatter:
             formatted_rows.append(formatted_row)
         
         return formatted_rows
+
+    @staticmethod
+    def _format_code_blocks(text: str) -> str:
+        """
+        Format code blocks for professional presentation.
+        
+        Ensures:
+        - Code blocks use proper fenced syntax with language identifiers
+        - Inline code is properly formatted
+        - Code blocks have consistent formatting
+        - Language detection for common programming languages
+        """
+        if not text:
+            return text
+
+        # Handle fenced code blocks (```)
+        lines = text.split('\n')
+        formatted_lines = []
+        in_code_block = False
+        code_block_lines = []
+        code_language = ""
+
+        for line in lines:
+            if line.strip().startswith('```'):
+                if not in_code_block:
+                    # Start of code block
+                    in_code_block = True
+                    code_language = line.strip()[3:].strip()  # Extract language after ```
+                    code_block_lines = []
+                else:
+                    # End of code block
+                    in_code_block = False
+                    
+                    # If no language specified, try to detect from content
+                    if not code_language:
+                        code_language = MarkdownFormatter._detect_code_language(code_block_lines)
+                    
+                    # Clean up code content
+                    cleaned_code = MarkdownFormatter._clean_code_content(code_block_lines)
+                    
+                    # Add opening fence with detected language
+                    formatted_lines.append(f'```{code_language}')
+                    
+                    # Add cleaned code lines
+                    formatted_lines.extend(cleaned_code)
+                    
+                    # Add closing fence
+                    formatted_lines.append('```')
+                    
+                    # Add blank line after code block for spacing
+                    formatted_lines.append('')
+                    
+                    code_block_lines = []
+                    code_language = ""
+            elif in_code_block:
+                # Inside code block, collect lines
+                code_block_lines.append(line)
+            else:
+                # Regular text
+                formatted_lines.append(line)
+
+        # Handle unclosed code block at end
+        if in_code_block and code_block_lines:
+            # If no language specified, try to detect from content
+            if not code_language:
+                code_language = MarkdownFormatter._detect_code_language(code_block_lines)
+            
+            cleaned_code = MarkdownFormatter._clean_code_content(code_block_lines)
+            
+            # Add opening fence with detected language
+            formatted_lines.append(f'```{code_language}')
+            formatted_lines.extend(cleaned_code)
+            formatted_lines.append('```')
+            formatted_lines.append('')
+
+        return '\n'.join(formatted_lines)
+
+    @staticmethod
+    def _detect_code_language(code_lines: List[str]) -> str:
+        """
+        Basic language detection for code blocks.
+        
+        Args:
+            code_lines: Lines of code to analyze
+            
+        Returns:
+            Detected language identifier or empty string
+        """
+        if not code_lines:
+            return ""
+        
+        code_text = '\n'.join(code_lines).lower()
+        
+        # Language detection patterns
+        language_patterns = {
+            'python': ['def ', 'import ', 'from ', 'class ', 'if __name__'],
+            'javascript': ['function ', 'const ', 'let ', 'var ', 'console.log', '=>'],
+            'typescript': ['interface ', 'type ', ': string', ': number', ': boolean'],
+            'java': ['public class', 'import java', 'public static void main'],
+            'cpp': ['#include', 'std::', 'cout <<', 'cin >>'],
+            'c': ['#include <stdio.h>', 'printf(', 'scanf('],
+            'csharp': ['using System', 'namespace ', 'public class', 'Console.WriteLine'],
+            'php': ['<?php', 'echo ', '$', 'function '],
+            'ruby': ['def ', 'puts ', 'require ', 'class '],
+            'go': ['package ', 'func ', 'import (', 'fmt.Println'],
+            'rust': ['fn ', 'let ', 'use ', 'println!'],
+            'sql': ['select ', 'from ', 'where ', 'insert into', 'create table'],
+            'bash': ['#!/bin/bash', 'echo ', 'if [', 'for ', 'while '],
+            'powershell': ['Write-Host', '$', 'Get-', 'Set-'],
+            'yaml': ['version:', 'services:', 'image:', 'ports:'],
+            'json': ['{', '}', '"', ':'],
+            'xml': ['<', '>', '<?xml', '</'],
+            'html': ['<html', '<head', '<body', '<div'],
+            'css': ['{', '}', 'color:', 'font-size:', 'margin:'],
+        }
+        
+        # Count matches for each language
+        language_scores = {}
+        for lang, patterns in language_patterns.items():
+            score = sum(1 for pattern in patterns if pattern in code_text)
+            if score > 0:
+                language_scores[lang] = score
+        
+        # Return the language with highest score
+        if language_scores:
+            return max(language_scores, key=language_scores.get)
+        
+        return ""
+
+    @staticmethod
+    def _clean_code_content(code_lines: List[str]) -> List[str]:
+        """
+        Clean up code content inside code blocks.
+        
+        Args:
+            code_lines: Raw code lines
+            
+        Returns:
+            Cleaned code lines
+        """
+        if not code_lines:
+            return code_lines
+        
+        cleaned_lines = []
+        
+        # Remove common leading/trailing whitespace issues
+        # But preserve indentation for languages that use it
+        for line in code_lines:
+            # Remove trailing whitespace
+            cleaned_line = line.rstrip()
+            
+            # For empty lines, keep them as-is (they might be intentional)
+            if cleaned_line or line.endswith(' '):
+                cleaned_lines.append(cleaned_line)
+            else:
+                cleaned_lines.append('')
+        
+        # Remove excessive empty lines at start and end
+        while cleaned_lines and cleaned_lines[0].strip() == '':
+            cleaned_lines.pop(0)
+        
+        while cleaned_lines and cleaned_lines[-1].strip() == '':
+            cleaned_lines.pop()
+        
+        return cleaned_lines
 
     @staticmethod
     def _format_sources(text: str) -> str:
