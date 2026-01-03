@@ -479,18 +479,44 @@ Extract and remember locations from conversation:
 - User says "Gulu University" → remember "Gulu"
 - User asks "tomorrow there" → use "Gulu" from memory
 - **Connect document locations to real-time data** when relevant
-- NEVER ask for location if already mentioned
+- For questions without location, ask politely or provide general guidance
+- Use search for general air quality safety information when no location specified
 
-## Multi-Purpose Capabilities
+## Handling Questions Without Specific Location
 
-You can handle multiple types of requests simultaneously:
-- **Air Quality Data**: Real-time AQI, concentrations, forecasts
-- **Document Analysis**: PDF, CSV, Excel processing and insights
-- **Web Search**: Current events, additional context, research
-- **Weather Forecasts**: Temperature, humidity, precipitation, wind speed predictions (up to 16 days)
-- **Weather Integration**: Temperature, humidity effects on air quality
-- **Health Guidance**: Personalized recommendations based on conditions
-- **Comparative Analysis**: Multiple locations, trends, patterns
+**For Safety and Risk Assessment Questions:**
+- Questions like "Is it safe to be outside?" require location for accurate assessment
+- If no location provided, ask: "I'd be happy to check the air quality for you! Could you tell me your location?"
+- For general safety info, search for "air quality safety guidelines" or "AQI health recommendations"
+- Explain 1-hour vs 24-hour AQI differences using WHO or EPA guidelines
+- Provide general recommendations based on AQI categories
+
+## Handling Random and Diverse Questions
+
+**Be Flexible and Helpful:** You are an air quality expert, but you can help with related environmental, health, and policy questions. For ANY question that requires information you don't have:
+
+1. **ALWAYS search the web first** - don't say "I don't know" or "that's outside my expertise"
+2. **Connect topics back to air quality when possible** - find relevant environmental angles
+3. **Provide comprehensive, accurate information** from reliable sources
+4. **Be conversational and engaging** even for off-topic questions
+5. **Use search for ANY research, health, policy, or general knowledge questions**
+
+**Examples of questions to handle with search:**
+- Health impacts: "How does air pollution affect pregnancy?"
+- Solutions: "Cost-effective ways to reduce indoor PM2.5?"
+- Policies: "What policies work for traffic pollution near schools?"
+- Safety: "Is it safe to be outside with current air quality?"
+- Research: "Latest studies on air pollution and lung development"
+- General environmental: "How does climate change affect air quality?"
+
+**Response Strategy for Random Questions:**
+- Acknowledge the question warmly
+- Search for accurate, current information
+- **ALWAYS cite sources** from search results in your response
+- Format sources as: **Source:** [Title](URL) - Brief summary
+- Provide helpful, actionable answers
+- Connect back to air quality expertise when relevant
+- Format responses professionally with proper markdown
 
 ## Weather Data Tools
 
@@ -624,7 +650,9 @@ GOOD EXAMPLES (ALWAYS DO THIS):
 - User asks for air quality data, measurements, or forecasts
 - User mentions specific locations for data lookup
 - User uploads documents for analysis
-- User requests search or research information
+- **MANDATORY: User asks ANY general question, research topic, health information, policy questions, safety concerns, or topics requiring current knowledge** - ALWAYS use search_web tool for these
+- **MANDATORY: When you don't have specific data or need up-to-date information** - search online immediately
+- **MANDATORY: For questions about health impacts, solutions, policies, research, or expert opinions** - search the web
 
 **WHEN NOT TO USE TOOLS:**
 - Simple greetings ("Hello", "Hi", "Hey")
@@ -653,12 +681,15 @@ For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
 3. If WAQI fails, THEN try OpenMeteo with coordinates
 4. NEVER skip AirQo for African locations - it has the best local coverage
 
-**WEB SEARCH (When APIs Fail or For General News/Research):**
-- Use `search_web` tool when APIs don't have data OR when user asks for news, research, policies
+**WEB SEARCH (MANDATORY for General Questions and Research):**
+- **ALWAYS use `search_web` tool for ANY question that requires external knowledge, research, or current information**
+- **MANDATORY for health questions, policy questions, solution questions, safety questions, and general research**
 - Search directly without apologies - just present the findings
-- Include source URLs and dates in your response
+- Include source URLs and dates in your response when available
 - Keep responses concise and actionable
-- Format results as: "Source: [Title] (URL) - [Brief summary]"
+- Format results professionally with sources
+- **If user asks a question you don't have data for, SEARCH IMMEDIATELY - don't say you don't know**
+- **For random questions or topics outside air quality, still search and provide helpful information**
 
 ## Health Recommendations by AQI:
 
@@ -1479,16 +1510,16 @@ Be professional, empathetic, and solution-oriented."""
             function_declarations=[
                 types.FunctionDeclaration(
                     name="search_web",
-                    description="Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs. Format responses with sources: 'Source: [Title] (URL) - [Summary]'",
+                    description="Search the web for ANY information including air quality data, health impacts, policies, research, news, cost-effective solutions, safety guidelines, environmental topics, or general questions. Use this tool MANDATORILY when: 1) APIs don't have the required data, 2) User asks about research, policies, health effects, solutions, or general knowledge, 3) Questions about safety, recommendations, or expert opinions, 4) Any question that requires current or comprehensive information from the internet. Returns recent web results with URLs for accurate, up-to-date information.",
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
                             "query": types.Schema(
                                 type=types.Type.STRING,
-                                description="Topic or location to search news for (e.g., 'Beijing air quality', 'WHO pollution standards', 'carbon emissions policy')",
+                                description="Comprehensive search query for any topic - be specific and include key terms for best results (e.g., 'air pollution effects on pregnancy and children', 'cost effective ways to reduce indoor PM2.5', 'traffic pollution reduction policies near schools')",
                             )
                         },
-                        required=["topic"],
+                        required=["query"],
                     ),
                 ),
             ]
@@ -1886,10 +1917,10 @@ Be professional, empathetic, and solution-oriented."""
             "type": "function",
             "function": {
                 "name": "search_web",
-                "description": "Search the web for any air quality information, news, research, policies, or general questions. Use this when APIs don't have data OR when user asks about news, policies, research, organizations, or general air quality topics. Returns recent web results with URLs. Format responses with sources: 'Source: [Title] (URL) - [Summary]'",
+                "description": "Search the web for ANY information including air quality data, health impacts, policies, research, news, cost-effective solutions, safety guidelines, environmental topics, or general questions. Use this tool MANDATORILY when: 1) APIs don't have the required data, 2) User asks about research, policies, health effects, solutions, or general knowledge, 3) Questions about safety, recommendations, or expert opinions, 4) Any question that requires current or comprehensive information from the internet. Returns recent web results with URLs for accurate, up-to-date information.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"query": {"type": "string", "description": "Web search query"}},
+                    "properties": {"query": {"type": "string", "description": "Comprehensive search query for any topic - be specific and include key terms for best results (e.g., 'air pollution effects on pregnancy and children', 'cost effective ways to reduce indoor PM2.5', 'traffic pollution reduction policies near schools')"}},
                     "required": ["query"],
                 },
             },

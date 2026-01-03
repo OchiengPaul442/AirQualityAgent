@@ -113,37 +113,20 @@ async def scrape_webpage(url: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def search_airqo_sites(query: str) -> dict[str, Any]:
+async def search_web(query: str) -> dict[str, Any]:
     """
-    Search for AirQo sites by name or description.
-
+    Search the web for any information including air quality, health impacts, policies, research, news, or general questions.
+    Use this tool when you need current information, research data, or answers to general questions that require web search.
+    
     Args:
-        query: Search query (e.g., "Makerere")
+        query: The search query for any topic
     """
     try:
-        # This is a helper to expose the site search capability
-        # We might need to add a specific search method to AirQoService if get_metadata isn't enough
-        # For now, we can use get_site_id_by_name logic but return more info
-        # Or just expose get_metadata("sites") and let the client filter
-
-        # Let's implement a simple filter here for utility
-        response = airqo_service.get_metadata("sites")
-        sites = response.get("sites", [])
-        query_lower = query.lower()
-
-        matches = [
-            {
-                "id": s.get("_id"),
-                "name": s.get("name"),
-                "description": s.get("description"),
-                "country": s.get("country"),
-                "city": s.get("city"),
-            }
-            for s in sites
-            if query_lower in s.get("name", "").lower()
-            or query_lower in s.get("description", "").lower()
-        ]
-        return {"matches": matches[:10]}  # Limit to 10 results
+        # Import here to avoid circular imports
+        from src.services.search_service import SearchService
+        search_service = SearchService()
+        results = search_service.search(query)
+        return {"results": results}
     except Exception as e:
         return {"error": str(e)}
 
