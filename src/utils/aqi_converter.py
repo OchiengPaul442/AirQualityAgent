@@ -10,7 +10,7 @@ References:
 - WAQI API Documentation: https://aqicn.org/api/
 """
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 # US EPA AQI Breakpoints (Updated May 6, 2024)
 # Format: (AQI_low, AQI_high, Conc_low, Conc_high, Category, Color)
@@ -25,29 +25,29 @@ PM25_BREAKPOINTS = [
 ]
 
 PM10_BREAKPOINTS = [
-    (0, 50, 0, 54, "Good", "Green"),
-    (51, 100, 55, 154, "Moderate", "Yellow"),
-    (101, 150, 155, 254, "Unhealthy for Sensitive Groups", "Orange"),
-    (151, 200, 255, 354, "Unhealthy", "Red"),
-    (201, 300, 355, 424, "Very Unhealthy", "Purple"),
-    (301, 400, 425, 504, "Hazardous", "Maroon"),
-    (401, 500, 505, 604, "Hazardous", "Maroon"),
+    (0, 50, 0.0, 54.0, "Good", "Green"),
+    (51, 100, 55.0, 154.0, "Moderate", "Yellow"),
+    (101, 150, 155.0, 254.0, "Unhealthy for Sensitive Groups", "Orange"),
+    (151, 200, 255.0, 354.0, "Unhealthy", "Red"),
+    (201, 300, 355.0, 424.0, "Very Unhealthy", "Purple"),
+    (301, 400, 425.0, 504.0, "Hazardous", "Maroon"),
+    (401, 500, 505.0, 604.0, "Hazardous", "Maroon"),
 ]
 
 O3_8HR_BREAKPOINTS = [
-    (0, 50, 0, 54, "Good", "Green"),
-    (51, 100, 55, 70, "Moderate", "Yellow"),
-    (101, 150, 71, 85, "Unhealthy for Sensitive Groups", "Orange"),
-    (151, 200, 86, 105, "Unhealthy", "Red"),
-    (201, 300, 106, 200, "Very Unhealthy", "Purple"),
+    (0, 50, 0.0, 54.0, "Good", "Green"),
+    (51, 100, 55.0, 70.0, "Moderate", "Yellow"),
+    (101, 150, 71.0, 85.0, "Unhealthy for Sensitive Groups", "Orange"),
+    (151, 200, 86.0, 105.0, "Unhealthy", "Red"),
+    (201, 300, 106.0, 200.0, "Very Unhealthy", "Purple"),
 ]
 
 O3_1HR_BREAKPOINTS = [
-    (101, 150, 125, 164, "Unhealthy for Sensitive Groups", "Orange"),
-    (151, 200, 165, 204, "Unhealthy", "Red"),
-    (201, 300, 205, 404, "Very Unhealthy", "Purple"),
-    (301, 400, 405, 504, "Hazardous", "Maroon"),
-    (401, 500, 505, 604, "Hazardous", "Maroon"),
+    (101, 150, 125.0, 164.0, "Unhealthy for Sensitive Groups", "Orange"),
+    (151, 200, 165.0, 204.0, "Unhealthy", "Red"),
+    (201, 300, 205.0, 404.0, "Very Unhealthy", "Purple"),
+    (301, 400, 405.0, 504.0, "Hazardous", "Maroon"),
+    (401, 500, 505.0, 604.0, "Hazardous", "Maroon"),
 ]
 
 CO_BREAKPOINTS = [
@@ -61,23 +61,23 @@ CO_BREAKPOINTS = [
 ]
 
 NO2_BREAKPOINTS = [
-    (0, 50, 0, 53, "Good", "Green"),
-    (51, 100, 54, 100, "Moderate", "Yellow"),
-    (101, 150, 101, 360, "Unhealthy for Sensitive Groups", "Orange"),
-    (151, 200, 361, 649, "Unhealthy", "Red"),
-    (201, 300, 650, 1249, "Very Unhealthy", "Purple"),
-    (301, 400, 1250, 1649, "Hazardous", "Maroon"),
-    (401, 500, 1650, 2049, "Hazardous", "Maroon"),
+    (0, 50, 0.0, 53.0, "Good", "Green"),
+    (51, 100, 54.0, 100.0, "Moderate", "Yellow"),
+    (101, 150, 101.0, 360.0, "Unhealthy for Sensitive Groups", "Orange"),
+    (151, 200, 361.0, 649.0, "Unhealthy", "Red"),
+    (201, 300, 650.0, 1249.0, "Very Unhealthy", "Purple"),
+    (301, 400, 1250.0, 1649.0, "Hazardous", "Maroon"),
+    (401, 500, 1650.0, 2049.0, "Hazardous", "Maroon"),
 ]
 
 SO2_BREAKPOINTS = [
-    (0, 50, 0, 35, "Good", "Green"),
-    (51, 100, 36, 75, "Moderate", "Yellow"),
-    (101, 150, 76, 185, "Unhealthy for Sensitive Groups", "Orange"),
-    (151, 200, 186, 304, "Unhealthy", "Red"),
-    (201, 300, 305, 604, "Very Unhealthy", "Purple"),
-    (301, 400, 605, 804, "Hazardous", "Maroon"),
-    (401, 500, 805, 1004, "Hazardous", "Maroon"),
+    (0, 50, 0.0, 35.0, "Good", "Green"),
+    (51, 100, 36.0, 75.0, "Moderate", "Yellow"),
+    (101, 150, 76.0, 185.0, "Unhealthy for Sensitive Groups", "Orange"),
+    (151, 200, 186.0, 304.0, "Unhealthy", "Red"),
+    (201, 300, 305.0, 604.0, "Very Unhealthy", "Purple"),
+    (301, 400, 605.0, 804.0, "Hazardous", "Maroon"),
+    (401, 500, 805.0, 1004.0, "Hazardous", "Maroon"),
 ]
 
 

@@ -185,7 +185,7 @@ class CarbonIntensityService:
         if not data.get("data"):
             return {"error": "No data available"}
 
-        formatted_data = {
+        formatted_data: dict[str, Any] = {
             "source": "UK Carbon Intensity API",
             "description": "Carbon intensity of electricity generation in Great Britain (gCO2/kWh)",
             "data": []
