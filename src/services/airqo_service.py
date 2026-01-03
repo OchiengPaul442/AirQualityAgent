@@ -118,6 +118,7 @@ class AirQoService:
         end_time: datetime | None = None,
         frequency: str = "hourly",
         limit: int = 100,
+        fetch_all: bool = True,
     ) -> dict[str, Any]:
         """
         Get air quality measurements (General endpoint)
@@ -128,7 +129,8 @@ class AirQoService:
             start_time: Start of time range
             end_time: End of time range
             frequency: Data frequency (hourly, daily, raw)
-            limit: Maximum number of records
+            limit: Maximum number of records per page
+            fetch_all: If True, automatically fetch all pages via pagination (default True)
 
         Returns:
             Measurements data with PM2.5, PM10, etc.
@@ -144,7 +146,59 @@ class AirQoService:
         if end_time:
             params["endTime"] = end_time.isoformat()
 
+        # Get first page
         data = self._make_request("devices/measurements", params)
+
+        # If fetch_all is False or no pagination needed, return first page only
+        if not fetch_all or not data.get("success"):
+            return format_air_quality_data(data, source="airqo")
+
+        # Check if pagination is needed
+        meta = data.get("meta", {})
+        if not meta.get("nextPage") or meta.get("pages", 1) <= 1:
+            return format_air_quality_data(data, source="airqo")
+
+        # Collect all measurements from first page
+        all_measurements = data.get("measurements", [])
+        pages_fetched = 1
+        max_pages = 50  # Safety limit
+
+        # Fetch remaining pages
+        while meta.get("nextPage") and pages_fetched < max_pages:
+            try:
+                # Parse next page URL to extract pagination parameters
+                import urllib.parse
+                parsed = urllib.parse.urlparse(meta["nextPage"])
+                next_params = urllib.parse.parse_qs(parsed.query)
+
+                # Update parameters for next page
+                page_params = params.copy()
+                if "skip" in next_params:
+                    page_params["skip"] = int(next_params["skip"][0])
+                if "limit" in next_params:
+                    page_params["limit"] = int(next_params["limit"][0])
+
+                # Fetch next page
+                next_data = self._make_request("devices/measurements", page_params)
+
+                if next_data.get("success") and next_data.get("measurements"):
+                    all_measurements.extend(next_data["measurements"])
+                    meta = next_data.get("meta", {})
+                    pages_fetched += 1
+                    logger.info(f"Fetched page {pages_fetched} for measurements, total records: {len(all_measurements)}")
+                else:
+                    break
+
+            except Exception as e:
+                logger.warning(f"Error fetching next page of measurements: {e}")
+                break
+
+        # Update data with all collected measurements
+        data["measurements"] = all_measurements
+        if meta:
+            data["meta"]["totalResults"] = len(all_measurements)
+            data["meta"]["pagesFetched"] = pages_fetched
+
         return format_air_quality_data(data, source="airqo")
 
     def get_historical_measurements(
@@ -156,12 +210,26 @@ class AirQoService:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         frequency: str = "hourly",
+        fetch_all: bool = True,
     ) -> dict[str, Any]:
         """
         Get historical measurements by Site, Device, Grid, or Cohort ID.
 
         Note: AirQo API only provides historical data for the last 60 days.
         For older data, use the AirQo Analytics platform: https://analytics.airqo.net
+
+        Args:
+            site_id: Site ID to get measurements for
+            device_id: Device ID to get measurements for
+            grid_id: Grid ID to get measurements for
+            cohort_id: Cohort ID to get measurements for
+            start_time: Start time for historical data
+            end_time: End time for historical data
+            frequency: Data frequency ('hourly', 'daily', 'raw')
+            fetch_all: If True, automatically fetch all pages via pagination (default True)
+
+        Returns:
+            Historical measurements data
         """
         params = {"frequency": frequency}
         if start_time:
@@ -169,21 +237,74 @@ class AirQoService:
         if end_time:
             params["endTime"] = end_time.isoformat()
 
+        # Determine the endpoint
+        if site_id:
+            endpoint = f"devices/measurements/sites/{site_id}/historical"
+        elif device_id:
+            endpoint = f"devices/measurements/devices/{device_id}/historical"
+        elif grid_id:
+            endpoint = f"devices/measurements/grids/{grid_id}/historical"
+        elif cohort_id:
+            endpoint = f"devices/measurements/cohorts/{cohort_id}/historical"
+        else:
+            raise ValueError("One of site_id, device_id, grid_id, or cohort_id must be provided.")
+
         try:
-            if site_id:
-                return self._make_request(f"devices/measurements/sites/{site_id}/historical", params)
-            elif device_id:
-                return self._make_request(
-                    f"devices/measurements/devices/{device_id}/historical", params
-                )
-            elif grid_id:
-                return self._make_request(f"devices/measurements/grids/{grid_id}/historical", params)
-            elif cohort_id:
-                return self._make_request(
-                    f"devices/measurements/cohorts/{cohort_id}/historical", params
-                )
-            else:
-                raise ValueError("One of site_id, device_id, grid_id, or cohort_id must be provided.")
+            # Get first page
+            response = self._make_request(endpoint, params)
+
+            # If fetch_all is False or no pagination needed, return first page only
+            if not fetch_all or not response.get("success"):
+                return response
+
+            # Check if pagination is needed
+            meta = response.get("meta", {})
+            if not meta.get("nextPage") or meta.get("pages", 1) <= 1:
+                return response
+
+            # Collect all measurements from first page
+            all_measurements = response.get("measurements", [])
+            pages_fetched = 1
+            max_pages = 50  # Safety limit
+
+            # Fetch remaining pages
+            while meta.get("nextPage") and pages_fetched < max_pages:
+                try:
+                    # Parse next page URL to extract pagination parameters
+                    import urllib.parse
+                    parsed = urllib.parse.urlparse(meta["nextPage"])
+                    next_params = urllib.parse.parse_qs(parsed.query)
+
+                    # Update parameters for next page
+                    page_params = params.copy()
+                    if "skip" in next_params:
+                        page_params["skip"] = int(next_params["skip"][0])
+                    if "limit" in next_params:
+                        page_params["limit"] = int(next_params["limit"][0])
+
+                    # Fetch next page
+                    next_response = self._make_request(endpoint, page_params)
+
+                    if next_response.get("success") and next_response.get("measurements"):
+                        all_measurements.extend(next_response["measurements"])
+                        meta = next_response.get("meta", {})
+                        pages_fetched += 1
+                        logger.info(f"Fetched page {pages_fetched} for historical data, total measurements: {len(all_measurements)}")
+                    else:
+                        break
+
+                except Exception as e:
+                    logger.warning(f"Error fetching next page of historical data: {e}")
+                    break
+
+            # Update response with all collected measurements
+            response["measurements"] = all_measurements
+            if meta:
+                response["meta"]["totalResults"] = len(all_measurements)
+                response["meta"]["pagesFetched"] = pages_fetched
+
+            return response
+
         except Exception as e:
             error_msg = str(e)
             # Check if this is the "query too old" error

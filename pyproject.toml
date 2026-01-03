@@ -77,3 +77,9 @@ exclude = [
 
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::PendingDeprecationWarning:starlette.*",
+    "ignore::PendingDeprecationWarning:multipart.*",
+]
