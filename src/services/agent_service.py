@@ -802,6 +802,14 @@ For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
         if history is None:
             history = []
 
+        # Check for appreciation/thanks messages
+        if self._is_appreciation_message(message):
+            return {
+                "response": "You're welcome! I'm glad I could help with your air quality questions. Feel free to ask if you need more information.",
+                "tools_used": [],
+                "cached": False,
+            }
+
         # If document data is provided, enhance the message with document context
         enhanced_message = message
         if document_data and document_data.get("success"):
@@ -935,6 +943,70 @@ Please analyze the document above and answer the user's question based on its co
                 "tools_used": [],
                 "cached": False,
             }
+
+    def _is_appreciation_message(self, message: str) -> bool:
+        """
+        Check if the message is an appreciation or thanks message.
+        """
+        message_lower = message.lower().strip()
+        
+        # Common appreciation words (check as whole words)
+        appreciation_words = [
+            "thanks",
+            "thank",
+            "thx",
+            "ty",
+            "thankyou",
+            "appreciate",
+            "grateful",
+            "cheers",
+            "awesome",
+            "great",
+            "well",
+            "nice",
+            "helpful",
+            "much",
+            "job",
+            "done",
+            "work",
+            "lot",
+            "very",
+        ]
+        
+        # Split message into words
+        words = message_lower.split()
+        
+        # Check if message contains appreciation words
+        has_appreciation = any(word in appreciation_words for word in words)
+        
+        # Additional patterns that are phrases
+        appreciation_phrases = [
+            "thank you",
+            "thanks a lot",
+            "thank you very much",
+            "much appreciated",
+            "good job",
+            "well done",
+            "nice work",
+        ]
+        
+        has_phrase = any(phrase in message_lower for phrase in appreciation_phrases)
+        
+        # If it has appreciation words/phrases and is reasonably short, or is very short with thanks
+        if has_appreciation or has_phrase:
+            # For longer messages, be more restrictive - should be mostly appreciation
+            if len(words) > 10:
+                # Count appreciation words
+                appreciation_count = sum(1 for word in words if word in appreciation_words)
+                if appreciation_count < len(words) * 0.5:  # Less than 50% appreciation words
+                    return False
+            return True
+        
+        # Check if the message is very short and contains thanks words
+        if len(words) <= 5 and any(word in words for word in ["thanks", "thank", "thx", "ty"]):
+            return True
+            
+        return False
 
     # ------------------------------------------------------------------------
     # GEMINI IMPLEMENTATION

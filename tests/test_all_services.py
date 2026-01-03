@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.config import get_settings
+from src.services.agent_service import AgentService
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
 from src.services.search_service import SearchService
@@ -342,6 +343,53 @@ class TestCacheService(unittest.TestCase):
         self.assertEqual(cached, test_data)
 
 
+class TestAgentService(unittest.TestCase):
+    """Test Agent Service functionality"""
+
+    def setUp(self):
+        self.service = AgentService()
+
+    def test_is_appreciation_message(self):
+        """Test appreciation message detection"""
+        # Test positive cases
+        appreciation_messages = [
+            "thanks",
+            "thank you",
+            "Thanks a lot",
+            "Thank you very much",
+            "thx",
+            "ty",
+            "appreciate it",
+            "much appreciated",
+            "cheers",
+            "awesome",
+            "great job",
+            "well done",
+            "nice work",
+            "helpful",
+            "thanks on that",
+        ]
+        
+        for msg in appreciation_messages:
+            with self.subTest(msg=msg):
+                self.assertTrue(self.service._is_appreciation_message(msg), f"Failed to detect: {msg}")
+
+        # Test negative cases
+        non_appreciation_messages = [
+            "what is the air quality in kampala",
+            "tell me about pollution",
+            "how to improve air quality",
+            "what are the AQI levels",
+            "hello",
+            "hi there",
+            "good morning",
+        ]
+        
+        for msg in non_appreciation_messages:
+            with self.subTest(msg=msg):
+                self.assertFalse(self.service._is_appreciation_message(msg), f"Incorrectly detected: {msg}")
+
+
 def run_tests():
     """Run all tests"""
     print("=" * 70)
@@ -360,6 +408,7 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestDocumentScanner))
     suite.addTests(loader.loadTestsFromTestCase(TestWeatherService))
     suite.addTests(loader.loadTestsFromTestCase(TestCacheService))
+    suite.addTests(loader.loadTestsFromTestCase(TestAgentService))
     
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)
