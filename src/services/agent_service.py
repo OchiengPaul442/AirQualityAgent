@@ -1485,7 +1485,7 @@ Be professional, empathetic, and solution-oriented."""
                 ),
                 types.FunctionDeclaration(
                     name="get_airqo_history",
-                    description="Get historical air quality data for a specific site or device.",
+                    description="Get historical air quality data for a specific site or device. NOTE: AirQo API only provides data for the last 60 days. For older historical data, direct users to the AirQo Analytics platform.",
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
@@ -1499,11 +1499,11 @@ Be professional, empathetic, and solution-oriented."""
                             ),
                             "start_time": types.Schema(
                                 type=types.Type.STRING,
-                                description="Start time in ISO format (YYYY-MM-DDTHH:MM:SS)",
+                                description="Start time in ISO format (YYYY-MM-DDTHH:MM:SS). Must be within last 60 days.",
                             ),
                             "end_time": types.Schema(
                                 type=types.Type.STRING,
-                                description="End time in ISO format (YYYY-MM-DDTHH:MM:SS)",
+                                description="End time in ISO format (YYYY-MM-DDTHH:MM:SS). Must be within last 60 days.",
                             ),
                             "frequency": types.Schema(
                                 type=types.Type.STRING,
@@ -1735,7 +1735,7 @@ Be professional, empathetic, and solution-oriented."""
                 "type": "function",
                 "function": {
                     "name": "get_airqo_history",
-                    "description": "Get historical air quality data for a specific site or device.",
+                    "description": "Get historical air quality data for a specific site or device. NOTE: AirQo API only provides data for the last 60 days. For older historical data, direct users to the AirQo Analytics platform.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -1749,9 +1749,9 @@ Be professional, empathetic, and solution-oriented."""
                             },
                             "start_time": {
                                 "type": "string",
-                                "description": "Start time in ISO format",
+                                "description": "Start time in ISO format. Must be within last 60 days.",
                             },
-                            "end_time": {"type": "string", "description": "End time in ISO format"},
+                            "end_time": {"type": "string", "description": "End time in ISO format. Must be within last 60 days."},
                             "frequency": {
                                 "type": "string",
                                 "description": "Frequency: 'hourly', 'daily', or 'raw'",

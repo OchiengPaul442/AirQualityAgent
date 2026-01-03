@@ -218,6 +218,25 @@ The endpoint intelligently routes to multiple data sources:
 - Failures are handled gracefully
 - If `include_forecast=true` → adds forecast data from Open-Meteo (requires coordinates)
 
+### Data Limitations
+
+**AirQo Historical Data:**
+
+- Only available for the last 60 days
+- For older historical data, use the [AirQo Analytics Platform](https://analytics.airqo.net)
+- Contact: support@airqo.net
+
+**WAQI Data:**
+
+- Real-time data only (no historical data available through API)
+- Some locations may have limited coverage
+
+**Open-Meteo Data:**
+
+- No API key required
+- Historical data available but limited to recent periods
+- Forecast data available for 7 days
+
 ### Response (Success - 200)
 
 ```json

@@ -159,6 +159,9 @@ class AirQoService:
     ) -> dict[str, Any]:
         """
         Get historical measurements by Site, Device, Grid, or Cohort ID.
+
+        Note: AirQo API only provides historical data for the last 60 days.
+        For older data, use the AirQo Analytics platform: https://analytics.airqo.net
         """
         params = {"frequency": frequency}
         if start_time:
@@ -166,20 +169,40 @@ class AirQoService:
         if end_time:
             params["endTime"] = end_time.isoformat()
 
-        if site_id:
-            return self._make_request(f"devices/measurements/sites/{site_id}/historical", params)
-        elif device_id:
-            return self._make_request(
-                f"devices/measurements/devices/{device_id}/historical", params
-            )
-        elif grid_id:
-            return self._make_request(f"devices/measurements/grids/{grid_id}/historical", params)
-        elif cohort_id:
-            return self._make_request(
-                f"devices/measurements/cohorts/{cohort_id}/historical", params
-            )
-        else:
-            raise ValueError("One of site_id, device_id, grid_id, or cohort_id must be provided.")
+        try:
+            if site_id:
+                return self._make_request(f"devices/measurements/sites/{site_id}/historical", params)
+            elif device_id:
+                return self._make_request(
+                    f"devices/measurements/devices/{device_id}/historical", params
+                )
+            elif grid_id:
+                return self._make_request(f"devices/measurements/grids/{grid_id}/historical", params)
+            elif cohort_id:
+                return self._make_request(
+                    f"devices/measurements/cohorts/{cohort_id}/historical", params
+                )
+            else:
+                raise ValueError("One of site_id, device_id, grid_id, or cohort_id must be provided.")
+        except Exception as e:
+            error_msg = str(e)
+            # Check if this is the "query too old" error
+            if "Query too old" in error_msg or "oldest_supported" in error_msg:
+                return {
+                    "success": False,
+                    "error": "Historical data request too old",
+                    "message": "AirQo API only provides historical data for the last 60 days. For older data, please use the AirQo Analytics platform.",
+                    "analytics_platform_url": "https://analytics.airqo.net",
+                    "support_email": "support@airqo.net",
+                    "requested_date_range": {
+                        "start_time": start_time.isoformat() if start_time else None,
+                        "end_time": end_time.isoformat() if end_time else None,
+                        "frequency": frequency
+                    }
+                }
+            else:
+                # Re-raise other errors
+                raise
 
     def get_forecast(
         self,
