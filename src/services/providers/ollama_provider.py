@@ -49,6 +49,8 @@ class OllamaProvider(BaseAIProvider):
         system_instruction: str,
         temperature: float = 0.45,
         top_p: float = 0.9,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """
         Process a message with Ollama.
@@ -59,6 +61,8 @@ class OllamaProvider(BaseAIProvider):
             system_instruction: System instruction/prompt
             temperature: Response temperature
             top_p: Response top_p
+            top_k: Top-k sampling parameter
+            max_tokens: Maximum tokens to generate
 
         Returns:
             Dictionary with response and tools_used
@@ -73,14 +77,22 @@ class OllamaProvider(BaseAIProvider):
 
         try:
             # Call Ollama with tools
+            options = {
+                "temperature": temperature,
+                "top_p": top_p,
+            }
+
+            # Add optional parameters if provided
+            if top_k is not None:
+                options["top_k"] = top_k
+            if max_tokens is not None:
+                options["num_predict"] = max_tokens
+
             response = ollama.chat(
                 model=self.settings.AI_MODEL,
                 messages=messages,
                 tools=self.get_tool_definitions(),
-                options={
-                    "temperature": temperature,
-                    "top_p": top_p,
-                },
+                options=options,
             )
 
             # Handle tool calls

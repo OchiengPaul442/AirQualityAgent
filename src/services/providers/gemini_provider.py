@@ -55,6 +55,8 @@ class GeminiProvider(BaseAIProvider):
         system_instruction: str,
         temperature: float = 0.45,
         top_p: float = 0.9,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """
         Process a message with Gemini.
@@ -65,6 +67,8 @@ class GeminiProvider(BaseAIProvider):
             system_instruction: System instruction/prompt
             temperature: Response temperature
             top_p: Response top_p
+            top_k: Top-k sampling parameter
+            max_tokens: Maximum tokens to generate
 
         Returns:
             Dictionary with response and tools_used
@@ -89,14 +93,22 @@ class GeminiProvider(BaseAIProvider):
             tools = self.get_tool_definitions()
 
         # Create chat session
+        config_params = {
+            "tools": tools,  # type: ignore
+            "system_instruction": system_instruction,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+
+        # Add optional parameters if provided
+        if top_k is not None:
+            config_params["top_k"] = top_k
+        if max_tokens is not None:
+            config_params["max_output_tokens"] = max_tokens
+
         chat = self.client.chats.create(
             model=self.settings.AI_MODEL,
-            config=types.GenerateContentConfig(
-                tools=tools,  # type: ignore
-                system_instruction=system_instruction,
-                temperature=temperature,
-                top_p=top_p,
-            ),
+            config=types.GenerateContentConfig(**config_params),
             history=chat_history,
         )
 

@@ -59,6 +59,8 @@ class OpenAIProvider(BaseAIProvider):
         system_instruction: str,
         temperature: float = 0.45,
         top_p: float = 0.9,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """
         Process a message with OpenAI.
@@ -69,6 +71,8 @@ class OpenAIProvider(BaseAIProvider):
             system_instruction: System instruction/prompt
             temperature: Response temperature
             top_p: Response top_p
+            top_k: Top-k sampling (ignored for OpenAI)
+            max_tokens: Maximum tokens to generate
 
         Returns:
             Dictionary with response and tools_used
@@ -93,7 +97,7 @@ class OpenAIProvider(BaseAIProvider):
             messages=messages,
             tools=self.get_tool_definitions(),
             tool_choice="auto",
-            max_tokens=self.settings.AI_MAX_TOKENS,
+            max_tokens=max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS,
             temperature=temperature,
             top_p=top_p,
         )

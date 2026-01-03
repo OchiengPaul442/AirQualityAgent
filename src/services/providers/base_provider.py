@@ -36,7 +36,8 @@ class BaseAIProvider(ABC):
 
     @abstractmethod
     async def process_message(
-        self, message: str, history: list[dict[str, str]], system_instruction: str
+        self, message: str, history: list[dict[str, str]], system_instruction: str,
+        temperature: float = 0.45, top_p: float = 0.9, top_k: int | None = None, max_tokens: int | None = None
     ) -> dict[str, Any]:
         """
         Process a message and return a response.
@@ -45,6 +46,10 @@ class BaseAIProvider(ABC):
             message: User message
             history: Conversation history
             system_instruction: System instruction/prompt
+            temperature: Sampling temperature (0.0 to 2.0)
+            top_p: Nucleus sampling parameter (0.0 to 1.0)
+            top_k: Top-k sampling parameter (optional, provider-specific)
+            max_tokens: Maximum tokens to generate (optional)
 
         Returns:
             Dictionary with keys:

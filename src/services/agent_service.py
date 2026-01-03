@@ -276,7 +276,7 @@ class AgentService:
         )
 
         # cache.get expects (namespace, key)
-        cached_response = await self.cache.get("agent", cache_key)
+        cached_response = self.cache.get("agent", cache_key)
         if cached_response is not None:
             logger.info(f"Cache hit for key: {cache_key[:16]}...")
             cached_response["cached"] = True
@@ -313,7 +313,7 @@ class AgentService:
             # Cache the response
             response_data["cached"] = False
             # cache.set expects (namespace, key, value, ttl)
-            await self.cache.set("agent", cache_key, response_data, ttl=3600)  # 1 hour TTL
+            self.cache.set("agent", cache_key, response_data, ttl=3600)  # 1 hour TTL
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "

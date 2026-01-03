@@ -518,7 +518,7 @@ def get_system_instruction(style: str = "general", custom_suffix: str = "") -> s
     return instruction
 
 
-def get_response_parameters(style: str = "general", temperature: float | None = None, top_p: float | None = None) -> dict:
+def get_response_parameters(style: str = "general", temperature: float | None = None, top_p: float | None = None, top_k: int | None = None, max_tokens: int | None = None) -> dict:
     """
     Get response generation parameters for a given style.
 
@@ -526,9 +526,11 @@ def get_response_parameters(style: str = "general", temperature: float | None = 
         style: Response style preset
         temperature: Override temperature (if None, use style preset)
         top_p: Override top_p (if None, use style preset)
+        top_k: Override top_k (if None, use style preset or None)
+        max_tokens: Override max_tokens (if None, use style preset or None)
 
     Returns:
-        Dictionary with temperature and top_p values
+        Dictionary with temperature, top_p, top_k, and max_tokens values
     """
     style_lower = style.lower()
 
@@ -536,6 +538,8 @@ def get_response_parameters(style: str = "general", temperature: float | None = 
     params = {
         "temperature": 0.45,
         "top_p": 0.9,
+        "top_k": None,
+        "max_tokens": None,
     }
 
     # Apply style preset if it exists
@@ -543,11 +547,16 @@ def get_response_parameters(style: str = "general", temperature: float | None = 
         preset = STYLE_PRESETS[style_lower]
         params["temperature"] = preset["temperature"]
         params["top_p"] = preset["top_p"]
+        # Style presets don't define top_k or max_tokens, so they remain None
 
     # Override with explicit values if provided
     if temperature is not None:
         params["temperature"] = temperature
     if top_p is not None:
         params["top_p"] = top_p
+    if top_k is not None:
+        params["top_k"] = top_k
+    if max_tokens is not None:
+        params["max_tokens"] = max_tokens
 
     return params
