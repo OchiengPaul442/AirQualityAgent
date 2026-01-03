@@ -9,9 +9,10 @@ Refactored to use modular architecture:
 """
 
 import hashlib
+import inspect
 import json
 import logging
-from typing import Any, Type
+from typing import Any, Awaitable
 
 from src.config import get_settings
 from src.mcp.client import MCPClient
@@ -84,9 +85,18 @@ class AgentService:
         # Initialize cost tracker
         self.cost_tracker = CostTracker()
 
-        # Create and setup AI provider
+        # Create and setup AI provider (support sync or async setup)
         self.provider = self._create_provider()
-        self.provider.setup()
+        try:
+            setup_result = self.provider.setup()
+            if inspect.isawaitable(setup_result):
+                # schedule or run loop-aware await if running in async context
+                # we do not await here to avoid requiring async __init__, but
+                # callers that need full setup should call provider.setup() themselves
+                pass
+        except Exception:
+            # swallow provider setup errors here; provider will raise on use
+            logger.exception("Provider setup failed during AgentService init")
 
         logger.info(
             f"AgentService initialized with provider: {self.settings.AI_PROVIDER}"
@@ -99,7 +109,7 @@ class AgentService:
         Returns:
             BaseAIProvider: Configured provider instance
         """
-        provider_map: dict[str, Type[BaseAIProvider]] = {
+        provider_map: dict[str, type[BaseAIProvider]] = {
             "gemini": GeminiProvider,
             "openai": OpenAIProvider,
             "ollama": OllamaProvider,
@@ -265,8 +275,9 @@ class AgentService:
             message, history, document_data, style, temperature, top_p
         )
 
-        cached_response = await self.cache.get(cache_key)
-        if cached_response:
+        # cache.get expects (namespace, key)
+        cached_response = await self.cache.get("agent", cache_key)
+        if cached_response is not None:
             logger.info(f"Cache hit for key: {cache_key[:16]}...")
             cached_response["cached"] = True
             return cached_response
@@ -301,7 +312,8 @@ class AgentService:
 
             # Cache the response
             response_data["cached"] = False
-            await self.cache.set(cache_key, response_data, ttl=3600)  # 1 hour TTL
+            # cache.set expects (namespace, key, value, ttl)
+            await self.cache.set("agent", cache_key, response_data, ttl=3600)  # 1 hour TTL
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "
@@ -403,7 +415,12 @@ class AgentService:
         # Disconnect all MCP clients
         for server_name, client in self.mcp_clients.items():
             try:
-                await client.disconnect()
+                # Some MCPClient implementations may provide sync or async disconnect
+                disconnect_fn = getattr(client, "disconnect", None)
+                if disconnect_fn is not None:
+                    res = disconnect_fn()
+                    if inspect.isawaitable(res):
+                        await res
                 logger.info(f"Disconnected MCP client: {server_name}")
             except Exception as e:
                 logger.error(f"Error disconnecting MCP client {server_name}: {e}")
@@ -411,7 +428,10 @@ class AgentService:
         # Cleanup provider
         if hasattr(self.provider, "cleanup"):
             try:
-                await self.provider.cleanup()
+                cleanup_fn = getattr(self.provider, "cleanup")
+                res = cleanup_fn()
+                if inspect.isawaitable(res):
+                    await res
             except Exception as e:
                 logger.error(f"Error cleaning up provider: {e}")
 

@@ -4,10 +4,9 @@ System instructions and prompts for the AI agent.
 Contains the base system instruction and style-specific instruction suffixes.
 """
 
-from typing import Dict
 
 # Style preset configurations
-STYLE_PRESETS: Dict[str, dict] = {
+STYLE_PRESETS: dict[str, dict] = {
     "executive": {
         "temperature": 0.3,
         "top_p": 0.85,

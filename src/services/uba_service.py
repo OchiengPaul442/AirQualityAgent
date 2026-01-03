@@ -1,11 +1,10 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from src.config import Settings
-from src.utils.data_formatter import format_air_quality_data
 
 from .cache import get_cache
 
@@ -25,7 +24,7 @@ class UbaService:
         self.session = requests.Session()
         self.cache = get_cache()
 
-    def get_measures(self, component: Optional[str] = None, scope: str = "24h") -> Dict[str, Any]:
+    def get_measures(self, component: str | None = None, scope: str = "24h") -> dict[str, Any]:
         """
         Get air quality measurements from UBA API.
 
@@ -42,7 +41,7 @@ class UbaService:
             "24h": 2,  # 24 hours
             "d": 3     # daily
         }
-        
+
         api_scope = scope_map.get(scope, 2)  # Default to 24 hours
 
         cache_key = f"uba_measures_{component or 'all'}_{scope}"
@@ -64,7 +63,7 @@ class UbaService:
             time_from = "00:00"
             date_to = now.strftime("%Y-%m-%d")
             time_to = now.strftime("%H:%M")
-            
+
             params = {
                 "scope": api_scope,
                 "date_from": date_from,
@@ -73,13 +72,13 @@ class UbaService:
                 "time_to": time_to,
                 "lang": "en"
             }
-            
+
             # Add component filter if specified
             if component:
                 # Map component names to UBA component IDs
                 component_map = {
                     "NO2": 2,
-                    "PM10": 6, 
+                    "PM10": 6,
                     "O3": 3,
                     "SO2": 1,
                     "CO": 4
@@ -101,14 +100,14 @@ class UbaService:
                 "scope": scope
             }, formatted_data, ttl=1800)
 
-            logger.info(f"Successfully retrieved UBA measures data")
+            logger.info("Successfully retrieved UBA measures data")
             return formatted_data
 
         except Exception as e:
             logger.error(f"Error fetching UBA measures data: {e}")
             return {"error": f"Failed to fetch UBA data: {str(e)}"}
 
-    def get_stations(self) -> Dict[str, Any]:
+    def get_stations(self) -> dict[str, Any]:
         """
         Get list of available monitoring stations.
 
@@ -145,7 +144,7 @@ class UbaService:
             logger.error(f"Error fetching UBA stations data: {e}")
             return {"error": f"Failed to fetch UBA stations: {str(e)}"}
 
-    def _format_measures_data(self, raw_data: Dict) -> Dict[str, Any]:
+    def _format_measures_data(self, raw_data: dict) -> dict[str, Any]:
         """
         Format raw UBA measures API response.
 
@@ -204,7 +203,7 @@ class UbaService:
             logger.error(f"Error formatting UBA measures data: {e}")
             return {"error": f"Failed to format UBA data: {str(e)}"}
 
-    def _format_stations_data(self, raw_data: Dict) -> Dict[str, Any]:
+    def _format_stations_data(self, raw_data: dict) -> dict[str, Any]:
         """
         Format raw UBA stations API response.
 

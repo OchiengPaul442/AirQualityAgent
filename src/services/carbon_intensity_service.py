@@ -17,12 +17,10 @@ emitted per unit of electricity generated. This data is related to air quality
 as CO2 emissions contribute to climate change and air pollution.
 """
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
-from ..utils.data_formatter import format_air_quality_data
 from .cache import get_cache
 
 
@@ -44,7 +42,7 @@ class CarbonIntensityService:
         self.cache_service = get_cache()
         self.cache_ttl = settings.CACHE_TTL_SECONDS
 
-    def _make_request(self, endpoint: str, params: Optional[dict] = None) -> dict[str, Any]:
+    def _make_request(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
         """
         Make request to Carbon Intensity API
 
@@ -127,7 +125,7 @@ class CarbonIntensityService:
         """
         return self._make_request(f"/intensity/{from_datetime}/{to_datetime}")
 
-    def get_regional_intensity(self, region: Optional[str] = None) -> dict[str, Any]:
+    def get_regional_intensity(self, region: str | None = None) -> dict[str, Any]:
         """
         Get regional carbon intensity data
 

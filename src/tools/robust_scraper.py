@@ -11,9 +11,8 @@ A production-ready web scraper using requests and BeautifulSoup with:
 
 import logging
 import random
-import time
-from typing import Any, Dict, Optional
-from urllib.parse import urljoin, urlparse
+from typing import Any
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -60,7 +59,7 @@ class RobustScraper:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get headers with a random User-Agent."""
         return {
             "User-Agent": random.choice(USER_AGENTS),
@@ -75,7 +74,7 @@ class RobustScraper:
             "Sec-Fetch-User": "?1",
         }
 
-    def scrape(self, url: str) -> Dict[str, Any]:
+    def scrape(self, url: str) -> dict[str, Any]:
         """
         Scrape a URL and return structured data.
 

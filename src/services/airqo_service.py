@@ -6,8 +6,8 @@ API Documentation: https://docs.airqo.net/airqo-rest-api-documentation/
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+from datetime import datetime
+from typing import Any
 
 import requests
 
@@ -203,12 +203,12 @@ class AirQoService:
 
     def get_historical_measurements(
         self,
-        site_id: Optional[str] = None,
-        device_id: Optional[str] = None,
-        grid_id: Optional[str] = None,
-        cohort_id: Optional[str] = None,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
+        site_id: str | None = None,
+        device_id: str | None = None,
+        grid_id: str | None = None,
+        cohort_id: str | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
         frequency: str = "hourly",
         fetch_all: bool = True,
     ) -> dict[str, Any]:
@@ -327,10 +327,10 @@ class AirQoService:
 
     def get_forecast(
         self,
-        site_id: Optional[str] = None,
-        device_id: Optional[str] = None,
-        city: Optional[str] = None,
-        search: Optional[str] = None,
+        site_id: str | None = None,
+        device_id: str | None = None,
+        city: str | None = None,
+        search: str | None = None,
         frequency: str = "daily",
     ) -> dict[str, Any]:
         """
@@ -547,7 +547,7 @@ class AirQoService:
 
         return response
 
-    def get_site_id_by_name(self, name: str, limit: int = 80) -> Optional[Union[str, List[str]]]:
+    def get_site_id_by_name(self, name: str, limit: int = 80) -> str | list[str] | None:
         """
         Helper to find Site ID(s) by searching for a name using sites/summary endpoint.
         Uses the proper AirQo API search flow.
@@ -692,13 +692,13 @@ class AirQoService:
 
     def get_recent_measurements(
         self,
-        site_id: Optional[str] = None,
-        device_id: Optional[str] = None,
-        grid_id: Optional[str] = None,
-        cohort_id: Optional[str] = None,
+        site_id: str | None = None,
+        device_id: str | None = None,
+        grid_id: str | None = None,
+        cohort_id: str | None = None,
         country: str = "UG",
-        city: Optional[str] = None,
-        search: Optional[str] = None,
+        city: str | None = None,
+        search: str | None = None,
     ) -> dict[str, Any]:
         """
         Get recent measurements using the proper AirQo API flow:
@@ -888,7 +888,7 @@ class AirQoService:
 
         return self._make_request("devices", params)
 
-    def _reverse_geocode(self, latitude: float, longitude: float) -> Optional[str]:
+    def _reverse_geocode(self, latitude: float, longitude: float) -> str | None:
         """
         Reverse geocode coordinates to get city name using OpenStreetMap Nominatim API
         """

@@ -9,7 +9,7 @@ Provides resilient HTTP requests with:
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 from tenacity import (  # type: ignore[import-untyped]
@@ -74,9 +74,9 @@ DEFAULT_TIMEOUT = httpx.Timeout(
 )
 async def resilient_get(
     url: str,
-    headers: Optional[Dict[str, str]] = None,
-    params: Optional[Dict[str, Any]] = None,
-    timeout: Optional[httpx.Timeout] = None,
+    headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
+    timeout: httpx.Timeout | None = None,
 ) -> httpx.Response:
     """
     Perform a GET request with automatic retry logic.
@@ -105,19 +105,19 @@ async def resilient_get(
     except httpx.PoolTimeout as e:
         logger.error(f"Connection pool timeout for {url}: {e}")
         raise TimeoutError(
-            f"Too many concurrent requests. Please wait a moment and try again."
+            "Too many concurrent requests. Please wait a moment and try again."
         ) from e
 
     except httpx.TimeoutException as e:
         logger.error(f"Request timeout for {url}: {e}")
         raise TimeoutError(
-            f"The request timed out. The service may be slow or unresponsive. Please try again later."
+            "The request timed out. The service may be slow or unresponsive. Please try again later."
         ) from e
 
     except (httpx.ConnectError, httpx.ReadError, httpx.WriteError) as e:
         logger.error(f"Network error for {url}: {e}")
         raise NetworkError(
-            f"Unable to connect to the service. Please check your internet connection and try again."
+            "Unable to connect to the service. Please check your internet connection and try again."
         ) from e
 
     except httpx.HTTPStatusError as e:
@@ -134,7 +134,7 @@ async def resilient_get(
 
     except Exception as e:
         logger.error(f"Unexpected error for {url}: {e}")
-        raise HTTPClientError(f"An unexpected error occurred while contacting the service.") from e
+        raise HTTPClientError("An unexpected error occurred while contacting the service.") from e
 
 
 @retry(
@@ -154,10 +154,10 @@ async def resilient_get(
 )
 async def resilient_post(
     url: str,
-    headers: Optional[Dict[str, str]] = None,
-    json: Optional[Dict[str, Any]] = None,
-    data: Optional[Dict[str, Any]] = None,
-    timeout: Optional[httpx.Timeout] = None,
+    headers: dict[str, str] | None = None,
+    json: dict[str, Any] | None = None,
+    data: dict[str, Any] | None = None,
+    timeout: httpx.Timeout | None = None,
 ) -> httpx.Response:
     """
     Perform a POST request with automatic retry logic.
@@ -187,19 +187,19 @@ async def resilient_post(
     except httpx.PoolTimeout as e:
         logger.error(f"Connection pool timeout for {url}: {e}")
         raise TimeoutError(
-            f"Too many concurrent requests. Please wait a moment and try again."
+            "Too many concurrent requests. Please wait a moment and try again."
         ) from e
 
     except httpx.TimeoutException as e:
         logger.error(f"Request timeout for {url}: {e}")
         raise TimeoutError(
-            f"The request timed out. The service may be slow or unresponsive. Please try again later."
+            "The request timed out. The service may be slow or unresponsive. Please try again later."
         ) from e
 
     except (httpx.ConnectError, httpx.ReadError, httpx.WriteError) as e:
         logger.error(f"Network error for {url}: {e}")
         raise NetworkError(
-            f"Unable to connect to the service. Please check your internet connection and try again."
+            "Unable to connect to the service. Please check your internet connection and try again."
         ) from e
 
     except httpx.HTTPStatusError as e:
@@ -216,10 +216,10 @@ async def resilient_post(
 
     except Exception as e:
         logger.error(f"Unexpected error for {url}: {e}")
-        raise HTTPClientError(f"An unexpected error occurred while contacting the service.") from e
+        raise HTTPClientError("An unexpected error occurred while contacting the service.") from e
 
 
-def create_client(timeout: Optional[httpx.Timeout] = None) -> httpx.AsyncClient:
+def create_client(timeout: httpx.Timeout | None = None) -> httpx.AsyncClient:
     """
     Create a configured async HTTP client with connection pooling.
 

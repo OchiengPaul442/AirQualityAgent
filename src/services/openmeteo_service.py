@@ -13,8 +13,8 @@ Features:
 - Multiple pollutants: PM10, PM2.5, CO, NO2, SO2, O3, and more
 """
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any
 
 import requests
 
@@ -127,7 +127,7 @@ class OpenMeteoService:
         longitude: float,
         forecast_days: int = 5,
         timezone: str = "auto",
-        variables: Optional[List[str]] = None,
+        variables: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Get hourly air quality forecast
@@ -175,7 +175,7 @@ class OpenMeteoService:
         start_date: datetime,
         end_date: datetime,
         timezone: str = "auto",
-        variables: Optional[List[str]] = None,
+        variables: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Get historical air quality data

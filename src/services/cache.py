@@ -8,7 +8,7 @@ analysis results, and session data.
 import hashlib
 import json
 import pickle
-from typing import Any, cast
+from typing import Any
 
 import redis
 

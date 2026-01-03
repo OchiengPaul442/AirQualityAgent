@@ -10,7 +10,7 @@ References:
 - WAQI API Documentation: https://aqicn.org/api/
 """
 
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any
 
 # US EPA AQI Breakpoints (Updated May 6, 2024)
 # Format: (AQI_low, AQI_high, Conc_low, Conc_high, Category, Color)
@@ -189,7 +189,7 @@ def concentration_to_aqi(concentration: float, pollutant: str = "pm25") -> int:
     return 0
 
 
-def get_aqi_category(aqi: int) -> Dict[str, str]:
+def get_aqi_category(aqi: int) -> dict[str, str]:
     """
     Get AQI category information.
 
@@ -251,7 +251,7 @@ def get_aqi_category(aqi: int) -> Dict[str, str]:
 
 def parse_waqi_value(
     value: float, pollutant: str = "pm25", return_both: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Parse WAQI API value which is in AQI format, not raw concentration.
 
@@ -289,7 +289,7 @@ def parse_waqi_value(
 
 def format_pollutant_value(
     value: float, pollutant: str, data_type: str = "concentration", include_aqi: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Format a pollutant value with proper context (concentration or AQI).
 

@@ -6,7 +6,7 @@ This module exposes the agent's capabilities (AirQo, Scraping, etc.) as an MCP s
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from src.config import get_settings
@@ -28,7 +28,7 @@ mcp = FastMCP("Agent2 MCP Server")
 
 
 @mcp.tool()
-async def get_air_quality(city: str, site_id: Optional[str] = None) -> dict[str, Any]:
+async def get_air_quality(city: str, site_id: str | None = None) -> dict[str, Any]:
     """
     Get recent air quality measurements for a city or specific site.
 

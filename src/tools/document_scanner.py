@@ -11,7 +11,7 @@ Enhanced to handle large files with better chunking and ALL Excel sheets
 import logging
 import os
 from io import BytesIO
-from typing import Any, Dict, Union
+from typing import Any
 
 from src.config import get_settings
 
@@ -25,8 +25,8 @@ class DocumentScanner:
         self.settings = get_settings()
 
     def scan_document_from_bytes(
-        self, file_bytes: Union[BytesIO, bytes], filename: str
-    ) -> Dict[str, Any]:
+        self, file_bytes: BytesIO | bytes, filename: str
+    ) -> dict[str, Any]:
         """
         Read and extract text/data from document bytes (in-memory processing)
 
@@ -60,7 +60,7 @@ class DocumentScanner:
 
             else:
                 return {
-                    "error": f"Unsupported file type. Supported: PDF, CSV, Excel (.xlsx, .xls)",
+                    "error": "Unsupported file type. Supported: PDF, CSV, Excel (.xlsx, .xls)",
                     "filename": filename,
                     "file_extension": os.path.splitext(filename)[1],
                 }
@@ -68,7 +68,7 @@ class DocumentScanner:
         except Exception as e:
             return {"error": f"Error scanning document: {str(e)}", "filename": filename}
 
-    def scan_file(self, file_path: str) -> Dict[str, Any]:
+    def scan_file(self, file_path: str) -> dict[str, Any]:
         """
         Read and extract text/data from a file on disk
 
@@ -93,7 +93,7 @@ class DocumentScanner:
                 "filename": os.path.basename(file_path),
             }
 
-    def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
+    def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> dict[str, Any]:
         """Extract text from PDF file bytes"""
         try:
             import PyPDF2
@@ -127,7 +127,7 @@ class DocumentScanner:
         except Exception as e:
             return {"error": f"Error reading PDF: {str(e)}", "filename": filename}
 
-    def _scan_csv_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
+    def _scan_csv_bytes(self, file_bytes: BytesIO, filename: str) -> dict[str, Any]:
         """Extract data from CSV file bytes"""
         try:
             import gc  # Garbage collection for memory management
@@ -163,10 +163,10 @@ class DocumentScanner:
                 content_parts.append(df[numeric_cols].describe().to_string())
 
             content = "\n".join(content_parts)
-            
+
             # Store preview before cleaning up
             preview_data = df.head(10).to_dict(orient="records")
-            
+
             # Clean up dataframe to free memory
             del df
             gc.collect()
@@ -190,7 +190,7 @@ class DocumentScanner:
         except Exception as e:
             return {"error": f"Error reading CSV: {str(e)}", "filename": filename}
 
-    def _scan_excel_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
+    def _scan_excel_bytes(self, file_bytes: BytesIO, filename: str) -> dict[str, Any]:
         """Extract data from Excel file bytes - processes ALL sheets"""
         try:
             import gc  # Garbage collection for memory management
@@ -221,13 +221,13 @@ class DocumentScanner:
                     preview_rows = min(self.settings.DOCUMENT_PREVIEW_ROWS_EXCEL, len(df))
                     content_parts.append(f"\nFirst {preview_rows} rows:\n")
                     content_parts.append(df.head(preview_rows).to_string(index=False))
-                    
+
                     # Add numeric statistics for this sheet
                     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
                     if numeric_cols:
                         content_parts.append("\n\nNumeric Statistics:\n")
                         content_parts.append(df[numeric_cols].describe().to_string())
-                    
+
                     content_parts.append("\n")
 
                     all_sheets_data[sheet_name] = {
@@ -237,11 +237,11 @@ class DocumentScanner:
                         "preview": df.head(20).to_dict(orient="records"),
                         "dtypes": df.dtypes.astype(str).to_dict(),
                     }
-                    
+
                     # Clean up dataframe to free memory after processing
                     del df
                     gc.collect()
-                    
+
                 except Exception as sheet_error:
                     logger.warning(f"Error reading sheet '{sheet_name}': {sheet_error}")
                     content_parts.append(f"\n--- Sheet: {sheet_name} ---\n")
@@ -249,7 +249,7 @@ class DocumentScanner:
                     all_sheets_data[sheet_name] = {"error": str(sheet_error)}
 
             content = "\n".join(content_parts)
-            
+
             # Clean up excel file object to free memory
             del excel_file
             gc.collect()

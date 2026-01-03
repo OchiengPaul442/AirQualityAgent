@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ErrorLogger:
@@ -63,9 +63,9 @@ class ErrorLogger:
     def log_error(
         self,
         error: Exception,
-        context: Optional[Dict[str, Any]] = None,
-        user_message: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        context: dict[str, Any] | None = None,
+        user_message: str | None = None,
+    ) -> dict[str, Any]:
         """
         Log an error with context and return structured error data.
 
@@ -102,11 +102,11 @@ class ErrorLogger:
             "message": error_data["user_message"],
             "timestamp": error_data["timestamp"],
             "context": {
-                k: v for k, v in error_data["context"].items() if k in ["endpoint", "session_id"]
+                k: v for k, v in error_data["context"].items() if k in ["endpoint", "session_id"]  # type: ignore
             },
         }
 
-    def _log_json(self, error_data: Dict[str, Any]):
+    def _log_json(self, error_data: dict[str, Any]):
         """Append error data to JSON log file"""
         try:
             # Append to JSON file (one JSON object per line for easy parsing)
@@ -118,8 +118,8 @@ class ErrorLogger:
             self.logger.error(f"Failed to write to JSON log: {e}")
 
     def log_database_error(
-        self, error: Exception, operation: str, table: Optional[str] = None, **kwargs
-    ) -> Dict[str, Any]:
+        self, error: Exception, operation: str, table: str | None = None, **kwargs
+    ) -> dict[str, Any]:
         """Log database-specific errors"""
         context = {"operation": operation, "table": table, "error_category": "database", **kwargs}
 
@@ -132,7 +132,7 @@ class ErrorLogger:
 
     def log_network_error(
         self, error: Exception, url: str, method: str = "GET", **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Log network/API call errors"""
         context = {"url": url, "method": method, "error_category": "network", **kwargs}
 
@@ -142,7 +142,7 @@ class ErrorLogger:
 
         return self.log_error(error, context, user_message)
 
-    def log_ai_error(self, error: Exception, model: str, provider: str, **kwargs) -> Dict[str, Any]:
+    def log_ai_error(self, error: Exception, model: str, provider: str, **kwargs) -> dict[str, Any]:
         """Log AI/LLM provider errors"""
         context = {"model": model, "provider": provider, "error_category": "ai_provider", **kwargs}
 
@@ -152,7 +152,7 @@ class ErrorLogger:
 
 
 # Global error logger instance
-_error_logger: Optional[ErrorLogger] = None
+_error_logger: ErrorLogger | None = None
 
 
 def get_error_logger() -> ErrorLogger:
@@ -164,8 +164,8 @@ def get_error_logger() -> ErrorLogger:
 
 
 def log_error(
-    error: Exception, context: Optional[Dict[str, Any]] = None, user_message: Optional[str] = None
-) -> Dict[str, Any]:
+    error: Exception, context: dict[str, Any] | None = None, user_message: str | None = None
+) -> dict[str, Any]:
     """
     Convenience function to log errors.
 

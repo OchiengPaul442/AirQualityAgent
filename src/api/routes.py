@@ -9,12 +9,10 @@ from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from src.api.models import (
     AirQualityQueryRequest,
-    ChatRequest,
     ChatResponse,
     HealthCheck,
     MCPConnectionRequest,
@@ -43,7 +41,7 @@ logger = logging.getLogger(__name__)
 _agent_instance = None
 
 # Rate limiting (in-memory, for production use Redis)
-_rate_limit_store = defaultdict(list)
+_rate_limit_store: defaultdict[str, list[datetime]] = defaultdict(list)
 RATE_LIMIT_REQUESTS = 20  # requests per window
 RATE_LIMIT_WINDOW = 60  # seconds
 
@@ -78,13 +76,13 @@ def get_agent():
     return _agent_instance
 
 
-def sanitize_response(data: any) -> any:
+def sanitize_response(data: Any) -> Any:
     """
     Remove sensitive API keys from response data
     """
     if isinstance(data, dict):
         sanitized = {}
-        for key, value in data.items():
+        for key, value in data.items():  # type: ignore
             # Skip sensitive fields
             if key.lower() in ["token", "api_key", "api_token", "apikey", "secret", "password"]:
                 sanitized[key] = "***REDACTED***"
@@ -367,7 +365,7 @@ async def chat(
 
     try:
         # Rate limiting
-        client_ip = http_request.client.host
+        client_ip = http_request.client.host if http_request.client else "unknown"
         if not check_rate_limit(client_ip):
             raise HTTPException(
                 status_code=429, detail="Rate limit exceeded. Please try again in a moment."
@@ -405,7 +403,7 @@ async def chat(
                         del file_content
                         raise HTTPException(
                             status_code=413,
-                            detail=f"File size exceeds 8MB limit. Please upload a smaller file.",
+                            detail="File size exceeds 8MB limit. Please upload a smaller file.",
                         )
                     file_content.write(chunk)
 
@@ -487,7 +485,7 @@ async def chat(
         if document_data:
             # Add document content to token count
             doc_content = document_data.get("content", "")
-            tokens_used += len(doc_content.split())
+            tokens_used += len(str(doc_content).split())
         tokens_used = int(tokens_used * 1.3)  # Rough multiplier for actual tokens
 
         # Get total message count for this session
@@ -605,7 +603,7 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
                     if total_size > MAX_FILE_SIZE:
                         raise HTTPException(
                             status_code=413,
-                            detail=f"File size exceeds 8MB limit. Please upload a smaller file.",
+                            detail="File size exceeds 8MB limit. Please upload a smaller file.",
                         )
                     file_content.write(chunk)
 
@@ -738,7 +736,7 @@ async def connect_mcp_server(request: MCPConnectionRequest):
         await agent.connect_mcp_server(request.name, request.command, request.args)
 
         # Try to get available tools from the MCP client
-        tools = []
+        tools: list[dict[str, Any]] = []
         if request.name in agent.mcp_clients:
             try:
                 client = agent.mcp_clients[request.name]

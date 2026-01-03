@@ -232,7 +232,7 @@ class GeminiProvider(BaseAIProvider):
         try:
             tasks = [execute_with_semaphore(fc) for fc in function_calls]
             raw_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Convert exceptions to proper result format
             results: list[dict[str, Any]] = []
             for i, result in enumerate(raw_results):
@@ -243,7 +243,7 @@ class GeminiProvider(BaseAIProvider):
                         "result": {"error": f"Function execution failed: {str(result)}"},
                     })
                 else:
-                    results.append(result)
+                    results.append(result)  # type: ignore
         except Exception as e:
             logger.error(f"Parallel execution failed: {e}")
             results = [

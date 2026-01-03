@@ -1,8 +1,8 @@
 from functools import lru_cache
 
 from dotenv import load_dotenv
-from pydantic import ConfigDict, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load environment variables from .env.local or .env
 load_dotenv(dotenv_path=".env.local")
@@ -107,7 +107,7 @@ class Settings(BaseSettings):
             return ["*"]
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore"

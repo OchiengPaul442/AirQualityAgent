@@ -2,7 +2,7 @@
 Data formatting utilities for accurate and consistent data presentation
 """
 
-from typing import Any, Dict
+from typing import Any
 
 
 def format_number(value: Any, decimal_places: int = 1) -> str:

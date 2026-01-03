@@ -4,10 +4,10 @@ MCP Client Helper
 This module provides utilities for the agent to connect to other MCP servers.
 """
 
-import asyncio
 import logging
-from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
+from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -21,13 +21,13 @@ class MCPClient:
     """
 
     def __init__(
-        self, server_command: str, server_args: List[str], env: Optional[Dict[str, str]] = None
+        self, server_command: str, server_args: list[str], env: dict[str, str] | None = None
     ):
         self.server_params = StdioServerParameters(
             command=server_command, args=server_args, env=env
         )
-        self.session: Optional[ClientSession] = None
-        self._exit_stack = None
+        self.session: ClientSession | None = None
+        self._exit_stack: AsyncExitStack | None = None
 
     @asynccontextmanager
     async def connect(self) -> AsyncIterator["MCPClient"]:
@@ -43,6 +43,7 @@ class MCPClient:
                 self.session = await stack.enter_async_context(
                     ClientSession(transport[0], transport[1])
                 )
+                assert self.session is not None
                 await self.session.initialize()
                 logger.info("Connected to MCP server")
                 yield self
@@ -50,14 +51,14 @@ class MCPClient:
                 logger.error(f"Failed to connect to MCP server: {e}")
                 raise
 
-    async def list_tools(self) -> List[Any]:
+    async def list_tools(self) -> list[Any]:
         """List available tools on the server."""
         if not self.session:
             raise RuntimeError("Not connected to MCP server")
         result = await self.session.list_tools()
         return result.tools
 
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         """Call a tool on the server."""
         if not self.session:
             raise RuntimeError("Not connected to MCP server")

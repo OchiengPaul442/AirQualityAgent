@@ -1,10 +1,10 @@
 import logging
 
 try:
-    from ddgs import DDGS
+    from ddgs import DDGS  # type: ignore
 except ImportError:
     # Fallback if ddgs not installed yet
-    from duckduckgo_search import DDGS
+    from duckduckgo_search import DDGS  # type: ignore
 
 logger = logging.getLogger(__name__)
 

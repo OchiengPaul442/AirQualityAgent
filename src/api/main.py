@@ -8,7 +8,6 @@ from src.api.error_handlers import register_error_handlers
 from src.api.routes import router
 from src.config import get_settings
 from src.db.database import Base, engine, ensure_database_directory
-from src.db.models import ChatMessage, ChatSession  # Import models for SQLAlchemy metadata
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
