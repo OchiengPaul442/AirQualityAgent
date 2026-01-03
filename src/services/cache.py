@@ -8,7 +8,7 @@ analysis results, and session data.
 import hashlib
 import json
 import pickle
-from typing import Any
+from typing import Any, cast
 
 import redis
 
@@ -64,8 +64,13 @@ class RedisCache:
         if self.enabled:
             try:
                 value = self.client.get(cache_key)
-                if value:
-                    return pickle.loads(value)
+                if value is not None:
+                    # Redis returns bytes when decode_responses=False
+                    if isinstance(value, bytes):
+                        return pickle.loads(value)
+                    else:
+                        # Fallback for unexpected types
+                        return None
             except Exception as e:
                 print(f"Redis get error: {e}")
         else:
@@ -122,8 +127,11 @@ class RedisCache:
             try:
                 pattern = self._make_key(namespace, "*")
                 keys = self.client.keys(pattern)
-                if keys:
-                    self.client.delete(*keys)
+                if keys and isinstance(keys, list):
+                    # Ensure all keys are bytes (as expected with decode_responses=False)
+                    valid_keys = [k for k in keys if isinstance(k, (str, bytes))]
+                    if valid_keys:
+                        self.client.delete(*valid_keys)
                 return True
             except Exception as e:
                 print(f"Redis clear error: {e}")

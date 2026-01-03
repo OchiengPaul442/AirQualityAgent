@@ -135,7 +135,7 @@ class AirQoService:
         Returns:
             Measurements data with PM2.5, PM10, etc.
         """
-        params = {"frequency": frequency, "limit": limit}
+        params: dict[str, Any] = {"frequency": frequency, "limit": limit}
 
         if site_id:
             params["site_id"] = site_id
@@ -231,7 +231,7 @@ class AirQoService:
         Returns:
             Historical measurements data
         """
-        params = {"frequency": frequency}
+        params: dict[str, Any] = {"frequency": frequency}
         if start_time:
             params["startTime"] = start_time.isoformat()
         if end_time:
@@ -413,7 +413,7 @@ class AirQoService:
         Returns:
             Dictionary with sites array containing detailed site information
         """
-        params = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if search:
             params["search"] = search
 
@@ -488,7 +488,7 @@ class AirQoService:
         Returns:
             Dictionary with grids array, each containing sites
         """
-        params = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if search:
             params["search"] = search
 
@@ -894,7 +894,7 @@ class AirQoService:
         """
         try:
             url = "https://nominatim.openstreetmap.org/reverse"
-            params = {"lat": latitude, "lon": longitude, "format": "json", "zoom": 10}  # City level
+            params: dict[str, Any] = {"lat": latitude, "lon": longitude, "format": "json", "zoom": 10}  # City level
             headers = {"User-Agent": "AirQoAgent/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             if response.status_code == 200:
