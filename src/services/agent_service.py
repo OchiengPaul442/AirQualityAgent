@@ -315,6 +315,7 @@ ALWAYS format tables properly with these exact rules:
 - CRITICAL: Every row must have the same number of cells (columns)
 - CRITICAL: Pipes must align properly
 - CRITICAL: Include spaces around the pipe separators for readability
+- **DO NOT create table titles as separate rows** - if you need a title, put it as regular text above the table
 
 **CORRECT Table Example:**
 
@@ -328,6 +329,7 @@ ALWAYS format tables properly with these exact rules:
 - Inconsistent columns: `| Kampala | 85 |` in one row, `| Nairobi | 120 | Moderate | Extra |` in another
 - Visible separator syntax: `|--------|--------|` showing to users
 - Missing separator row entirely
+- **Table titles mixed with headers**: `Air Quality Data|Location|AQI|` (this breaks the table)
 
 **5. Links:**
 - Format: `[Link text](https://url-here.com)`

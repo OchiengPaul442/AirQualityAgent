@@ -276,6 +276,7 @@ class MarkdownFormatter:
         2. Proper pipe alignment
         3. Consistent spacing around pipes
         4. Valid separator row
+        5. Fix malformed tables that don't start with pipes
         """
         lines = text.split('\n')
         formatted_lines = []
@@ -286,12 +287,21 @@ class MarkdownFormatter:
             # Detect table row (has pipes with content)
             is_table_row = '|' in line and line.strip().startswith('|') and line.strip().endswith('|')
             
-            if is_table_row:
+            # Also detect malformed table rows that have pipes but don't start with |
+            # This handles cases like: "Header1|Header2|Header3|" or "Data1|Data2|Data3|"
+            is_malformed_table_row = ('|' in line and not line.strip().startswith('|') and 
+                                    line.strip().endswith('|') and line.count('|') >= 2)
+            
+            if is_table_row or is_malformed_table_row:
                 if not in_table:
                     # Starting new table - add blank line before
                     if formatted_lines and formatted_lines[-1].strip():
                         formatted_lines.append('')
                     in_table = True
+                
+                # Fix malformed table row by ensuring it starts with |
+                if is_malformed_table_row and not line.strip().startswith('|'):
+                    line = '|' + line
                 
                 table_buffer.append(line)
             else:
@@ -322,6 +332,39 @@ class MarkdownFormatter:
         if not table_rows:
             return []
         
+        # Check if first row looks like a title (contains date or comparison text)
+        # and doesn't have the same number of columns as other rows
+        title_row = None
+        if len(table_rows) > 1:
+            first_cells = [cell.strip() for cell in table_rows[0].split('|') if cell.strip()]
+            second_cells = [cell.strip() for cell in table_rows[1].split('|') if cell.strip()]
+            
+            # If first row has different column count or contains date/comparison keywords
+            # or if it looks like a title spanning the table
+            is_title_row = (len(first_cells) != len(second_cells) or 
+                          any(keyword in table_rows[0].lower() for keyword in ['comparison', '202', 'summary', 'data']) or
+                          ('(' in table_rows[0] and ')' in table_rows[0] and len(first_cells) > len(second_cells)))
+            
+            if is_title_row and len(first_cells) > 1:
+                # Check if first cell looks like a title (contains date or comparison keywords)
+                first_cell = first_cells[0]
+                is_first_cell_title = any(keyword in first_cell.lower() for keyword in ['comparison', '202', 'summary', 'data']) or \
+                                    ('(' in first_cell and ')' in first_cell)
+                
+                if is_first_cell_title:
+                    # Extract only the first cell as title, treat rest as header row
+                    title_row = first_cell
+                    # Reconstruct the header row from remaining cells
+                    header_cells = first_cells[1:]
+                    table_rows[0] = '| ' + ' | '.join(header_cells) + ' |'
+                else:
+                    # Extract title by splitting on pipes and joining with spaces
+                    title_text = ' '.join(first_cells)
+                    # Clean up extra spaces
+                    title_text = re.sub(r'\s+', ' ', title_text)
+                    title_row = title_text
+                    table_rows = table_rows[1:]
+        
         # Parse table cells
         parsed_rows = []
         for row in table_rows:
@@ -350,6 +393,12 @@ class MarkdownFormatter:
         
         # Format each row with padding
         formatted_rows = []
+        
+        # Add title as a header if detected
+        if title_row:
+            formatted_rows.append(f"**{title_row}**")
+            formatted_rows.append('')  # Blank line after title
+        
         for row_idx, row in enumerate(parsed_rows):
             formatted_cells = []
             for col_idx in range(num_cols):
@@ -386,7 +435,62 @@ class MarkdownFormatter:
         current_sources = []
 
         for i, line in enumerate(lines):
-            # Check if this is a source line (handle multi-line summaries)
+            # Check for inline sources (Source: appearing after content on the same line)
+            inline_source_match = re.search(r'(.+?)\s+(Source|source):\s*(.+)$', line)
+            
+            if inline_source_match:
+                # Handle inline source citation
+                content_before, _, full_source_text = inline_source_match.groups()
+                
+                # Initialize variables
+                url = None
+                summary = ""
+                
+                # Parse the source text: can be "Title (URL) – summary" or "Title – summary" or just "Title"
+                if '(' in full_source_text and ')' in full_source_text:
+                    # Has URL in parentheses: Title (URL) – summary
+                    url_match = re.search(r'(.+?)\s*\((https?://[^\s)]+)\)(?:\s*–\s*(.+))?', full_source_text)
+                    if url_match:
+                        title = url_match.group(1).strip()
+                        url = url_match.group(2)
+                        summary = url_match.group(3).strip() if url_match.group(3) else ""
+                    else:
+                        title = full_source_text.strip()
+                        url = None
+                        summary = ""
+                else:
+                    # No URL: Title – summary
+                    if ' – ' in full_source_text:
+                        title, summary = full_source_text.split(' – ', 1)
+                        title = title.strip()
+                        summary = summary.strip()
+                    else:
+                        title = full_source_text.strip()
+                        summary = ""
+                
+                # Check if summary continues on next lines
+                if summary and not summary.endswith('.') and not summary.endswith(')') and i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line and not next_line.startswith('Source:') and not re.match(r'^(?:Source|source):', next_line, re.IGNORECASE):
+                        summary += ' ' + next_line
+                        lines[i + 1] = ''  # Mark as processed
+                
+                # Format inline citation with line break
+                if summary and url:
+                    citation = f"**{title}** - {summary} ([link]({url}))"
+                elif summary:
+                    citation = f"**{title}** - {summary}"
+                elif url:
+                    citation = f"**{title}** ([link]({url}))"
+                else:
+                    citation = f"**{title}**"
+                
+                # Add the content with source on new line
+                formatted_lines.append(content_before.strip())
+                formatted_lines.append(citation)
+                continue
+            
+            # Check if this is a standalone source line (handle multi-line summaries)
             stripped_line = line.strip()
             source_match = re.match(r'^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$', stripped_line)
 
@@ -461,14 +565,14 @@ class MarkdownFormatter:
         - Consistent use of ** for bold, * for italic
         """
         # Fix bold with extra spaces: ** text ** -> **text**
-        # Use negative lookahead to ensure no ** in the content
-        text = re.sub(r'\*\*\s+((?:(?!\*\*).)*?)\s+\*\*', r'**\1**', text)
+        # Only match on single lines to avoid cross-line issues
+        text = re.sub(r'(?m)^\*\*\s+([^\*\n]+?)\s+\*\*$', r'**\1**', text)
         
         # Fix italic with extra spaces: * text * -> *text*
-        text = re.sub(r'(?<!\*)\*\s+([^\*]+?)\s+\*(?!\*)', r'*\1*', text)
+        text = re.sub(r'(?m)^(?<!\*)\*\s+([^\*\n]+?)\s+\*(?!\*)$', r'*\1*', text)
         
         # Fix bold-italic: *** text *** -> ***text***
-        text = re.sub(r'\*\*\*\s+([^\*]+?)\s+\*\*\*', r'***\1***', text)
+        text = re.sub(r'(?m)^\*\*\*\s+([^\*\n]+?)\s+\*\*\*$', r'***\1***', text)
         
         return text
 
