@@ -35,8 +35,10 @@ from src.mcp.client import MCPClient
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
 from src.services.carbon_intensity_service import CarbonIntensityService
+from src.services.defra_service import DefraService
 from src.services.openmeteo_service import OpenMeteoService
 from src.services.search_service import SearchService
+from src.services.uba_service import UbaService
 from src.services.waqi_service import WAQIService
 from src.services.weather_service import WeatherService
 from src.tools.document_scanner import DocumentScanner
@@ -52,6 +54,8 @@ class AgentService:
         self.airqo = AirQoService()
         self.openmeteo = OpenMeteoService()
         self.carbon_intensity = CarbonIntensityService()
+        self.defra = DefraService()
+        self.uba = UbaService()
         self.weather = WeatherService()
         self.scraper = RobustScraper()
         self.search = SearchService()
@@ -199,6 +203,8 @@ class AgentService:
                 self._get_gemini_airqo_tool(),
                 self._get_gemini_openmeteo_tool(),
                 self._get_gemini_carbon_intensity_tool(),
+                self._get_gemini_defra_tool(),
+                self._get_gemini_uba_tool(),
                 self._get_gemini_weather_tool(),
                 self._get_gemini_search_tool(),
                 self._get_gemini_scrape_tool(),
@@ -239,6 +245,8 @@ class AgentService:
             self.openai_tools.extend(airqo_tools)
             self.openai_tools.extend(self._get_openai_openmeteo_tool())
             self.openai_tools.extend(self._get_openai_carbon_intensity_tool())
+            self.openai_tools.extend(self._get_openai_defra_tool())
+            self.openai_tools.extend(self._get_openai_uba_tool())
             # Weather tools returns a list now
             weather_tools = self._get_openai_weather_tool()
             if isinstance(weather_tools, list):
@@ -1932,6 +1940,65 @@ Be professional, empathetic, and solution-oriented."""
             ]
         )
 
+    def _get_gemini_defra_tool(self):
+        return types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="get_defra_site_data",
+                    description="Get current air quality data from UK DEFRA monitoring sites. Provides real-time pollutant measurements from official UK government monitoring stations. No API key required.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "site_code": types.Schema(
+                                type=types.Type.STRING,
+                                description="DEFRA site code (e.g., 'LON1', 'MAN3'). Use get_defra_sites to find available sites.",
+                            ),
+                        },
+                        required=["site_code"],
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_defra_sites",
+                    description="Get list of all available DEFRA air quality monitoring sites in the UK. Returns site codes, names, and locations for finding specific monitoring stations.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={},
+                    ),
+                ),
+                types.FunctionDeclaration(
+                    name="get_defra_species_codes",
+                    description="Get list of pollutant species codes used by DEFRA. Useful for understanding what pollutants are measured at each site.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={},
+                    ),
+                ),
+            ]
+        )
+
+    def _get_gemini_uba_tool(self):
+        return types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="get_uba_measures",
+                    description="Get current air quality measurements from German UBA monitoring network. Provides real-time pollutant data from official German environmental agency stations. No API key required.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "component": types.Schema(
+                                type=types.Type.STRING,
+                                description="Pollutant component (e.g., 'NO2', 'PM10', 'O3', 'SO2'). Optional - returns all if not specified.",
+                            ),
+                            "scope": types.Schema(
+                                type=types.Type.STRING,
+                                description="Geographic scope: '1h' (1 hour), '24h' (24 hours), 'd' (daily). Default is '1h'.",
+                            ),
+                        },
+                    ),
+                ),
+            ]
+        )
+
     def _get_openai_openmeteo_tool(self):
         return [
             {
@@ -2082,6 +2149,73 @@ Be professional, empathetic, and solution-oriented."""
                     "parameters": {
                         "type": "object",
                         "properties": {},
+                    },
+                },
+            },
+        ]
+
+    def _get_openai_defra_tool(self):
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_defra_site_data",
+                    "description": "Get current air quality data from UK DEFRA monitoring sites. Provides real-time pollutant measurements from official UK government monitoring stations. No API key required.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "site_code": {
+                                "type": "string",
+                                "description": "DEFRA site code (e.g., 'LON1', 'MAN3'). Use get_defra_sites to find available sites.",
+                            },
+                        },
+                        "required": ["site_code"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_defra_sites",
+                    "description": "Get list of all available DEFRA air quality monitoring sites in the UK. Returns site codes, names, and locations for finding specific monitoring stations.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_defra_species_codes",
+                    "description": "Get list of pollutant species codes used by DEFRA. Useful for understanding what pollutants are measured at each site.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            },
+        ]
+
+    def _get_openai_uba_tool(self):
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_uba_measures",
+                    "description": "Get current air quality measurements from German UBA monitoring network. Provides real-time pollutant data from official German environmental agency stations. No API key required.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "component": {
+                                "type": "string",
+                                "description": "Pollutant component (e.g., 'NO2', 'PM10', 'O3', 'SO2'). Optional - returns all if not specified.",
+                            },
+                            "scope": {
+                                "type": "string",
+                                "description": "Geographic scope: '1h' (1 hour), '24h' (24 hours), 'd' (daily). Default is '1h'.",
+                            },
+                        },
                     },
                 },
             },
@@ -2630,6 +2764,17 @@ Be professional, empathetic, and solution-oriented."""
                 return self.carbon_intensity.get_generation_mix()
             elif function_name == "get_uk_carbon_intensity_factors":
                 return self.carbon_intensity.get_intensity_factors()
+            elif function_name == "get_defra_site_data":
+                site_code = args.get("site_code")
+                return self.defra.get_site_data(site_code)
+            elif function_name == "get_defra_sites":
+                return self.defra.get_sites()
+            elif function_name == "get_defra_species_codes":
+                return self.defra.get_species_codes()
+            elif function_name == "get_uba_measures":
+                component = args.get("component")
+                scope = args.get("scope", "1h")
+                return self.uba.get_measures(component=component, scope=scope)
             elif function_name == "get_city_weather":
                 city = args.get("city")
                 return self.weather.get_current_weather(city)
