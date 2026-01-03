@@ -1,6 +1,10 @@
-# Docker Deployment Guide
+# Docker Deployment Guide for Aeris
 
-This guide explains how to deploy the Air Quality AI Agent using Docker.
+This guide explains how to deploy **Aeris**, your Air Quality AI Assistant, using Docker.
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 ## Prerequisites
 

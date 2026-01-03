@@ -1,7 +1,13 @@
-# Air Quality Agent API: Comprehensive Frontend Integration Guide
+# Aeris API: Comprehensive Frontend Integration Guide
 
-**Last Updated:** January 1, 2026  
+**Last Updated:** January 3, 2026  
 **API Version:** 2.2.0
+
+---
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 ---
 
@@ -21,7 +27,7 @@
 
 ## Overview
 
-The Air Quality Agent API provides a unified, intelligent interface for accessing global air quality data from multiple sources (WAQI, AirQo, Open-Meteo) with AI-powered chat capabilities and extensibility through MCP server connections.
+The Aeris API provides a unified, intelligent interface for accessing global air quality data from multiple sources (WAQI, AirQo, Open-Meteo) with AI-powered chat capabilities and extensibility through MCP server connections.
 
 ### Key Features
 

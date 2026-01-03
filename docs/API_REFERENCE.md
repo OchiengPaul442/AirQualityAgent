@@ -1,8 +1,16 @@
-# API Reference
+# Aeris API Reference
 
-Complete reference for all API endpoints provided by the Air Quality AI Agent.
+Complete reference for all API endpoints provided by **Aeris**, your Air Quality AI Assistant.
 
 ---
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
+
+---
+
+## Base URL
 
 ## Base URL
 

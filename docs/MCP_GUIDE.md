@@ -1,15 +1,19 @@
-# MCP Integration Guide
+# Aeris MCP Integration Guide
 
-Model Context Protocol (MCP) allows the Air Quality AI Agent to connect to external data sources and expose its capabilities to MCP clients like Claude Desktop.
+Model Context Protocol (MCP) allows **Aeris**, your Air Quality AI Assistant, to connect to external data sources and expose its capabilities to MCP clients like Claude Desktop.
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 ## Overview
 
-The agent supports MCP in two ways:
+Aeris supports MCP in two ways:
 
 1. **As an MCP Server**: Exposes air quality tools to MCP clients
 2. **As an MCP Client**: Connects to external MCP servers (databases, APIs, etc.)
 
-## Using the Agent as an MCP Server
+## Using Aeris as an MCP Server
 
 ### Setup for Claude Desktop
 

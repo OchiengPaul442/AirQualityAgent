@@ -1,6 +1,10 @@
-# Deployment Guide
+# Deploying Aeris
 
-This guide covers deploying the Air Quality AI Agent to production environments.
+This guide covers deploying **Aeris**, your Air Quality AI Assistant, to production environments.
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 ## Production Requirements
 

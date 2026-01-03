@@ -1,10 +1,12 @@
-# Document Upload & Analysis API Guide
+# Aeris Document Upload & Analysis Guide
 
 ## Overview
 
 Upload and analyze PDF, CSV, or Excel files **directly through the chat endpoint** with **in-memory processing** for cost-effective analysis. Files are **never stored** on the server - processed entirely in RAM and immediately discarded.
 
-**Important:** Document upload is now integrated into the `/api/v1/agent/chat` endpoint. You can upload a file along with your message to the AI agent for analysis.
+**Important:** Document upload is now integrated into the `/api/v1/agent/chat` endpoint. You can upload a file along with your message to **Aeris**, your Air Quality AI Assistant, for analysis.
+
+**Meet Aeris**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 **Key Benefits:**
 

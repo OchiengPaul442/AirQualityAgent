@@ -1,10 +1,14 @@
-# System Architecture
+# Aeris System Architecture
 
-This document describes the architecture and design of the Air Quality AI Agent.
+This document describes the architecture and design of **Aeris**, your Air Quality AI Assistant.
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 ## Overview
 
-The Air Quality AI Agent is a stateless, scalable AI system built with FastAPI that provides real-time air quality monitoring, analysis, and recommendations through multiple AI providers.
+Aeris is a stateless, scalable AI system built with FastAPI that provides real-time air quality monitoring, analysis, and recommendations through multiple AI providers.
 
 ## System Components
 

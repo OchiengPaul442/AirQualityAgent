@@ -1,6 +1,10 @@
-# Getting Started
+# Getting Started with Aeris
 
-This guide will help you set up and run the Air Quality AI Agent.
+This guide will help you set up and run **Aeris**, your Air Quality AI Assistant.
+
+## Meet Aeris
+
+**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
 ## Prerequisites
 

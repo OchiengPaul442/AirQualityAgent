@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # API Configuration
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "Air Quality AI Agent API"
+    PROJECT_NAME: str = "Aeris - Air Quality AI Assistant API"
 
     # Air Quality Data Sources
     WAQI_API_KEY: str = ""  # World Air Quality Index API key
@@ -73,6 +73,19 @@ class Settings(BaseSettings):
     # - simple: Clear, straightforward language for public understanding
     # - policy: Formal, evidence-based for government/policy makers
     AI_RESPONSE_STYLE: str = "general"
+
+    # AI Token Limits
+    AI_MAX_TOKENS: int = 4096  # Maximum tokens for AI responses
+
+    # Document Processing Limits
+    DOCUMENT_MAX_LENGTH_PDF: int = 50000  # Max characters for PDF processing
+    DOCUMENT_MAX_LENGTH_CSV: int = 50000  # Max characters for CSV processing
+    DOCUMENT_MAX_LENGTH_EXCEL: int = 100000  # Max characters for Excel processing
+    DOCUMENT_PREVIEW_ROWS_CSV: int = 200  # Max preview rows for CSV
+    DOCUMENT_PREVIEW_ROWS_EXCEL: int = 100  # Max preview rows per Excel sheet
+
+    # Agent Document Limits
+    AGENT_MAX_DOC_LENGTH: int = 100000  # Max document content length in agent
 
     # Redis Configuration
     REDIS_ENABLED: bool = False

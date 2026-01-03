@@ -251,7 +251,15 @@ class AgentService:
             logger.error(f"Failed to setup OpenAI: {e}")
 
     def _get_system_instruction(self) -> str:
-        base_instruction = """You are a friendly, knowledgeable Air Quality Assistant. Think of yourself as a helpful environmental expert who cares about people's health and well-being.
+        base_instruction = """You are Aeris, a friendly and knowledgeable Air Quality AI Assistant. Your name is Aeris, and you are a helpful environmental expert who cares deeply about people's health and well-being.
+
+## Your Identity
+
+**Your Name:** Aeris
+- When users greet you or ask your name, respond warmly: "I'm Aeris, your air quality assistant."
+- When addressed as "Aeris", acknowledge it naturally: "Yes, how can I help you today?"
+- Sign off professionally when appropriate: "Feel free to reach out anytime. - Aeris"
+- Be proud of your identity as an environmental health expert dedicated to helping people understand air quality
 
 ## Your Personality & Communication Style
 
@@ -292,6 +300,12 @@ GOOD: "Hmm, I'm having trouble getting that info right now"
   - Example: `1. First item`
   - Example: `2. Second item`
 - Nested lists: Indent with 2 spaces
+- **IMPORTANT: When listing sensor IDs or device names**, format them properly with commas and parentheses:
+  - CORRECT: `(airqo_g5271, airqo_g5375, aq_g5_93)`
+  - CORRECT: `Devices monitored: airqo_g5271, airqo_g5375, and aq_g5_93`
+  - WRONG: Breaking IDs across multiple lines unnecessarily
+  - WRONG: Adding line breaks within parentheses
+  - Keep device/sensor ID lists compact and readable
 
 **4. Tables - VERY IMPORTANT:**
 ALWAYS format tables properly with these exact rules:
@@ -347,7 +361,7 @@ ALWAYS format tables properly with these exact rules:
 2. **Test your table structure** - Count columns in header vs data rows
 3. **Use consistent spacing** - Add space before and after pipes: `| data |` not `|data|`
 4. **Complete all rows** - Every table row needs all columns filled
-5. **Escape special characters** - Use `\*` if you want literal asterisk in text
+5. **Escape special characters** - Use `\\*` if you want literal asterisk in text
 6. **NEVER use emojis for numbering** - Use regular numbers like `1.`, `2.`, `3.` instead of `1️⃣`, `2️⃣`, `3️⃣`
 7. **Professional appearance** - Avoid emojis in formal/professional responses unless specifically requested
 
@@ -740,7 +754,8 @@ For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
             doc_metadata = document_data.get("metadata", {})
 
             # Truncate document content if it's too long (to avoid token limit)
-            max_doc_length = 15000  # characters
+            # Configurable limit to handle larger documents and multi-sheet Excel files
+            max_doc_length = self.settings.AGENT_MAX_DOC_LENGTH  # characters
             if len(doc_content) > max_doc_length:
                 doc_content = (
                     doc_content[:max_doc_length] + "\\n[... content truncated due to length ...]"
@@ -1041,7 +1056,7 @@ Please analyze the document above and answer the user's question based on its co
             messages=messages,
             tools=self.openai_tools,
             tool_choice="auto",
-            max_tokens=2048,
+            max_tokens=self.settings.AI_MAX_TOKENS,  # Configurable token limit
             temperature=self.response_temperature,
             top_p=self.response_top_p,
         )
@@ -1186,7 +1201,7 @@ Please analyze the document above and answer the user's question based on its co
                 final_response = self.client.chat.completions.create(
                     model=self.settings.AI_MODEL,
                     messages=messages,
-                    max_tokens=2048,
+                    max_tokens=self.settings.AI_MAX_TOKENS,  # Configurable token limit
                     temperature=self.response_temperature,
                     top_p=self.response_top_p,
                 )
@@ -1236,7 +1251,7 @@ Be professional, empathetic, and solution-oriented."""
                         },
                         {"role": "user", "content": fallback_prompt},
                     ],
-                    max_tokens=2048,
+                    max_tokens=self.settings.AI_MAX_TOKENS,  # Configurable token limit
                     temperature=self.response_temperature,
                     top_p=self.response_top_p,
                 )

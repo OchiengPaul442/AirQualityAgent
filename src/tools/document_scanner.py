@@ -4,15 +4,25 @@ Document Scanner Tool
 Enhanced document reading utility with in-memory processing
 Supports PDF, CSV, and Excel files without disk storage
 Cost-effective and memory-efficient approach
+
+Enhanced to handle large files with better chunking and ALL Excel sheets
 """
 
+import logging
 import os
 from io import BytesIO
 from typing import Any, Dict, Union
 
+from src.config import get_settings
+
+logger = logging.getLogger(__name__)
+
 
 class DocumentScanner:
     """Scan and extract text/data from documents in memory (PDF, CSV, Excel)"""
+
+    def __init__(self):
+        self.settings = get_settings()
 
     def scan_document_from_bytes(
         self, file_bytes: Union[BytesIO, bytes], filename: str
@@ -95,8 +105,8 @@ class DocumentScanner:
             for page in reader.pages:
                 text += page.extract_text() + "\n"
 
-            # 10KB limit for AI processing
-            max_length = 10000
+            # Configurable limit for AI processing to handle larger documents
+            max_length = self.settings.DOCUMENT_MAX_LENGTH_PDF
 
             return {
                 "success": True,
@@ -120,6 +130,8 @@ class DocumentScanner:
     def _scan_csv_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
         """Extract data from CSV file bytes"""
         try:
+            import gc  # Garbage collection for memory management
+
             import pandas as pd
 
             # Read CSV from bytes
@@ -139,8 +151,8 @@ class DocumentScanner:
             content_parts.append(f"Rows: {summary['rows']}, Columns: {summary['columns']}\n")
             content_parts.append(f"Columns: {', '.join(summary['column_names'])}\n\n")
 
-            # Show first 50 rows
-            preview_rows = min(50, len(df))
+            # Show configurable number of rows for better data analysis
+            preview_rows = min(self.settings.DOCUMENT_PREVIEW_ROWS_CSV, len(df))
             content_parts.append(f"First {preview_rows} rows:\n")
             content_parts.append(df.head(preview_rows).to_string(index=False))
 
@@ -151,16 +163,23 @@ class DocumentScanner:
                 content_parts.append(df[numeric_cols].describe().to_string())
 
             content = "\n".join(content_parts)
+            
+            # Store preview before cleaning up
+            preview_data = df.head(10).to_dict(orient="records")
+            
+            # Clean up dataframe to free memory
+            del df
+            gc.collect()
 
             return {
                 "success": True,
                 "filename": filename,
                 "file_type": "csv",
-                "content": content[:10000],  # 10KB limit
+                "content": content[:self.settings.DOCUMENT_MAX_LENGTH_CSV],  # Configurable limit for better large file handling
                 "full_length": len(content),
-                "truncated": len(content) > 10000,
+                "truncated": len(content) > self.settings.DOCUMENT_MAX_LENGTH_CSV,
                 "metadata": summary,
-                "preview_data": df.head(10).to_dict(orient="records"),
+                "preview_data": preview_data,
             }
         except ImportError:
             return {
@@ -172,8 +191,10 @@ class DocumentScanner:
             return {"error": f"Error reading CSV: {str(e)}", "filename": filename}
 
     def _scan_excel_bytes(self, file_bytes: BytesIO, filename: str) -> Dict[str, Any]:
-        """Extract data from Excel file bytes"""
+        """Extract data from Excel file bytes - processes ALL sheets"""
         try:
+            import gc  # Garbage collection for memory management
+
             import pandas as pd
 
             # Read all sheets from bytes
@@ -187,40 +208,64 @@ class DocumentScanner:
 
             all_sheets_data = {}
 
-            # Process first 5 sheets
-            for sheet_name in sheet_names[:5]:
-                df = pd.read_excel(file_bytes, sheet_name=sheet_name)
+            # Process ALL sheets (not limited to first 5) for comprehensive analysis
+            for i, sheet_name in enumerate(sheet_names):
+                try:
+                    df = pd.read_excel(file_bytes, sheet_name=sheet_name)
 
-                content_parts.append(f"\n--- Sheet: {sheet_name} ---\n")
-                content_parts.append(f"Rows: {len(df)}, Columns: {len(df.columns)}\n")
-                content_parts.append(f"Columns: {', '.join(df.columns.tolist())}\n")
+                    content_parts.append(f"\n--- Sheet {i+1}/{len(sheet_names)}: {sheet_name} ---\n")
+                    content_parts.append(f"Rows: {len(df)}, Columns: {len(df.columns)}\n")
+                    content_parts.append(f"Columns: {', '.join(df.columns.tolist())}\n")
 
-                # Show first 20 rows per sheet
-                preview_rows = min(20, len(df))
-                content_parts.append(f"\nFirst {preview_rows} rows:\n")
-                content_parts.append(df.head(preview_rows).to_string(index=False))
-                content_parts.append("\n")
+                    # Show configurable number of rows per sheet for better data analysis
+                    preview_rows = min(self.settings.DOCUMENT_PREVIEW_ROWS_EXCEL, len(df))
+                    content_parts.append(f"\nFirst {preview_rows} rows:\n")
+                    content_parts.append(df.head(preview_rows).to_string(index=False))
+                    
+                    # Add numeric statistics for this sheet
+                    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+                    if numeric_cols:
+                        content_parts.append("\n\nNumeric Statistics:\n")
+                        content_parts.append(df[numeric_cols].describe().to_string())
+                    
+                    content_parts.append("\n")
 
-                all_sheets_data[sheet_name] = {
-                    "rows": len(df),
-                    "columns": len(df.columns),
-                    "column_names": df.columns.tolist(),
-                    "preview": df.head(10).to_dict(orient="records"),
-                }
+                    all_sheets_data[sheet_name] = {
+                        "rows": len(df),
+                        "columns": len(df.columns),
+                        "column_names": df.columns.tolist(),
+                        "preview": df.head(20).to_dict(orient="records"),
+                        "dtypes": df.dtypes.astype(str).to_dict(),
+                    }
+                    
+                    # Clean up dataframe to free memory after processing
+                    del df
+                    gc.collect()
+                    
+                except Exception as sheet_error:
+                    logger.warning(f"Error reading sheet '{sheet_name}': {sheet_error}")
+                    content_parts.append(f"\n--- Sheet: {sheet_name} ---\n")
+                    content_parts.append(f"Error reading sheet: {str(sheet_error)}\n\n")
+                    all_sheets_data[sheet_name] = {"error": str(sheet_error)}
 
             content = "\n".join(content_parts)
+            
+            # Clean up excel file object to free memory
+            del excel_file
+            gc.collect()
 
             return {
                 "success": True,
                 "filename": filename,
                 "file_type": "excel",
-                "content": content[:10000],  # 10KB limit
+                "content": content[:self.settings.DOCUMENT_MAX_LENGTH_EXCEL],  # Configurable limit for comprehensive multi-sheet analysis
                 "full_length": len(content),
-                "truncated": len(content) > 10000,
+                "truncated": len(content) > self.settings.DOCUMENT_MAX_LENGTH_EXCEL,
                 "metadata": {
                     "sheet_count": len(sheet_names),
                     "sheet_names": sheet_names,
                     "sheets_data": all_sheets_data,
+                    "total_rows": sum(s.get("rows", 0) for s in all_sheets_data.values() if isinstance(s, dict) and "rows" in s),
                 },
             }
         except ImportError as ie:
