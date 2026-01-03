@@ -43,6 +43,20 @@ async def get_air_quality(city: str, site_id: Optional[str] = None) -> dict[str,
 
 
 @mcp.tool()
+async def get_multiple_cities_air_quality(cities: list[str]) -> dict[str, Any]:
+    """
+    Get recent air quality measurements for multiple cities simultaneously.
+
+    Args:
+        cities: List of city names (e.g., ["Kampala", "Gulu"])
+    """
+    try:
+        return airqo_service.get_multiple_cities_air_quality(cities)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
 async def get_air_quality_forecast(site_id: str, frequency: str = "daily") -> dict[str, Any]:
     """
     Get air quality forecast for a specific site.

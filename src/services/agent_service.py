@@ -468,7 +468,7 @@ GOOD: "Kampala PM2.5 concentration is 83.6 µg/m³ (AQI: 165, Unhealthy)"
 
 **Tool Calling Strategy:**
 - Single location: Try primary source first, fallback if needed
-- Multiple locations: Call appropriate sources for each location
+- **Multiple locations: Use `get_multiple_african_cities_air_quality` for African cities** to get all data simultaneously
 - Document analysis: Supplement with location-specific data from prioritized sources
 
 ## Location Memory & Context
@@ -1329,6 +1329,21 @@ Be professional, empathetic, and solution-oriented."""
                     ),
                 ),
                 types.FunctionDeclaration(
+                    name="get_multiple_african_cities_air_quality",
+                    description="Get real-time air quality for MULTIPLE African cities simultaneously. Use this when user asks about multiple locations (e.g., 'air quality in Kampala and Gulu', 'compare air quality between Nairobi and Dar es Salaam'). Returns data for all requested cities in one response for easy comparison.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "cities": types.Schema(
+                                type=types.Type.ARRAY,
+                                items=types.Schema(type=types.Type.STRING),
+                                description="List of city names in Africa (e.g., ['Gulu', 'Kampala', 'Nairobi'])",
+                            ),
+                        },
+                        required=["cities"],
+                    ),
+                ),
+                types.FunctionDeclaration(
                     name="get_airqo_history",
                     description="Get historical air quality data for a specific site or device.",
                     parameters=types.Schema(
@@ -1555,6 +1570,24 @@ Be professional, empathetic, and solution-oriented."""
                             },
                         },
                         "required": ["city"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_multiple_african_cities_air_quality",
+                    "description": "Get real-time air quality for MULTIPLE African cities simultaneously. Use this when user asks about multiple locations (e.g., 'air quality in Kampala and Gulu', 'compare air quality between Nairobi and Dar es Salaam'). Returns data for all requested cities in one response for easy comparison.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "cities": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of city names in Africa (e.g., ['Gulu', 'Kampala', 'Nairobi'])",
+                            },
+                        },
+                        "required": ["cities"],
                     },
                 },
             },
@@ -2055,6 +2088,24 @@ Be professional, empathetic, and solution-oriented."""
             {
                 "type": "function",
                 "function": {
+                    "name": "get_multiple_african_cities_air_quality",
+                    "description": "Get real-time air quality for MULTIPLE African cities simultaneously. Use this when user asks about multiple locations (e.g., 'air quality in Kampala and Gulu', 'compare air quality between Nairobi and Dar es Salaam'). Returns data for all requested cities in one response for easy comparison.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "cities": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of city names in Africa (e.g., ['Gulu', 'Kampala', 'Nairobi'])",
+                            },
+                        },
+                        "required": ["cities"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "get_city_weather",
                     "description": "Get current weather conditions for any city. Returns temperature, humidity, wind, precipitation, and weather conditions.",
                     "parameters": {
@@ -2387,6 +2438,23 @@ Be professional, empathetic, and solution-oriented."""
                     return {
                         "success": False,
                         "message": f"Could not retrieve AirQo data for {city}. The location may not have AirQo monitoring coverage.",
+                        "error": str(e),
+                    }
+            elif function_name == "get_multiple_african_cities_air_quality":
+                cities = args.get("cities", [])
+                if not cities:
+                    return {"error": "No cities provided"}
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: self.airqo.get_multiple_cities_air_quality(cities),
+                    )
+                    return result
+                except Exception as e:
+                    logger.error(f"Error getting multiple cities air quality: {e}")
+                    return {
+                        "success": False,
+                        "message": f"Could not retrieve air quality data for multiple cities: {str(e)}",
                         "error": str(e),
                     }
             elif function_name == "get_airqo_history":

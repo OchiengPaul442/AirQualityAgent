@@ -639,6 +639,46 @@ class AirQoService:
             "Must provide site_id, device_id, grid_id, cohort_id, city, or search parameter."
         )
 
+    def get_multiple_cities_air_quality(self, cities: list[str]) -> dict[str, Any]:
+        """
+        Get air quality data for multiple cities simultaneously.
+
+        Args:
+            cities: List of city names
+
+        Returns:
+            Dictionary with air quality data for each city
+        """
+        results = {}
+        import asyncio
+
+        async def get_city_data(city):
+            try:
+                return city, self.get_recent_measurements(city=city)
+            except Exception as e:
+                return city, {"error": str(e)}
+
+        async def gather_results():
+            tasks = [get_city_data(city) for city in cities]
+            return await asyncio.gather(*tasks)
+
+        # Run the async gathering
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            city_results = loop.run_until_complete(gather_results())
+            for city, data in city_results:
+                results[city] = data
+        finally:
+            loop.close()
+
+        return {
+            "success": True,
+            "cities": results,
+            "count": len(cities),
+            "source": "airqo"
+        }
+
     def search_sites_by_location(self, location: str, limit: int = 80) -> dict[str, Any]:
         """
         Search for monitoring sites by location name.
