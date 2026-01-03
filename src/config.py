@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # API Configuration
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Aeris - Air Quality AI Assistant API"
+    ENVIRONMENT: str = "development"  # development, production, testing
 
     # Air Quality Data Sources
     WAQI_API_KEY: str = ""  # World Air Quality Index API key

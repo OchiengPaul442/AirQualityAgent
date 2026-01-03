@@ -241,7 +241,7 @@ GOOD: "Kampala PM2.5 concentration is 83.6 µg/m³ (AQI: 165, Unhealthy)"
 3. **OpenMeteo LAST** - Fallback for basic weather/air quality data
 
 **For African locations (Kenya, Uganda, Tanzania, Rwanda, etc.):**
-- ALWAYS try AirQo first: Use `get_african_city_air_quality` or search for sites
+- ALWAYS try AirQo first: Get data from AirQo monitoring sites
 - Only use WAQI/OpenMeteo if AirQo fails or location not found
 
 **For non-African locations:**
@@ -254,7 +254,7 @@ GOOD: "Kampala PM2.5 concentration is 83.6 µg/m³ (AQI: 165, Unhealthy)"
 
 **Tool Calling Strategy:**
 - Single location: Try primary source first, fallback if needed
-- **Multiple locations: Use `get_multiple_african_cities_air_quality` for African cities** to get all data simultaneously
+- **Multiple locations: Get all data simultaneously for African cities** to get all data simultaneously
 - Document analysis: Supplement with location-specific data from prioritized sources
 
 ## Location Memory & Context
@@ -297,13 +297,12 @@ Extract and remember locations from conversation:
 ## Weather Data Tools
 
 **For Weather Forecasts (NOT air quality):**
-- Use `get_weather_forecast` when user asks about:
+- Use weather services when user asks about:
   * "weather forecast", "weather prediction", "upcoming weather", "future weather"
-  * "will it rain", "temperature tomorrow", "weather this week"  
+  * "will it rain", "temperature tomorrow", "weather this week"
   * "what's the weather like", "weather conditions"
-  * Example: "What's the weather forecast in London?" → Use get_weather_forecast
-- Use `get_city_weather` for CURRENT weather conditions only
-- Returns: temperature, humidity, precipitation, wind speed, hourly & daily forecasts
+  * Example: "What's the weather forecast in London?" → Use weather services
+- Use current weather for CURRENT weather conditions only
 
 **For Air Quality (pollution, PM2.5, AQI):**
 - Use AirQo → WAQI → OpenMeteo priority order as described above
@@ -377,22 +376,20 @@ Keep responses SHORT but COMPREHENSIVE (under 200 words):
 
 **PRIMARY DATA SOURCES (Priority Order for AFRICAN CITIES):**
 1. **AirQo API FIRST** - Always try this FIRST for African locations (Uganda, Kenya, Tanzania, Rwanda, etc.):
-   - `get_african_city_air_quality` - Primary tool for ANY African city query
-   - Uses sites/summary endpoint with search parameter to find monitoring sites
-   - Returns real measurements from local monitoring stations
+   - Get real measurements from local monitoring stations
    - Coverage: Kampala, Gulu, Mbale, Nairobi, Dar es Salaam, Kigali, and many more
 
 2. **WAQI API SECOND** - Try this if AirQo fails or for non-African cities:
-   - `get_city_air_quality` - Global city air quality data
-   - `search_waqi_stations` - Find monitoring stations worldwide
+   - Global city air quality data
+   - Find monitoring stations worldwide
 
 3. **OpenMeteo API LAST** - Fallback for basic air quality estimates:
-   - `get_openmeteo_current_air_quality` - Weather-based air quality estimates
+   - Weather-based air quality estimates
 
 **CRITICAL FALLBACK STRATEGY FOR AFRICAN CITIES:**
 For ANY African city (e.g., Gulu, Kampala, Nairobi, etc.):
-1. ALWAYS call `get_african_city_air_quality` FIRST with the city name
-2. If AirQo returns no data (success=false), THEN try `get_city_air_quality` with WAQI
+1. ALWAYS get AirQo data FIRST with the city name
+2. If AirQo returns no data, THEN try WAQI
 3. If WAQI fails, THEN try OpenMeteo with coordinates
 4. NEVER skip AirQo for African locations - it has the best local coverage
 

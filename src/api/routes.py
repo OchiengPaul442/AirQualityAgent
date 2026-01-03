@@ -32,6 +32,7 @@ from src.services.agent_service import AgentService
 from src.services.airqo_service import AirQoService
 from src.services.openmeteo_service import OpenMeteoService
 from src.services.waqi_service import WAQIService
+from src.utils.security import ResponseFilter, validate_request_data
 
 router = APIRouter()
 settings = get_settings()
@@ -364,12 +365,19 @@ async def chat(
     MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB limit
 
     try:
-        # Rate limiting
-        client_ip = http_request.client.host if http_request.client else "unknown"
-        if not check_rate_limit(client_ip):
-            raise HTTPException(
-                status_code=429, detail="Rate limit exceeded. Please try again in a moment."
-            )
+        # Validate and sanitize input data
+        try:
+            request_data = {
+                'message': message,
+                'session_id': session_id,
+                'file': file
+            }
+            sanitized_data = validate_request_data(request_data)
+            message = sanitized_data['message']
+            session_id = sanitized_data['session_id']
+        except ValueError as e:
+            logger.warning(f"Input validation failed: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
 
         # Generate or use provided session ID
         session_id = session_id if session_id and session_id.strip() else str(uuid.uuid4())
@@ -464,6 +472,8 @@ async def chat(
         processing_time = time.time() - start_time
 
         final_response = sanitize_response(result["response"])
+        # Apply response filtering to hide implementation details
+        final_response = ResponseFilter.clean_response(final_response)
         tools_used = result.get("tools_used", [])
 
         # Add document processing tool to tools_used if document was processed
