@@ -456,21 +456,31 @@ class MarkdownFormatter:
                     # If no language specified, try to detect from content
                     if not code_language:
                         code_language = MarkdownFormatter._detect_code_language(code_block_lines)
-                    
+
                     # Clean up code content
                     cleaned_code = MarkdownFormatter._clean_code_content(code_block_lines)
-                    
-                    # Add opening fence with detected language
-                    formatted_lines.append(f'```{code_language}')
-                    
-                    # Add cleaned code lines
-                    formatted_lines.extend(cleaned_code)
-                    
-                    # Add closing fence
-                    formatted_lines.append('```')
-                    
-                    # Add blank line after code block for spacing
-                    formatted_lines.append('')
+
+                    # Decide whether this is actually code or just short text that was
+                    # accidentally wrapped in fences by the model. If it's short and
+                    # doesn't look like code, unwrap it to plain text to avoid ugly
+                    # code-block boxes in the UI.
+                    joined = "\n".join(cleaned_code).strip()
+                    looks_like_code = bool(code_language) or MarkdownFormatter._looks_like_code(joined)
+
+                    if not looks_like_code and len(joined) > 0 and len(joined) <= 80 and '\n' not in joined:
+                        # Treat as plain text (single short line) - don't use code fences
+                        formatted_lines.append(joined)
+                        # preserve a blank line for spacing
+                        formatted_lines.append('')
+                    else:
+                        # Add opening fence with detected language (may be empty)
+                        formatted_lines.append(f'```{code_language}')
+                        # Add cleaned code lines
+                        formatted_lines.extend(cleaned_code)
+                        # Add closing fence
+                        formatted_lines.append('```')
+                        # Add blank line after code block for spacing
+                        formatted_lines.append('')
                     
                     code_block_lines = []
                     code_language = ""
@@ -488,12 +498,18 @@ class MarkdownFormatter:
                 code_language = MarkdownFormatter._detect_code_language(code_block_lines)
             
             cleaned_code = MarkdownFormatter._clean_code_content(code_block_lines)
-            
-            # Add opening fence with detected language
-            formatted_lines.append(f'```{code_language}')
-            formatted_lines.extend(cleaned_code)
-            formatted_lines.append('```')
-            formatted_lines.append('')
+            # Decide whether to unwrap (same logic as above)
+            joined = "\n".join(cleaned_code).strip()
+            looks_like_code = bool(code_language) or MarkdownFormatter._looks_like_code(joined)
+
+            if not looks_like_code and len(joined) > 0 and len(joined) <= 80 and '\n' not in joined:
+                formatted_lines.append(joined)
+                formatted_lines.append('')
+            else:
+                formatted_lines.append(f'```{code_language}')
+                formatted_lines.extend(cleaned_code)
+                formatted_lines.append('```')
+                formatted_lines.append('')
 
         return '\n'.join(formatted_lines)
 
@@ -548,6 +564,25 @@ class MarkdownFormatter:
             return max(language_scores, key=language_scores.get)
         
         return ""
+
+    @staticmethod
+    def _looks_like_code(text: str) -> bool:
+        """
+        Heuristic to decide if a short piece of text looks like code.
+        Returns True if it contains characters or patterns common in code.
+        """
+        if not text:
+            return False
+
+        # Common code indicators: semicolons, parentheses, equals, arrows, braces, keywords
+        code_indicators = [";", "()", "={", "=>", "->", "import ", "def ", "class ", "console.log", "{", "}", "function ", "print(", "printf(", "$", "<", ">", '"', "'"]
+        score = sum(1 for pat in code_indicators if pat in text)
+
+        # Also detect JSON-like or key:value patterns
+        if re.search(r"\"\w+\"\s*:\s*", text):
+            score += 2
+
+        return score >= 1
 
     @staticmethod
     def _clean_code_content(code_lines: List[str]) -> List[str]:
