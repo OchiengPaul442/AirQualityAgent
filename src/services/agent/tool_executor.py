@@ -26,6 +26,7 @@ class ToolExecutor:
         search_service,
         scraper,
         document_scanner,
+        geocoding_service,
     ):
         """
         Initialize tool executor with service instances.
@@ -41,6 +42,7 @@ class ToolExecutor:
             search_service: Web search service
             scraper: Web scraper
             document_scanner: Document scanner
+            geocoding_service: Geocoding service
         """
         self.waqi = waqi_service
         self.airqo = airqo_service
@@ -52,6 +54,9 @@ class ToolExecutor:
         self.search = search_service
         self.scraper = scraper
         self.document_scanner = document_scanner
+        self.geocoding = geocoding_service
+        self.client_ip = None  # Will be set by agent service
+        self.client_location = None  # Will be set by agent service (GPS data)
 
     def execute(self, function_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """
@@ -264,6 +269,82 @@ class ToolExecutor:
                 if not file_path:
                     return {"error": "file_path parameter is required"}
                 return self.document_scanner.scan_file(file_path)
+
+            # Geocoding tools
+            elif function_name == "geocode_address":
+                return self.geocoding.geocode_address(args.get("address"), args.get("limit", 1))
+
+            elif function_name == "reverse_geocode":
+                return self.geocoding.reverse_geocode(args.get("latitude"), args.get("longitude"))
+
+            elif function_name == "get_location_from_ip":
+                # Check if we have GPS coordinates first (preferred over IP)
+                if self.client_location and self.client_location.get("source") == "gps":
+                    # Use GPS coordinates directly
+                    latitude = self.client_location["latitude"]
+                    longitude = self.client_location["longitude"]
+                    
+                    # Get location name using reverse geocoding
+                    reverse_result = self.geocoding.reverse_geocode(latitude, longitude)
+                    if reverse_result.get("success"):
+                        location_name = reverse_result.get("display_name", "Unknown location")
+                        city = reverse_result.get("address", {}).get("city", "Unknown city")
+                    else:
+                        location_name = f"{latitude:.4f}, {longitude:.4f}"
+                        city = "Unknown city"
+                    
+                    # Automatically call air quality API with GPS coordinates
+                    air_quality_result = self.openmeteo.get_current_air_quality(
+                        latitude=latitude,
+                        longitude=longitude,
+                        timezone="auto"
+                    )
+                    
+                    combined_result = {
+                        "success": True,
+                        "message": "Location determined from GPS coordinates (precise)",
+                        "location": {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "city": city,
+                            "display_name": location_name,
+                            "source": "gps",
+                            "accuracy": "precise"
+                        },
+                        "air_quality": air_quality_result
+                    }
+                    return combined_result
+                else:
+                    # Fall back to IP geolocation
+                    location_result = self.geocoding.get_location_from_ip(self.client_ip)
+                    # If location retrieval succeeds, automatically get air quality for those coordinates
+                    if location_result.get("success") and location_result.get("latitude") and location_result.get("longitude"):
+                        logger.info(f"Location retrieved from IP: {location_result.get('latitude')}, {location_result.get('longitude')}")
+                        # Automatically call air quality API with the coordinates
+                        air_quality_result = self.openmeteo.get_current_air_quality(
+                            latitude=location_result["latitude"],
+                            longitude=location_result["longitude"],
+                            timezone="auto"
+                        )
+                        # Combine the results
+                        combined_result = {
+                            "success": True,
+                            "message": "Location and air quality data retrieved from IP address (approximate)",
+                            "location": {
+                                "latitude": location_result["latitude"],
+                                "longitude": location_result["longitude"],
+                                "country": location_result.get("country_name"),
+                                "city": location_result.get("city"),
+                                "region": location_result.get("region"),
+                                "source": "ip",
+                                "accuracy": "approximate"
+                            },
+                            "air_quality": air_quality_result
+                        }
+                        return combined_result
+                    else:
+                        # Location retrieval failed, return the error
+                        return location_result
 
             else:
                 return {

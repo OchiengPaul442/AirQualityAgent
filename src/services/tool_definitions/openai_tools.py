@@ -535,6 +535,71 @@ def get_document_tools() -> list[dict]:
     ]
 
 
+def get_geocoding_tools() -> list[dict]:
+    """Get geocoding tool definitions."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "geocode_address",
+                "description": "Convert an address or location name to geographic coordinates (latitude/longitude). Use this to find coordinates for cities, addresses, or landmarks. Essential for air quality queries that need precise location data.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "address": {
+                            "type": "string",
+                            "description": "The address, city, or location name to geocode (e.g., 'London, UK', '1600 Pennsylvania Avenue, Washington DC')",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results to return (default: 1)",
+                        },
+                    },
+                    "required": ["address"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "reverse_geocode",
+                "description": "Convert geographic coordinates (latitude/longitude) to a human-readable address. Use this to identify the location name for given coordinates.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "latitude": {
+                            "type": "number",
+                            "description": "Latitude coordinate (e.g., 51.5074 for London)",
+                        },
+                        "longitude": {
+                            "type": "number",
+                            "description": "Longitude coordinate (e.g., -0.1278 for London)",
+                        },
+                    },
+                    "required": ["latitude", "longitude"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_location_from_ip",
+                "description": "Get approximate location information from an IP address. Use this as a fallback when user location is needed but not provided. Note: IP geolocation is approximate and may not reflect the user's actual current location.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ip_address": {
+                            "type": "string",
+                            "description": "IP address to geolocate (optional - uses request IP if not provided)",
+                        },
+                    },
+                    "required": [],
+                },
+            },
+        },
+    ]
+
+
 def get_all_tools() -> list[dict]:
     """
     Get all tool definitions for OpenAI.
@@ -553,4 +618,5 @@ def get_all_tools() -> list[dict]:
     all_tools.extend(get_defra_tools())
     all_tools.extend(get_uba_tools())
     all_tools.extend(get_document_tools())
+    all_tools.extend(get_geocoding_tools())
     return all_tools

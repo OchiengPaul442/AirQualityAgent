@@ -464,6 +464,64 @@ def get_document_tools() -> types.Tool:
     )
 
 
+def get_geocoding_tools() -> types.Tool:
+    """Get geocoding tool definitions."""
+    return types.Tool(
+        function_declarations=[
+            types.FunctionDeclaration(
+                name="geocode_address",
+                description="Convert an address or location name to geographic coordinates (latitude/longitude). Use this to find coordinates for cities, addresses, or landmarks. Essential for air quality queries that need precise location data.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "address": types.Schema(
+                            type=types.Type.STRING,
+                            description="The address, city, or location name to geocode (e.g., 'London, UK', '1600 Pennsylvania Avenue, Washington DC')",
+                        ),
+                        "limit": types.Schema(
+                            type=types.Type.INTEGER,
+                            description="Maximum number of results to return (default: 1)",
+                        ),
+                    },
+                    required=["address"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="reverse_geocode",
+                description="Convert geographic coordinates (latitude/longitude) to a human-readable address. Use this to identify the location name for given coordinates.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "latitude": types.Schema(
+                            type=types.Type.NUMBER,
+                            description="Latitude coordinate (e.g., 51.5074 for London)",
+                        ),
+                        "longitude": types.Schema(
+                            type=types.Type.NUMBER,
+                            description="Longitude coordinate (e.g., -0.1278 for London)",
+                        ),
+                    },
+                    required=["latitude", "longitude"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="get_location_from_ip",
+                description="Get approximate location information from an IP address. Use this as a fallback when user location is needed but not provided. Note: IP geolocation is approximate and may not reflect the user's actual current location.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "ip_address": types.Schema(
+                            type=types.Type.STRING,
+                            description="IP address to geolocate (optional - uses request IP if not provided)",
+                        ),
+                    },
+                    required=[],
+                ),
+            ),
+        ]
+    )
+
+
 def get_all_tools() -> list[types.Tool]:
     """
     Get all tool definitions for Gemini.
@@ -482,4 +540,5 @@ def get_all_tools() -> list[types.Tool]:
         get_defra_tools(),
         get_uba_tools(),
         get_document_tools(),
+        get_geocoding_tools(),
     ]

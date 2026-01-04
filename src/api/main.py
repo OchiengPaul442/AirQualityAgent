@@ -5,14 +5,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.api.error_handlers import register_error_handlers
 from src.api.routes import router
 from src.config import get_settings
 from src.db.database import Base, engine, ensure_database_directory
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
@@ -87,6 +87,12 @@ async def add_security_headers(request, call_next):
 register_error_handlers(app)
 
 app.include_router(router, prefix=settings.API_V1_STR)
+
+
+@app.get("/")
+async def serve_frontend():
+    """Serve the frontend HTML file."""
+    return FileResponse("frontend.html", media_type="text/html")
 
 
 @app.get("/health")

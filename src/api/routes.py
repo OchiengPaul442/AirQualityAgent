@@ -303,10 +303,12 @@ async def chat(
         None, description="Optional session ID for conversation continuity"
     ),
     file: UploadFile | None = File(None, description="Optional file upload (PDF, CSV, Excel)"),
+    latitude: float | None = Form(None, description="Optional GPS latitude for location-based queries"),
+    longitude: float | None = Form(None, description="Optional GPS longitude for location-based queries"),
     db: Session = Depends(get_db),
 ):
     """
-    Chat with the Air Quality AI Agent with optional document upload.
+    Chat with the Air Quality AI Agent with optional document upload and GPS location.
     
     **Session Management:**
     - All conversations are automatically saved to the database
@@ -321,12 +323,20 @@ async def chat(
     - Files processed in memory (not saved to disk)
     - Agent analyzes document and responds to your query
     
+    **GPS Location (Optional):**
+    - Provide latitude and longitude for precise location-based air quality queries
+    - If provided, takes precedence over IP-based geolocation
+    - Enables accurate local air quality data instead of approximate IP-based location
+    - Frontend should request browser geolocation permission when user asks about "my location"
+    
     **Request Format:**
     - Content-Type: multipart/form-data
     - Fields:
       - message (required): Your question or instruction
       - session_id (optional): Session ID from previous chat
       - file (optional): Document file to analyze
+      - latitude (optional): GPS latitude (-90 to 90)
+      - longitude (optional): GPS longitude (-180 to 180)
     
     **IMPORTANT - Session Persistence:**
     - The agent references previous messages in the session for context-aware responses
@@ -461,12 +471,48 @@ async def chat(
             {"role": str(m.role), "content": str(m.content)} for m in history_objs
         ]
 
+        # Add GPS context to history if available
+        if latitude is not None and longitude is not None:
+            gps_context = f"SYSTEM: GPS coordinates are available ({latitude:.4f}, {longitude:.4f}). The user has already consented to location sharing by providing GPS data. Use get_location_from_ip tool immediately for air quality data."
+            history.insert(0, {"role": "system", "content": gps_context})
+            logger.info(f"Added GPS context to conversation history: {gps_context}")
+
         # Save user message to database AFTER getting history
         try:
             add_message(db, session_id, "user", message)
         except Exception as db_error:
             logger.error(f"Failed to save user message to database: {db_error}")
             # Continue processing even if db save fails
+
+        # Modify message if GPS is available and user is asking about location
+        original_message = message
+        if latitude is not None and longitude is not None:
+            # Check if message is about current location
+            location_keywords = ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local']
+            if any(keyword in message.lower() for keyword in location_keywords):
+                message = f"Get air quality data for GPS coordinates {latitude:.4f}, {longitude:.4f} (user has already consented by providing GPS data)"
+                logger.info(f"Modified location query with GPS coordinates: '{original_message}' -> '{message}'")
+
+        # Prepare location data - prefer GPS over IP
+        location_data = None
+        client_ip = http_request.client.host if http_request.client else None
+        if latitude is not None and longitude is not None:
+            # Validate GPS coordinates
+            if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+                location_data = {
+                    "source": "gps",
+                    "latitude": latitude,
+                    "longitude": longitude
+                }
+                logger.info(f"Using GPS coordinates: {latitude}, {longitude}")
+            else:
+                logger.warning(f"Invalid GPS coordinates provided: {latitude}, {longitude}")
+        elif client_ip:
+            location_data = {
+                "source": "ip",
+                "ip_address": client_ip
+            }
+            logger.info(f"Using IP address for location: {client_ip}")
 
         # Initialize Agent Service
         agent = get_agent()
@@ -479,7 +525,9 @@ async def chat(
             document_data=document_data,
             style=settings.AI_RESPONSE_STYLE,
             temperature=settings.AI_RESPONSE_TEMPERATURE,
-            top_p=settings.AI_RESPONSE_TOP_P
+            top_p=settings.AI_RESPONSE_TOP_P,
+            client_ip=client_ip,
+            location_data=location_data
         )
         processing_time = time.time() - start_time
 

@@ -22,6 +22,7 @@ from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
 from src.services.carbon_intensity_service import CarbonIntensityService
 from src.services.defra_service import DefraService
+from src.services.geocoding_service import GeocodingService
 from src.services.openmeteo_service import OpenMeteoService
 from src.services.prompts.system_instructions import get_response_parameters, get_system_instruction
 from src.services.providers.base_provider import BaseAIProvider
@@ -70,6 +71,7 @@ class AgentService:
         self.scraper = RobustScraper()  # Always enabled for web scraping
         self.search = SearchService()  # Always enabled for web search
         self.document_scanner = DocumentScanner()  # Always enabled for document processing
+        self.geocoding = GeocodingService()  # Always enabled for location services
 
         # Initialize tool executor with available services
         self.tool_executor = ToolExecutor(
@@ -83,6 +85,7 @@ class AgentService:
             self.search,
             self.scraper,
             self.document_scanner,
+            self.geocoding,
         )
 
         # Initialize cost tracker
@@ -239,6 +242,8 @@ class AgentService:
         style: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        client_ip: str | None = None,
+        location_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process a user message and generate a response.
@@ -257,6 +262,10 @@ class AgentService:
             style: Response style preset (default: "general")
             temperature: Temperature override (default: from style)
             top_p: Top-p override (default: from style)
+            client_ip: Client IP address for location services (fallback)
+            location_data: GPS or IP location data with format:
+                {"source": "gps", "latitude": float, "longitude": float} or
+                {"source": "ip", "ip_address": str}
 
         Returns:
             Dict containing:
@@ -267,15 +276,65 @@ class AgentService:
         """
         history = history or []
 
-        # Handle simple appreciation messages
-        if self._is_appreciation_message(message):
-            logger.info("Appreciation message detected, sending simple response")
-            return {
-                "response": "You're welcome! Let me know if you need anything else.",
-                "tokens_used": 0,
-                "cost_estimate": 0.0,
-                "cached": False,
-            }
+        # Check for GPS-based location queries
+        if location_data and location_data.get("source") == "gps":
+            location_keywords = ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local']
+            if any(keyword in message.lower() for keyword in location_keywords):
+                logger.info(f"GPS location query detected, providing direct air quality data for coordinates: {location_data['latitude']}, {location_data['longitude']}")
+                
+                # Get air quality data directly
+                from src.services.openmeteo_service import OpenMeteoService
+                openmeteo = OpenMeteoService()
+                air_quality_result = openmeteo.get_current_air_quality(
+                    latitude=location_data["latitude"],
+                    longitude=location_data["longitude"],
+                    timezone="auto"
+                )
+                
+                # Get location name
+                from src.services.geocoding_service import GeocodingService
+                geocoding = GeocodingService()
+                reverse_result = geocoding.reverse_geocode(location_data["latitude"], location_data["longitude"])
+                location_name = "your current location"
+                if reverse_result.get("success"):
+                    city = reverse_result.get("address", {}).get("city", "")
+                    if city:
+                        location_name = city
+                
+                # Format response
+                if "current" in air_quality_result and air_quality_result["current"]:
+                    response_text = f"# Air Quality at {location_name}\n\n"
+                    response_text += f"**Location**: {location_data['latitude']:.4f}, {location_data['longitude']:.4f} (precise GPS)\n\n"
+                    
+                    # Add air quality data
+                    current = air_quality_result["current"]
+                    response_text += "## Current Air Quality\n\n"
+                    response_text += "| Parameter | Value | Status |\n"
+                    response_text += "|-----------|-------|--------|\n"
+                    
+                    if "us_aqi" in current:
+                        us_aqi = current["us_aqi"]
+                        status = "Good" if us_aqi <= 50 else "Moderate" if us_aqi <= 100 else "Unhealthy"
+                        response_text += f"| US AQI | {us_aqi} | {status} |\n"
+                    
+                    if "pm2_5" in current:
+                        pm25 = current["pm2_5"]
+                        response_text += f"| PM2.5 | {pm25} µg/m³ | |\n"
+                    
+                    if "pm10" in current:
+                        pm10 = current["pm10"]
+                        response_text += f"| PM10 | {pm10} µg/m³ | |\n"
+                    
+                    response_text += "\n*Data provided with precise GPS coordinates for accurate local air quality information.*"
+                else:
+                    response_text = f"I couldn't retrieve air quality data for your current location ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). Please try again or specify a different location."
+                
+                return {
+                    "response": response_text,
+                    "tokens_used": 0,
+                    "cost_estimate": 0.0,
+                    "cached": False,
+                }
 
         # Check cost limits
         within_limits, error_msg = self.cost_tracker.check_limits()
@@ -307,9 +366,13 @@ class AgentService:
         response_params = get_response_parameters(style or "general", temperature, top_p)
 
         # Get system instruction with document context (pass history for new doc detection)
+        location_context = ""
+        if location_data and location_data.get("source") == "gps":
+            location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
+
         system_instruction = get_system_instruction(
             style=style or "general",
-            custom_suffix=self._build_document_context(document_data, history),
+            custom_suffix=self._build_document_context(document_data, history) + location_context,
         )
         
         # Log if document context was added
@@ -319,6 +382,25 @@ class AgentService:
             if has_previous:
                 logger.info(f"NEW document uploaded in existing session - replacing previous document(s)")
             logger.info(f"Document context added to system instruction: {doc_context_length} chars for {len(document_data)} document(s)")
+
+        # Set location data for geocoding services (GPS takes precedence over IP)
+        if location_data:
+            if location_data.get("source") == "gps":
+                self.tool_executor.client_location = {
+                    "source": "gps",
+                    "latitude": location_data["latitude"],
+                    "longitude": location_data["longitude"]
+                }
+                logger.info(f"Set GPS location for tool executor: {location_data['latitude']}, {location_data['longitude']}")
+            elif location_data.get("source") == "ip":
+                self.tool_executor.client_ip = location_data["ip_address"]
+                self.tool_executor.client_location = None  # Clear GPS if IP is used
+                logger.info(f"Set IP location for tool executor: {location_data['ip_address']}")
+        elif client_ip:
+            # Fallback to IP if no location_data provided
+            self.tool_executor.client_ip = client_ip
+            self.tool_executor.client_location = None
+            logger.info(f"Set IP location for tool executor (fallback): {client_ip}")
 
         # Process with provider
         try:
