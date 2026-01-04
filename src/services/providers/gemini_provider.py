@@ -108,14 +108,51 @@ class GeminiProvider(BaseAIProvider):
         if effective_max_tokens is not None:
             config_params["max_output_tokens"] = effective_max_tokens
 
-        chat = self.client.chats.create(
-            model=self.settings.AI_MODEL,
-            config=types.GenerateContentConfig(**config_params),
-            history=chat_history,
-        )
+        # Retry configuration for network resilience
+        max_retries = 3
+        base_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                chat = self.client.chats.create(
+                    model=self.settings.AI_MODEL,
+                    config=types.GenerateContentConfig(**config_params),
+                    history=chat_history,
+                )
 
-        # Send message
-        response = chat.send_message(message)
+                # Send message
+                response = chat.send_message(message)
+                break  # Success, exit retry loop
+            except Exception as e:
+                logger.error(f"Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    import time
+                    time.sleep(delay)
+                else:
+                    error_msg = str(e)
+                    if "connection" in error_msg.lower() or "network" in error_msg.lower():
+                        return {
+                            "response": "I'm having trouble connecting to the AI service. Please check your internet connection and try again.",
+                            "tools_used": [],
+                        }
+                    elif "timeout" in error_msg.lower():
+                        return {
+                            "response": "The AI service is taking too long to respond. Please try again with a simpler question.",
+                            "tools_used": [],
+                        }
+                    elif "quota" in error_msg.lower() or "rate" in error_msg.lower():
+                        return {
+                            "response": "The AI service is currently experiencing high demand. Please wait a moment and try again.",
+                            "tools_used": [],
+                        }
+                    else:
+                        return {
+                            "response": f"I encountered an error: {error_msg}. Please try again.",
+                            "tools_used": [],
+                        }
+        
         tools_used: list[str] = []
 
         # Handle function calls
@@ -280,7 +317,7 @@ class GeminiProvider(BaseAIProvider):
         return results
 
     def _clean_response(self, content: str) -> str:
-        """Clean response content."""
+        """Clean response content while preserving markdown structure."""
         if not content:
             return ""
 
@@ -289,53 +326,76 @@ class GeminiProvider(BaseAIProvider):
         # Remove HTML tags
         content = re.sub(r'<[^>]+>', '', content)
 
-        # Remove code markers
+        # Remove code markers ONLY if they're not part of proper code blocks
         unwanted_patterns = [
             "```markdown\n",
-            "\n```",
             "```md\n",
             "```text\n",
-            "```\n",
-            "```",
         ]
 
         for pattern in unwanted_patterns:
-            content = content.replace(pattern, "")
+            content = content.replace(pattern, "```\n")
 
-        # Fix common Markdown issues
-        # Ensure tables have proper separators
+        # Ensure proper spacing after markdown elements
         lines = content.split('\n')
         cleaned_lines = []
+        prev_was_header = False
+        prev_was_list = False
         in_table = False
         table_header_count = 0
 
         for i, line in enumerate(lines):
             stripped = line.strip()
             
+            # Check for headers
+            is_header = stripped.startswith('#') and ' ' in stripped[:7]
+            
+            # Check for list items
+            is_list = bool(re.match(r'^[\s]*[-*+]\s', line) or re.match(r'^[\s]*\d+\.\s', line))
+            
             # Check if this is a table row
-            if '|' in stripped and stripped.startswith('|') and stripped.endswith('|'):
+            is_table_row = '|' in stripped and stripped.startswith('|') and stripped.endswith('|')
+            
+            if is_table_row:
                 if not in_table:
+                    # Starting a table - ensure blank line before
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
                     in_table = True
-                    table_header_count = stripped.count('|') - 1  # Number of columns
+                    table_header_count = stripped.count('|') - 1
                     cleaned_lines.append(line)
                 else:
                     current_count = stripped.count('|') - 1
                     if current_count == table_header_count:
                         cleaned_lines.append(line)
                     else:
-                        # Skip malformed table rows
                         logger.warning(f"Skipping malformed table row: {stripped}")
                         continue
             else:
-                if in_table and stripped and not stripped.startswith('|'):
-                    # End of table
+                if in_table and stripped:
+                    # End of table - ensure blank line after
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
                     in_table = False
+                
+                # Ensure proper spacing after headers
+                if prev_was_header and stripped and not is_header:
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
+                
+                # Ensure proper spacing before headers
+                if is_header and cleaned_lines and cleaned_lines[-1].strip():
+                    if not prev_was_list:
+                        cleaned_lines.append('')
+                
                 cleaned_lines.append(line)
+                prev_was_header = is_header
+                prev_was_list = is_list
 
         content = '\n'.join(cleaned_lines)
 
         # Ensure proper spacing in tables
         content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
-        content = re.sub(r'\| +\|', r'| |', content)  # Remove extra spaces in empty cells
+        content = re.sub(r'\| +\|', r'| |', content)
 
         return content.strip()

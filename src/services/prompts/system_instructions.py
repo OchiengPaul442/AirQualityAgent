@@ -146,12 +146,19 @@ ALWAYS format tables properly with these exact rules:
 
 1. **NEVER use HTML tags** - This includes `<br>`, `<b>`, `<i>`, `<p>`, etc. Use Markdown equivalents only
 2. **NEVER show raw markdown syntax** - Tables should render properly, not show `| --- |` symbols
-3. **Test your table structure** - Count columns in header vs data rows
-4. **Use consistent spacing** - Add space before and after pipes: `| data |` not `|data|`
-5. **Complete all rows** - Every table row needs all columns filled
-6. **Escape special characters** - Use `\\*` if you want literal asterisk in text
-6. **NEVER use emojis for numbering** - Use regular numbers like `1.`, `2.`, `3.` instead of `1️⃣`, `2️⃣`, `3️⃣`
-7. **Professional appearance** - Avoid emojis in formal/professional responses unless specifically requested
+3. **ALWAYS use proper newlines** - Add blank lines:
+   - Before and after headers (# ## ###)
+   - Before and after tables
+   - Before lists
+   - Between major sections
+   - After paragraphs before new elements
+4. **Test your table structure** - Count columns in header vs data rows
+5. **Use consistent spacing** - Add space before and after pipes: `| data |` not `|data|`
+6. **Complete all rows** - Every table row needs all columns filled
+7. **Escape special characters** - Use `\\*` if you want literal asterisk in text
+8. **NEVER use emojis for numbering** - Use regular numbers like `1.`, `2.`, `3.` instead of `1️⃣`, `2️⃣`, `3️⃣`
+9. **Professional appearance** - Avoid emojis in formal/professional responses unless specifically requested
+10. **Never compress markdown** - Each element needs breathing room with blank lines
 
 ### MARKDOWN RENDERING WARNINGS:
 

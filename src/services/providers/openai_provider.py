@@ -91,19 +91,68 @@ class OpenAIProvider(BaseAIProvider):
 
         tools_used: list[str] = []
 
-        # Create completion
-        # Use higher max_tokens when tools are available (responses tend to be longer)
-        effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
+        # Retry configuration for network resilience
+        max_retries = 3
+        base_delay = 1  # seconds
         
-        response = self.client.chat.completions.create(
-            model=self.settings.AI_MODEL,
-            messages=messages,
-            tools=self.get_tool_definitions(),
-            tool_choice="auto",
-            max_tokens=effective_max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-        )
+        for attempt in range(max_retries):
+            try:
+                # Create completion
+                # Use higher max_tokens when tools are available (responses tend to be longer)
+                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
+                
+                response = self.client.chat.completions.create(
+                    model=self.settings.AI_MODEL,
+                    messages=messages,
+                    tools=self.get_tool_definitions(),
+                    tool_choice="auto",
+                    max_tokens=effective_max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                )
+                break  # Success, exit retry loop
+            except openai.APIConnectionError as e:
+                logger.error(f"API connection error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    logger.info(f"Retrying in {delay} seconds...")
+                    import time
+                    time.sleep(delay)
+                else:
+                    return {
+                        "response": "I'm having trouble connecting to the AI service. Please check your internet connection and try again in a moment.",
+                        "tools_used": [],
+                    }
+            except openai.APITimeoutError as e:
+                logger.error(f"API timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    import time
+                    time.sleep(delay)
+                else:
+                    return {
+                        "response": "The AI service is taking too long to respond. Please try again with a simpler question or check back in a moment.",
+                        "tools_used": [],
+                    }
+            except openai.RateLimitError as e:
+                logger.error(f"Rate limit exceeded: {e}")
+                return {
+                    "response": "The AI service is currently experiencing high demand. Please wait a moment and try again.",
+                    "tools_used": [],
+                }
+            except Exception as e:
+                logger.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    import time
+                    time.sleep(delay)
+                else:
+                    return {
+                        "response": f"I encountered an unexpected error: {str(e)}. Please try again.",
+                        "tools_used": [],
+                    }
 
         # Handle tool calls
         if response.choices[0].message.tool_calls:
@@ -151,33 +200,45 @@ class OpenAIProvider(BaseAIProvider):
                     }
                 )
 
-            # Get final response
-            try:
-                final_response = self.client.chat.completions.create(
-                    model=self.settings.AI_MODEL,
-                    messages=messages,
-                    max_tokens=effective_max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                )
-                response_text = final_response.choices[0].message.content
-                finish_reason = final_response.choices[0].finish_reason
-                logger.info(
-                    f"Final response received. Length: {len(response_text) if response_text else 0}, Finish reason: {finish_reason}"
-                )
-                
-                # Check if response was truncated due to length limit
-                if finish_reason == "length":
-                    logger.warning("Response was truncated due to max_tokens limit")
-                    response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
-                
-                response_text = self._clean_response(response_text)
-            except Exception as e:
-                logger.error(f"Final API call failed: {e}")
-                return {
-                    "response": f"I executed the tools successfully but encountered an error generating the final response: {str(e)}",
-                    "tools_used": tools_used,
-                }
+            # Get final response with retry logic
+            for attempt in range(3):  # 3 attempts
+                try:
+                    final_response = self.client.chat.completions.create(
+                        model=self.settings.AI_MODEL,
+                        messages=messages,
+                        max_tokens=effective_max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                    )
+                    response_text = final_response.choices[0].message.content
+                    finish_reason = final_response.choices[0].finish_reason
+                    logger.info(
+                        f"Final response received. Length: {len(response_text) if response_text else 0}, Finish reason: {finish_reason}"
+                    )
+                    
+                    # Check if response was truncated due to length limit
+                    if finish_reason == "length":
+                        logger.warning("Response was truncated due to max_tokens limit")
+                        response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
+                    
+                    response_text = self._clean_response(response_text)
+                    break  # Success, exit retry loop
+                except (openai.APIConnectionError, openai.APITimeoutError) as e:
+                    logger.error(f"Final API call error (attempt {attempt + 1}/3): {e}")
+                    if attempt < 2:
+                        import time
+                        time.sleep(1 * (2 ** attempt))  # Exponential backoff
+                    else:
+                        return {
+                            "response": "I successfully gathered the information but encountered a network error generating the response. Please try asking again.",
+                            "tools_used": tools_used,
+                        }
+                except Exception as e:
+                    logger.error(f"Final API call failed: {e}")
+                    return {
+                        "response": f"I executed the tools successfully but encountered an error generating the final response: {str(e)}",
+                        "tools_used": tools_used,
+                    }
         else:
             response_text = response.choices[0].message.content
             finish_reason = response.choices[0].finish_reason
@@ -292,7 +353,7 @@ class OpenAIProvider(BaseAIProvider):
         return results
 
     def _clean_response(self, content: str) -> str:
-        """Clean response content."""
+        """Clean response content while preserving markdown structure."""
         if not content:
             return ""
 
@@ -301,54 +362,78 @@ class OpenAIProvider(BaseAIProvider):
         # Remove HTML tags
         content = re.sub(r'<[^>]+>', '', content)
 
-        # Remove code markers
+        # Remove code markers ONLY if they're not part of proper code blocks
+        # Keep proper code blocks intact
         unwanted_patterns = [
             "```markdown\n",
-            "\n```",
             "```md\n",
             "```text\n",
-            "```\n",
-            "```",
         ]
 
         for pattern in unwanted_patterns:
-            content = content.replace(pattern, "")
+            content = content.replace(pattern, "```\n")
 
-        # Fix common Markdown issues
-        # Ensure tables have proper separators
+        # Ensure proper spacing after markdown elements
         lines = content.split('\n')
         cleaned_lines = []
+        prev_was_header = False
+        prev_was_list = False
         in_table = False
         table_header_count = 0
 
         for i, line in enumerate(lines):
             stripped = line.strip()
             
+            # Check for headers
+            is_header = stripped.startswith('#') and ' ' in stripped[:7]
+            
+            # Check for list items
+            is_list = bool(re.match(r'^[\s]*[-*+]\s', line) or re.match(r'^[\s]*\d+\.\s', line))
+            
             # Check if this is a table row
-            if '|' in stripped and stripped.startswith('|') and stripped.endswith('|'):
+            is_table_row = '|' in stripped and stripped.startswith('|') and stripped.endswith('|')
+            
+            if is_table_row:
                 if not in_table:
+                    # Starting a table - ensure blank line before if previous line has content
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
                     in_table = True
-                    table_header_count = stripped.count('|') - 1  # Number of columns
+                    table_header_count = stripped.count('|') - 1
                     cleaned_lines.append(line)
                 else:
                     current_count = stripped.count('|') - 1
                     if current_count == table_header_count:
                         cleaned_lines.append(line)
                     else:
-                        # Skip malformed table rows
                         logger.warning(f"Skipping malformed table row: {stripped}")
                         continue
             else:
-                if in_table and stripped and not stripped.startswith('|'):
-                    # End of table
+                if in_table and stripped:
+                    # End of table - ensure blank line after
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
                     in_table = False
+                
+                # Ensure proper spacing after headers
+                if prev_was_header and stripped and not is_header:
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
+                
+                # Ensure proper spacing before headers
+                if is_header and cleaned_lines and cleaned_lines[-1].strip():
+                    if not prev_was_list:  # Don't add space if previous was a list
+                        cleaned_lines.append('')
+                
                 cleaned_lines.append(line)
+                prev_was_header = is_header
+                prev_was_list = is_list
 
         content = '\n'.join(cleaned_lines)
 
         # Ensure proper spacing in tables
         content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
-        content = re.sub(r'\| +\|', r'| |', content)  # Remove extra spaces in empty cells
+        content = re.sub(r'\| +\|', r'| |', content)
 
         return content.strip()
 

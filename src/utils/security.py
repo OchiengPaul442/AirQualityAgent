@@ -218,13 +218,20 @@ class ResponseFilter:
                 flags=re.IGNORECASE
             )
 
-        # Clean up any resulting awkward phrasing
-        response = re.sub(r'\s+', ' ', response)  # Multiple spaces
-        response = re.sub(r'\s*\.\s*\.', '.', response)  # Double periods
-        response = re.sub(r'\s*,\s*,', ',', response)  # Double commas
-        response = response.strip()
-
-        return response
+        # Clean up any resulting awkward phrasing BUT PRESERVE NEWLINES
+        # Split by lines first to preserve markdown structure
+        lines = response.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Only collapse multiple spaces within a line, NOT newlines
+            line = re.sub(r'  +', ' ', line)  # Multiple spaces (not single space)
+            line = re.sub(r'\s*\.\s*\.', '.', line)  # Double periods
+            line = re.sub(r'\s*,\s*,', ',', line)  # Double commas
+            cleaned_lines.append(line.strip())
+        
+        # Rejoin with newlines to preserve markdown structure
+        response = '\n'.join(cleaned_lines)
+        return response.strip()
 
     @staticmethod
     def sanitize_for_display(data: Any) -> Any:

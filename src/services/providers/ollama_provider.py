@@ -75,27 +75,57 @@ class OllamaProvider(BaseAIProvider):
 
         tools_used = []
 
-        try:
-            # Call Ollama with tools
-            options = {
-                "temperature": temperature,
-                "top_p": top_p,
-            }
+        # Retry configuration for network resilience
+        max_retries = 3
+        base_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                # Call Ollama with tools
+                options = {
+                    "temperature": temperature,
+                    "top_p": top_p,
+                }
 
-            # Add optional parameters if provided
-            if top_k is not None:
-                options["top_k"] = top_k
-            # Use higher max_tokens when tools are available
-            effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
-            if effective_max_tokens is not None:
-                options["num_predict"] = effective_max_tokens
+                # Add optional parameters if provided
+                if top_k is not None:
+                    options["top_k"] = top_k
+                # Use higher max_tokens when tools are available
+                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
+                if effective_max_tokens is not None:
+                    options["num_predict"] = effective_max_tokens
 
-            response = ollama.chat(
-                model=self.settings.AI_MODEL,
-                messages=messages,
-                tools=self.get_tool_definitions(),
-                options=options,
-            )
+                response = ollama.chat(
+                    model=self.settings.AI_MODEL,
+                    messages=messages,
+                    tools=self.get_tool_definitions(),
+                    options=options,
+                )
+                break  # Success, exit retry loop
+            except Exception as e:
+                logger.error(f"Ollama error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    import time
+                    time.sleep(delay)
+                else:
+                    error_msg = str(e)
+                    if "connection" in error_msg.lower():
+                        return {
+                            "response": "Unable to connect to the local Ollama service. Please ensure Ollama is running.",
+                            "tools_used": [],
+                        }
+                    elif "model" in error_msg.lower():
+                        return {
+                            "response": f"The requested model '{self.settings.AI_MODEL}' is not available in Ollama. Please pull the model first.",
+                            "tools_used": [],
+                        }
+                    else:
+                        return {
+                            "response": f"Ollama error: {error_msg}. Please check your Ollama installation.",
+                            "tools_used": [],
+                        }
 
             # Handle tool calls
             if response.get("message", {}).get("tool_calls"):
@@ -148,16 +178,9 @@ class OllamaProvider(BaseAIProvider):
                 "tools_used": tools_used,
             }
 
-        except Exception as e:
-            logger.error(f"Ollama processing failed: {e}")
-            return {
-                "response": f"I encountered an error processing your request: {str(e)}",
-                "tools_used": tools_used,
-            }
-
     def _clean_response(self, content: str) -> str:
         """
-        Clean response content from Ollama.
+        Clean response content from Ollama while preserving markdown structure.
 
         Removes code markers and unwanted formatting.
         """
@@ -169,53 +192,76 @@ class OllamaProvider(BaseAIProvider):
         # Remove HTML tags
         content = re.sub(r'<[^>]+>', '', content)
 
-        # Remove code markers
+        # Remove code markers ONLY if they're not part of proper code blocks
         unwanted_patterns = [
             "```markdown\n",
-            "\n```",
             "```md\n",
             "```text\n",
-            "```\n",
-            "```",
         ]
 
         for pattern in unwanted_patterns:
-            content = content.replace(pattern, "")
+            content = content.replace(pattern, "```\n")
 
-        # Fix common Markdown issues
-        # Ensure tables have proper separators
+        # Ensure proper spacing after markdown elements
         lines = content.split('\n')
         cleaned_lines = []
+        prev_was_header = False
+        prev_was_list = False
         in_table = False
         table_header_count = 0
 
         for i, line in enumerate(lines):
             stripped = line.strip()
             
+            # Check for headers
+            is_header = stripped.startswith('#') and ' ' in stripped[:7]
+            
+            # Check for list items
+            is_list = bool(re.match(r'^[\s]*[-*+]\s', line) or re.match(r'^[\s]*\d+\.\s', line))
+            
             # Check if this is a table row
-            if '|' in stripped and stripped.startswith('|') and stripped.endswith('|'):
+            is_table_row = '|' in stripped and stripped.startswith('|') and stripped.endswith('|')
+            
+            if is_table_row:
                 if not in_table:
+                    # Starting a table - ensure blank line before
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
                     in_table = True
-                    table_header_count = stripped.count('|') - 1  # Number of columns
+                    table_header_count = stripped.count('|') - 1
                     cleaned_lines.append(line)
                 else:
                     current_count = stripped.count('|') - 1
                     if current_count == table_header_count:
                         cleaned_lines.append(line)
                     else:
-                        # Skip malformed table rows
                         logger.warning(f"Skipping malformed table row: {stripped}")
                         continue
             else:
-                if in_table and stripped and not stripped.startswith('|'):
-                    # End of table
+                if in_table and stripped:
+                    # End of table - ensure blank line after
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
                     in_table = False
+                
+                # Ensure proper spacing after headers
+                if prev_was_header and stripped and not is_header:
+                    if cleaned_lines and cleaned_lines[-1].strip():
+                        cleaned_lines.append('')
+                
+                # Ensure proper spacing before headers
+                if is_header and cleaned_lines and cleaned_lines[-1].strip():
+                    if not prev_was_list:
+                        cleaned_lines.append('')
+                
                 cleaned_lines.append(line)
+                prev_was_header = is_header
+                prev_was_list = is_list
 
         content = '\n'.join(cleaned_lines)
 
         # Ensure proper spacing in tables
         content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
-        content = re.sub(r'\| +\|', r'| |', content)  # Remove extra spaces in empty cells
+        content = re.sub(r'\| +\|', r'| |', content)
 
         return content.strip()
