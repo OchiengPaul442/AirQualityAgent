@@ -164,11 +164,16 @@ class DocumentScanner:
 
             content = "\n".join(content_parts)
 
-            # Store preview before cleaning up
-            preview_data = df.head(10).to_dict(orient="records")
+            # Store preview before cleaning up - convert datetime to strings for JSON serializability
+            preview_df = df.head(10).copy()
+            for col in preview_df.columns:
+                if pd.api.types.is_datetime64_any_dtype(preview_df[col]):
+                    preview_df[col] = preview_df[col].astype(str)
+            preview_data = preview_df.to_dict(orient="records")
 
             # Clean up dataframe to free memory
             del df
+            del preview_df
             gc.collect()
 
             return {
@@ -230,11 +235,17 @@ class DocumentScanner:
 
                     content_parts.append("\n")
 
+                    # Convert datetime objects to strings for JSON serializability
+                    preview_df = df.head(20).copy()
+                    for col in preview_df.columns:
+                        if pd.api.types.is_datetime64_any_dtype(preview_df[col]):
+                            preview_df[col] = preview_df[col].astype(str)
+                    
                     all_sheets_data[sheet_name] = {
                         "rows": len(df),
                         "columns": len(df.columns),
                         "column_names": df.columns.tolist(),
-                        "preview": df.head(20).to_dict(orient="records"),
+                        "preview": preview_df.to_dict(orient="records"),
                         "dtypes": df.dtypes.astype(str).to_dict(),
                     }
 

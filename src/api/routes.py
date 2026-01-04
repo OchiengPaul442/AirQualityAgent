@@ -506,12 +506,19 @@ async def chat(
         tokens_used = len(message.split()) + len(final_response.split())
         for msg in history:
             tokens_used += len(msg["content"].split())
+        
+        # Extract document filenames for tracking
+        document_filenames = []
         if document_data:
             # Add document content to token count (document_data is a list)
             for doc in document_data:
                 if isinstance(doc, dict):
                     doc_content = doc.get("content", "")
                     tokens_used += len(str(doc_content).split())
+                    # Track filenames
+                    filename = doc.get("filename")
+                    if filename:
+                        document_filenames.append(filename)
         tokens_used = int(tokens_used * 1.3)  # Rough multiplier for actual tokens
 
         # Get total message count for this session
@@ -533,8 +540,8 @@ async def chat(
             tokens_used=tokens_used,
             cached=result.get("cached", False),
             message_count=message_count,
-            document_processed=document_filename is not None,
-            document_filename=document_filename,
+            document_processed=bool(document_filenames or document_filename),
+            document_filename=document_filenames[0] if document_filenames else document_filename,
         )
     except HTTPException:
         raise

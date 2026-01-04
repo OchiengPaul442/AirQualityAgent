@@ -198,13 +198,31 @@ class AgentService:
         Returns:
             str: MD5 hash cache key
         """
+        # Custom JSON encoder to handle datetime and other non-serializable objects
+        def json_serializer(obj):
+            """Convert non-serializable objects to strings"""
+            from datetime import date, datetime
+            if isinstance(obj, (datetime, date)):
+                return obj.isoformat()
+            elif hasattr(obj, '__dict__'):
+                return str(obj)
+            else:
+                return str(obj)
+        
         # Create a hashable representation
+        try:
+            doc_str = json.dumps(document_data, sort_keys=True, default=json_serializer) if document_data else ""
+        except Exception as e:
+            logger.warning(f"Failed to serialize document_data for cache key, using fallback: {e}")
+            # Fallback: use string representation
+            doc_str = str(document_data) if document_data else ""
+        
         cache_parts = [
             self.settings.AI_PROVIDER,
             self.settings.AI_MODEL,
             message,
-            json.dumps(history[-5:] if len(history) > 5 else history, sort_keys=True),
-            json.dumps(document_data, sort_keys=True) if document_data else "",
+            json.dumps(history[-5:] if len(history) > 5 else history, sort_keys=True, default=json_serializer),
+            doc_str,
             style or "",
             str(temperature) if temperature is not None else "",
             str(top_p) if top_p is not None else "",
@@ -288,15 +306,18 @@ class AgentService:
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
 
-        # Get system instruction
+        # Get system instruction with document context (pass history for new doc detection)
         system_instruction = get_system_instruction(
             style=style or "general",
-            custom_suffix=self._build_document_context(document_data),
+            custom_suffix=self._build_document_context(document_data, history),
         )
         
         # Log if document context was added
         if document_data:
-            doc_context_length = len(self._build_document_context(document_data))
+            doc_context_length = len(self._build_document_context(document_data, history))
+            has_previous = any("UPLOADED DOCUMENTS" in msg.get("content", "") for msg in (history or []))
+            if has_previous:
+                logger.info(f"NEW document uploaded in existing session - replacing previous document(s)")
             logger.info(f"Document context added to system instruction: {doc_context_length} chars for {len(document_data)} document(s)")
 
         # Process with provider
@@ -343,13 +364,14 @@ class AgentService:
             }
 
     def _build_document_context(
-        self, document_data: list[dict[str, Any]] | None
+        self, document_data: list[dict[str, Any]] | None, history: list[dict[str, str]] | None = None
     ) -> str:
         """
         Build document context string for system instruction.
 
         Args:
             document_data: List of document metadata and content
+            history: Conversation history to check for previous document uploads
 
         Returns:
             str: Formatted document context or empty string
@@ -361,12 +383,44 @@ class AgentService:
         if not isinstance(document_data, list):
             logger.warning(f"document_data should be a list, got {type(document_data)}")
             return ""
+        
+        # Check if there was a previous document upload in this session
+        has_previous_document = False
+        if history:
+            for msg in history:
+                content = msg.get("content", "")
+                if "UPLOADED DOCUMENTS" in content or "Document:" in content or "📄 Document" in content:
+                    has_previous_document = True
+                    break
 
         context_parts = [
             "\n\n=== UPLOADED DOCUMENTS ===",
-            "\n⚠️ IMPORTANT: The document data below is ALREADY PROVIDED to you. DO NOT use the scan_document tool.",
-            "You have direct access to this data - analyze it immediately without requesting file access.\n"
         ]
+        
+        # Add explicit replacement notice if this is a new document in existing session
+        if has_previous_document:
+            context_parts.append(
+                "\n🔄 NEW DOCUMENT UPLOADED - IMPORTANT NOTICE:"
+            )
+            context_parts.append(
+                "The user has uploaded a NEW document that REPLACES any previous documents."
+            )
+            context_parts.append(
+                "⚠️ DISREGARD all previous document references from earlier in this conversation."
+            )
+            context_parts.append(
+                "⚠️ ONLY analyze and reference the document(s) shown below."
+            )
+            context_parts.append(
+                "⚠️ DO NOT mention, compare, or reference any previously uploaded files.\n"
+            )
+        else:
+            context_parts.append(
+                "\n⚠️ IMPORTANT: The document data below is ALREADY PROVIDED to you. DO NOT use the scan_document tool."
+            )
+            context_parts.append(
+                "You have direct access to this data - analyze it immediately without requesting file access.\n"
+            )
 
         for idx, doc in enumerate(document_data, 1):
             # Skip if not a dictionary
