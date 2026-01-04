@@ -56,19 +56,22 @@ class AgentService:
         self.cache = get_cache()
         self.mcp_clients: dict[str, MCPClient] = {}
 
-        # Initialize all services
-        self.waqi = WAQIService()
-        self.airqo = AirQoService()
-        self.openmeteo = OpenMeteoService()
-        self.carbon_intensity = CarbonIntensityService()
-        self.defra = DefraService()
-        self.uba = UbaService()
-        self.weather = WeatherService()
-        self.scraper = RobustScraper()
-        self.search = SearchService()
-        self.document_scanner = DocumentScanner()
+        # Parse enabled data sources
+        enabled_sources = set(src.strip().lower() for src in self.settings.ENABLED_DATA_SOURCES.split(',') if src.strip())
 
-        # Initialize tool executor with all services
+        # Initialize services based on enabled sources
+        self.waqi = WAQIService() if 'waqi' in enabled_sources else None
+        self.airqo = AirQoService() if 'airqo' in enabled_sources else None
+        self.openmeteo = OpenMeteoService() if 'openmeteo' in enabled_sources else None
+        self.carbon_intensity = CarbonIntensityService() if 'carbon_intensity' in enabled_sources else None
+        self.defra = DefraService() if 'defra' in enabled_sources else None
+        self.uba = UbaService() if 'uba' in enabled_sources else None
+        self.weather = WeatherService()  # Always enabled as it's used by other services
+        self.scraper = RobustScraper()  # Always enabled for web scraping
+        self.search = SearchService()  # Always enabled for web search
+        self.document_scanner = DocumentScanner()  # Always enabled for document processing
+
+        # Initialize tool executor with available services
         self.tool_executor = ToolExecutor(
             self.waqi,
             self.airqo,

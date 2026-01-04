@@ -469,7 +469,14 @@ async def chat(
 
         # Process message with timing for cost tracking
         start_time = time.time()
-        result = await agent.process_message(message, history, document_data=document_data)
+        result = await agent.process_message(
+            message, 
+            history, 
+            document_data=document_data,
+            style=settings.AI_RESPONSE_STYLE,
+            temperature=settings.AI_RESPONSE_TEMPERATURE,
+            top_p=settings.AI_RESPONSE_TOP_P
+        )
         processing_time = time.time() - start_time
 
         final_response = sanitize_response(result["response"])

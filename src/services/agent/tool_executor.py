@@ -67,13 +67,19 @@ class ToolExecutor:
         try:
             # WAQI tools
             if function_name == "get_city_air_quality":
+                if self.waqi is None:
+                    return {"success": False, "message": "WAQI service is not enabled."}
                 return self.waqi.get_city_feed(args.get("city"))
 
             elif function_name == "search_waqi_stations":
+                if self.waqi is None:
+                    return {"success": False, "message": "WAQI service is not enabled."}
                 return self.waqi.search_stations(args.get("keyword"))
 
             # AirQo tools
             elif function_name == "get_african_city_air_quality":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
                 city = args.get("city")
                 site_id = args.get("site_id")
                 try:
@@ -91,6 +97,8 @@ class ToolExecutor:
                     }
 
             elif function_name == "get_multiple_african_cities_air_quality":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
                 cities = args.get("cities", [])
                 results = {}
                 for city in cities:
@@ -107,6 +115,8 @@ class ToolExecutor:
                 return {"success": True, "data": results, "cities_count": len(cities)}
 
             elif function_name == "get_airqo_history":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
                 start_time_str = args.get("start_time")
                 end_time_str = args.get("end_time")
                 start_time = (
@@ -128,6 +138,8 @@ class ToolExecutor:
                 )
 
             elif function_name == "get_airqo_forecast":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
                 return self.airqo.get_forecast(
                     site_id=args.get("site_id"),
                     device_id=args.get("device_id"),
@@ -136,15 +148,21 @@ class ToolExecutor:
                 )
 
             elif function_name == "get_airqo_metadata":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
                 return self.airqo.get_metadata(entity_type=args.get("entity_type", "grids"))
 
             elif function_name == "get_air_quality_by_location":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
                 return self.airqo.get_air_quality_by_location(
                     latitude=args.get("latitude"), longitude=args.get("longitude")
                 )
 
             # OpenMeteo tools
             elif function_name == "get_openmeteo_current_air_quality":
+                if self.openmeteo is None:
+                    return {"success": False, "message": "OpenMeteo service is not enabled."}
                 return self.openmeteo.get_current_air_quality(
                     latitude=args.get("latitude"),
                     longitude=args.get("longitude"),
@@ -152,6 +170,8 @@ class ToolExecutor:
                 )
 
             elif function_name == "get_openmeteo_forecast":
+                if self.openmeteo is None:
+                    return {"success": False, "message": "OpenMeteo service is not enabled."}
                 return self.openmeteo.get_hourly_forecast(
                     latitude=args.get("latitude"),
                     longitude=args.get("longitude"),
@@ -160,6 +180,8 @@ class ToolExecutor:
                 )
 
             elif function_name == "get_openmeteo_historical":
+                if self.openmeteo is None:
+                    return {"success": False, "message": "OpenMeteo service is not enabled."}
                 start_date_str = args.get("start_date")
                 end_date_str = args.get("end_date")
                 return self.openmeteo.get_historical_data(
@@ -172,32 +194,50 @@ class ToolExecutor:
 
             # Carbon Intensity tools
             elif function_name == "get_uk_carbon_intensity_current":
+                if self.carbon_intensity is None:
+                    return {"success": False, "message": "Carbon Intensity service is not enabled."}
                 return self.carbon_intensity.get_current_intensity()
 
             elif function_name == "get_uk_carbon_intensity_today":
+                if self.carbon_intensity is None:
+                    return {"success": False, "message": "Carbon Intensity service is not enabled."}
                 return self.carbon_intensity.get_intensity_today()
 
             elif function_name == "get_uk_carbon_intensity_regional":
+                if self.carbon_intensity is None:
+                    return {"success": False, "message": "Carbon Intensity service is not enabled."}
                 return self.carbon_intensity.get_regional_intensity(args.get("region"))
 
             elif function_name == "get_uk_generation_mix":
+                if self.carbon_intensity is None:
+                    return {"success": False, "message": "Carbon Intensity service is not enabled."}
                 return self.carbon_intensity.get_generation_mix()
 
             elif function_name == "get_uk_carbon_intensity_factors":
+                if self.carbon_intensity is None:
+                    return {"success": False, "message": "Carbon Intensity service is not enabled."}
                 return self.carbon_intensity.get_intensity_factors()
 
             # DEFRA tools
             elif function_name == "get_defra_site_data":
+                if self.defra is None:
+                    return {"success": False, "message": "DEFRA service is not enabled."}
                 return self.defra.get_site_data(args.get("site_code"))
 
             elif function_name == "get_defra_sites":
+                if self.defra is None:
+                    return {"success": False, "message": "DEFRA service is not enabled."}
                 return self.defra.get_sites()
 
             elif function_name == "get_defra_species_codes":
+                if self.defra is None:
+                    return {"success": False, "message": "DEFRA service is not enabled."}
                 return self.defra.get_species_codes()
 
             # UBA tools
             elif function_name == "get_uba_measures":
+                if self.uba is None:
+                    return {"success": False, "message": "UBA service is not enabled."}
                 return self.uba.get_measures(
                     component=args.get("component"), scope=args.get("scope", "1h")
                 )
