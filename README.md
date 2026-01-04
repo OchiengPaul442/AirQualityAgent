@@ -10,12 +10,15 @@
 
 **Meet Aeris**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
-**Latest Updates (v2.9):**
+**Latest Updates (v2.9.2):**
 
-- 🚀 **NEW: Major Performance Optimization** - 3-5x faster responses with max_tokens limits (600-1200 per style)
-- 🎯 **NEW: Professional Standards** - WHO/EPA/World Bank report formatting, reduced emoji usage
-- 📚 **NEW: Enhanced Research** - Mandatory web search for policy/health questions, credible source citations
-- 🧠 **NEW: Advanced Analytics** - Forecasting, comparative analysis, policy evaluation capabilities
+- 🧠 **NEW: Enhanced Conversation Context** - Fixed context loss issues, maintains conversation continuity
+- 🎯 **NEW: Flexible Reasoning** - Better handling of simple questions and conversational flow
+- 📚 **NEW: Improved Response Continuity** - References previous messages for summaries and follow-ups
+- 🚀 **Performance Optimization** - 3-5x faster responses with max_tokens limits (600-1200 per style)
+- 🎯 **Professional Standards** - WHO/EPA/World Bank report formatting, reduced emoji usage
+- 📚 **Enhanced Research** - Mandatory web search for policy/health questions, credible source citations
+- 🧠 **Advanced Analytics** - Forecasting, comparative analysis, policy evaluation capabilities
 - ✅ **Optimized System Prompt**: Reduced verbosity for speed while maintaining quality
 - ✅ **Configurable Response Styles**: Professional tones for executives, policymakers, researchers, public
 - ✅ **Multi-Source Data**: WAQI, AirQo, Open-Meteo with intelligent fallbacks

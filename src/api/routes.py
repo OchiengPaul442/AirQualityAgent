@@ -459,7 +459,7 @@ async def chat(
 
         # Get conversation history BEFORE adding new message
         try:
-            history_objs = get_recent_session_history(db, session_id, max_messages=20)
+            history_objs = get_recent_session_history(db, session_id, max_messages=50)
         except Exception as db_error:
             logger.warning(
                 f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"

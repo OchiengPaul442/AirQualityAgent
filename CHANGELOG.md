@@ -4,6 +4,47 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.2] - 2026-01-04
+
+### 🧠 Enhanced Conversation Context & Reasoning
+
+**CRITICAL: Fixed context loss issues in ongoing conversations**
+
+#### Context Retention Fixes
+
+- **Conversation Continuity**: Added comprehensive system instructions for maintaining conversation context
+- **History Awareness**: Agent now properly references previous messages when users ask for summaries or follow-ups
+- **Topic Continuity**: Maintains discussion threads across related messages
+- **Reference Recognition**: Properly handles "summarize that", "what about X", "tell me more" requests
+
+#### Flexible Reasoning Improvements
+
+- **Simple Question Handling**: Direct, reasonable responses to basic queries (dates, times, facts)
+- **Contextual Responses**: Builds upon ongoing conversation topics
+- **Reasonable AI Behavior**: Professional yet conversational tone with logical reasoning
+- **Question Type Recognition**: Distinguishes between factual queries, follow-ups, and complex analysis
+
+#### System Prompt Enhancements
+
+- **Conversation Memory Rules**: Explicit instructions to always reference previous responses
+- **Context Loss Prevention**: Guidelines to avoid switching to unrelated topics
+- **Flexible Question Handling**: Better recognition of different question types
+- **Professional Communication**: Maintains expertise while being approachable
+
+#### Technical Improvements
+
+- **Increased History Depth**: Extended conversation history from 20 to 50 messages for better context
+- **Memory Management**: Better handling of conversation threads and topic continuity
+- **Response Consistency**: Maintains topic focus across message exchanges
+
+#### Testing & Validation
+
+- **Context Tests**: Verified agent properly summarizes previous responses
+- **Reasoning Tests**: Confirmed flexible handling of simple questions
+- **Continuity Tests**: Validated topic maintenance across conversations
+
+---
+
 ## [2.9.1] - 2026-01-04
 
 ### 🔧 Critical Token Management Fix

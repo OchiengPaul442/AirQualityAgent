@@ -172,6 +172,8 @@ class AgentService:
         
         # Only consider consent valid if there was a location-related question before
         return has_location_question and has_consent
+
+    def _is_appreciation_message(self, message: str) -> bool:
         """
         Check if a message is a simple appreciation/acknowledgment.
 
