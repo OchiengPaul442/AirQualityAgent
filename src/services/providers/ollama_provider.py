@@ -1,11 +1,13 @@
 """
 Ollama Provider Implementation.
 
-Handles local Ollama deployment for air quality agent.
+Handles local Ollama deployment for air quality agent with enhanced error handling and rate limit detection.
 """
 
 import json
 import logging
+import time
+from datetime import datetime
 from typing import Any
 
 import ollama
@@ -78,6 +80,7 @@ class OllamaProvider(BaseAIProvider):
         # Retry configuration for network resilience
         max_retries = 3
         base_delay = 1
+        response = None  # Initialize response to prevent NoneType errors
         
         for attempt in range(max_retries):
             try:
@@ -90,8 +93,8 @@ class OllamaProvider(BaseAIProvider):
                 # Add optional parameters if provided
                 if top_k is not None:
                     options["top_k"] = top_k
-                # Use higher max_tokens when tools are available
-                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
+                # Use higher max_tokens when tools are available (tool responses need more space)
+                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 3 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
                 if effective_max_tokens is not None:
                     options["num_predict"] = effective_max_tokens
 
@@ -102,30 +105,89 @@ class OllamaProvider(BaseAIProvider):
                     options=options,
                 )
                 break  # Success, exit retry loop
-            except Exception as e:
-                logger.error(f"Ollama error (attempt {attempt + 1}/{max_retries}): {e}")
+                
+            except ConnectionError as e:
+                logger.error(f"Ollama connection error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                else:
+                    return {
+                        "response": "Unable to connect to the local Ollama service. Please ensure Ollama is running.",
+                        "tools_used": [],
+                    }
+                    
+            except TimeoutError as e:
+                logger.error(f"Ollama timeout (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)
                     logger.info(f"Retrying in {delay} seconds...")
-                    import time
                     time.sleep(delay)
                 else:
-                    error_msg = str(e)
-                    if "connection" in error_msg.lower():
+                    return {
+                        "response": "The Ollama service is taking too long to respond. Please try again with a simpler question.",
+                        "tools_used": [],
+                    }
+                    
+            except Exception as e:
+                error_msg = str(e).lower()
+                logger.error(f"Ollama error (attempt {attempt + 1}/{max_retries}): {e}")
+                
+                # Check for rate limiting or quota issues
+                if "rate" in error_msg or "limit" in error_msg or "quota" in error_msg:
+                    # Extract detailed rate limit information for monitoring
+                    error_details = {
+                        "provider": "ollama",
+                        "error_type": "rate_limit",
+                        "timestamp": datetime.now().isoformat(),
+                        "model": self.settings.AI_MODEL,
+                        "error_message": str(e),
+                    }
+
+                    if "rate" in error_msg:
+                        error_details["rate_limit_exceeded"] = True
+                    if "quota" in error_msg:
+                        error_details["quota_exceeded"] = True
+
+                    # Log structured rate limit information
+                    logger.warning("🚨 OLLAMA RATE LIMIT EXCEEDED", extra=error_details)
+
+                    return {
+                        "response": "Aeris is currently experiencing high demand. Please wait a moment and try again.",
+                        "tools_used": [],
+                        "rate_limit_info": error_details,
+                    }
+                
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                else:
+                    # Return user-friendly errors
+                    if "connection" in error_msg:
                         return {
                             "response": "Unable to connect to the local Ollama service. Please ensure Ollama is running.",
                             "tools_used": [],
                         }
-                    elif "model" in error_msg.lower():
+                    elif "model" in error_msg:
                         return {
-                            "response": f"The requested model '{self.settings.AI_MODEL}' is not available in Ollama. Please pull the model first.",
+                            "response": f"The requested model '{self.settings.AI_MODEL}' is not available. Please pull the model first with: ollama pull {self.settings.AI_MODEL}",
                             "tools_used": [],
                         }
                     else:
                         return {
-                            "response": f"Ollama error: {error_msg}. Please check your Ollama installation.",
+                            "response": f"I encountered an error: {str(e)}. Please check your Ollama installation and try again.",
                             "tools_used": [],
                         }
+
+            # Validate response before accessing
+            if response is None:
+                logger.error("Ollama response is None after retry loop - all attempts failed")
+                return {
+                    "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                    "tools_used": [],
+                }
 
             # Handle tool calls
             if response.get("message", {}).get("tool_calls"):

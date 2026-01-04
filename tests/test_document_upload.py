@@ -45,7 +45,7 @@ def test_csv_scan():
         else:
             print(f"✗ Document is not dict: {type(doc)}")
     
-    return result.get('success', False)
+    assert result.get('success', False)
 
 if __name__ == "__main__":
     success = test_csv_scan()

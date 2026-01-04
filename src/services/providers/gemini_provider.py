@@ -6,6 +6,7 @@ Handles Gemini-specific setup and message processing with tool calling.
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 from google import genai
@@ -111,6 +112,8 @@ class GeminiProvider(BaseAIProvider):
         # Retry configuration for network resilience
         max_retries = 3
         base_delay = 1
+        response = None  # Initialize response to prevent NoneType errors
+        chat = None  # Initialize chat to prevent NoneType errors
         
         for attempt in range(max_retries):
             try:
@@ -143,15 +146,49 @@ class GeminiProvider(BaseAIProvider):
                             "tools_used": [],
                         }
                     elif "quota" in error_msg.lower() or "rate" in error_msg.lower():
+                        # Extract detailed rate limit information for monitoring
+                        error_details = {
+                            "provider": "gemini",
+                            "error_type": "rate_limit",
+                            "timestamp": datetime.now().isoformat(),
+                            "model": self.settings.AI_MODEL,
+                            "error_message": error_msg,
+                        }
+
+                        # Try to extract quota information from error message
+                        if "quota" in error_msg.lower():
+                            error_details["quota_exceeded"] = True
+                        if "rate" in error_msg.lower():
+                            error_details["rate_limit_exceeded"] = True
+
+                        # Log structured rate limit information
+                        logger.warning("🚨 GEMINI RATE LIMIT EXCEEDED", extra=error_details)
+
                         return {
-                            "response": "The AI service is currently experiencing high demand. Please wait a moment and try again.",
+                            "response": "Aeris is currently experiencing high demand. Please wait a moment and try again.",
                             "tools_used": [],
+                            "rate_limit_info": error_details,  # Include for debugging
                         }
                     else:
                         return {
                             "response": f"I encountered an error: {error_msg}. Please try again.",
                             "tools_used": [],
                         }
+        
+        # Validate response before accessing
+        if response is None:
+            logger.error("Gemini response is None after retry loop - all attempts failed")
+            return {
+                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "tools_used": [],
+            }
+        
+        if chat is None:
+            logger.error("Gemini chat is None - cannot continue")
+            return {
+                "response": "I apologize, but I encountered an error creating the chat session. Please try again.",
+                "tools_used": [],
+            }
         
         tools_used: list[str] = []
 

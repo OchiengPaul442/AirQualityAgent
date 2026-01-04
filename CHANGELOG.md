@@ -4,6 +4,35 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.3] - 2026-01-05
+
+### 🔧 System Instructions Optimization & Error Handling
+
+**CRITICAL: Resolved conflicting instructions and improved error resilience**
+
+#### System Prompt Compression
+
+- **Eliminated Redundancy**: Merged overlapping sections (Conversation Continuity + Flexible Reasoning)
+- **Streamlined Location Handling**: Compressed detailed location privacy rules to prevent conflicts
+- **Removed Conflicting Rules**: Eliminated contradictory instructions that could confuse the agent
+- **Preserved Core Functionality**: Maintained all essential capabilities without data loss
+
+#### Error Message Personalization
+
+- **Aeris Branding**: Changed generic "AI service" errors to "Aeris" for better user experience
+- **Context-Aware Errors**: Enhanced instructions to avoid generic errors when context exists
+- **API Resilience**: Improved guidance for handling API issues gracefully
+
+#### Rate Limit Monitoring & Detection
+
+- **Enhanced Rate Limit Logging**: Detailed structured logging for OpenAI and Gemini rate limit events
+- **Rate Limit Monitor Tool**: `rate_limit_monitor.py` script for analyzing usage patterns and trends
+- **Rate Limit Checker Tool**: `rate_limit_checker.py` for controlled testing of API limits
+- **Comprehensive Documentation**: Complete guide for monitoring and managing API rate limits
+- **Developer-Friendly Monitoring**: Easy-to-use tools for detecting and responding to rate limit issues
+
+---
+
 ## [2.9.2] - 2026-01-04
 
 ### 🧠 Enhanced Conversation Context & Reasoning

@@ -10,11 +10,11 @@
 
 **Meet Aeris**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
-**Latest Updates (v2.9.2):**
+**Latest Updates (v2.9.3):**
 
-- 🧠 **NEW: Enhanced Conversation Context** - Fixed context loss issues, maintains conversation continuity
-- 🎯 **NEW: Flexible Reasoning** - Better handling of simple questions and conversational flow
-- 📚 **NEW: Improved Response Continuity** - References previous messages for summaries and follow-ups
+- 🔧 **System Instructions Optimization** - Resolved conflicting instructions, compressed redundant sections
+- 🛡️ **Error Handling Enhancement** - Personalized error messages, improved API resilience
+- 🧠 **Context Loss Prevention** - Stronger rules against generic errors when context exists
 - 🚀 **Performance Optimization** - 3-5x faster responses with max_tokens limits (600-1200 per style)
 - 🎯 **Professional Standards** - WHO/EPA/World Bank report formatting, reduced emoji usage
 - 📚 **Enhanced Research** - Mandatory web search for policy/health questions, credible source citations
@@ -32,14 +32,15 @@
 
 ## 📚 Documentation
 
-| Guide                                                  | Description                 |
-| ------------------------------------------------------ | --------------------------- |
-| **[Getting Started](docs/GETTING_STARTED.md)**         | Quick setup and first steps |
-| **[API Reference](docs/API_REFERENCE.md)**             | Complete API documentation  |
-| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)** | Configure AI response style |
-| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**   | PDF/CSV/Excel file analysis |
-| [Architecture](docs/ARCHITECTURE.md)                   | System design               |
-| [Deployment](docs/DEPLOYMENT.md)                       | Production deployment       |
+| Guide                                                      | Description                  |
+| ---------------------------------------------------------- | ---------------------------- |
+| **[Getting Started](docs/GETTING_STARTED.md)**             | Quick setup and first steps  |
+| **[API Reference](docs/API_REFERENCE.md)**                 | Complete API documentation   |
+| **[Response Quality](docs/RESPONSE_QUALITY_GUIDE.md)**     | Configure AI response style  |
+| **[Document Upload](docs/DOCUMENT_UPLOAD_GUIDE.md)**       | PDF/CSV/Excel file analysis  |
+| [Architecture](docs/ARCHITECTURE.md)                       | System design                |
+| [Deployment](docs/DEPLOYMENT.md)                           | Production deployment        |
+| **[Rate Limit Monitoring](docs/RATE_LIMIT_MONITORING.md)** | Monitor API usage and limits |
 
 ---
 

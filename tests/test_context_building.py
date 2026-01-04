@@ -87,7 +87,7 @@ def test_context_building():
     print(f"Length: {len(context)} characters")
     print(f"Success: {'UPLOADED DOCUMENTS' in context and 'END DOCUMENTS' in context}")
     
-    return 'UPLOADED DOCUMENTS' in context
+    assert 'UPLOADED DOCUMENTS' in context
 
 if __name__ == "__main__":
     success = test_context_building()

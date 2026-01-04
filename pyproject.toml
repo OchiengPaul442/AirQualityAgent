@@ -1,6 +1,6 @@
 [project]
 name = "airquality-agent"
-version = "2.9.2"
+version = "2.9.3"
 description = "Aeris - Production-ready air quality monitoring and AI assistant"
 license = {text = "MIT"}
 authors = [

@@ -7,6 +7,7 @@ Handles OpenAI, DeepSeek, Kimi, and OpenRouter provider setup and message proces
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 import openai
@@ -104,6 +105,7 @@ class OpenAIProvider(BaseAIProvider):
         # Retry configuration for network resilience
         max_retries = 3
         base_delay = 1  # seconds
+        response = None  # Initialize response to prevent NoneType errors
         
         for attempt in range(max_retries):
             try:
@@ -146,10 +148,45 @@ class OpenAIProvider(BaseAIProvider):
                         "tools_used": [],
                     }
             except openai.RateLimitError as e:
-                logger.error(f"Rate limit exceeded: {e}")
+                # Extract detailed rate limit information for monitoring
+                error_details = {
+                    "provider": "openai",
+                    "error_type": "rate_limit",
+                    "timestamp": datetime.now().isoformat(),
+                    "model": self.settings.AI_MODEL,
+                    "error_message": str(e),
+                }
+
+                # Try to extract rate limit details from error
+                if hasattr(e, 'headers') and e.headers:
+                    error_details.update({
+                        "x_ratelimit_limit_requests": e.headers.get("x-ratelimit-limit-requests"),
+                        "x_ratelimit_limit_tokens": e.headers.get("x-ratelimit-limit-tokens"),
+                        "x_ratelimit_remaining_requests": e.headers.get("x-ratelimit-remaining-requests"),
+                        "x_ratelimit_remaining_tokens": e.headers.get("x-ratelimit-remaining-tokens"),
+                        "x_ratelimit_reset_requests": e.headers.get("x-ratelimit-reset-requests"),
+                        "x_ratelimit_reset_tokens": e.headers.get("x-ratelimit-reset-tokens"),
+                    })
+
+                # Log structured rate limit information
+                logger.warning("🚨 OPENAI RATE LIMIT EXCEEDED", extra=error_details)
+
+                # Return user-friendly response with rate limit info
+                reset_time = None
+                if hasattr(e, 'headers') and e.headers:
+                    reset_requests = e.headers.get("x-ratelimit-reset-requests")
+                    reset_tokens = e.headers.get("x-ratelimit-reset-tokens")
+                    if reset_requests or reset_tokens:
+                        reset_time = reset_requests or reset_tokens
+
+                response_msg = "Aeris is currently experiencing high demand. Please wait a moment and try again."
+                if reset_time:
+                    response_msg += f" Expected reset in approximately {reset_time}."
+
                 return {
-                    "response": "The AI service is currently experiencing high demand. Please wait a moment and try again.",
+                    "response": response_msg,
                     "tools_used": [],
+                    "rate_limit_info": error_details,  # Include for debugging
                 }
             except Exception as e:
                 logger.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
@@ -163,6 +200,21 @@ class OpenAIProvider(BaseAIProvider):
                         "response": f"I encountered an unexpected error: {str(e)}. Please try again.",
                         "tools_used": [],
                     }
+
+        # Validate response before accessing
+        if response is None:
+            logger.error("Response is None after retry loop - all attempts failed")
+            return {
+                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "tools_used": [],
+            }
+        
+        if not hasattr(response, 'choices') or not response.choices:
+            logger.error("Response missing choices attribute or choices is empty")
+            return {
+                "response": "I apologize, but I received an invalid response. Please try again.",
+                "tools_used": [],
+            }
 
         # Handle tool calls
         if response.choices[0].message.tool_calls:
