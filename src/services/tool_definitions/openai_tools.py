@@ -512,6 +512,64 @@ def get_uba_tools() -> list[dict]:
     ]
 
 
+def get_nsw_tools() -> list[dict]:
+    """Get NSW (New South Wales) air quality tool definitions."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_nsw_air_quality",
+                "description": "Get current air quality data from NSW monitoring network. Provides raw pollutant concentrations and Air Quality Categories.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "Optional location filter (city, region, or site name). If not provided, returns data from all sites.",
+                        }
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_nsw_sites",
+                "description": "Get list of all air quality monitoring sites in NSW with their locations and details.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_nsw_pollutant_data",
+                "description": "Get recent pollutant concentration data for a specific pollutant across NSW sites.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pollutant": {
+                            "type": "string",
+                            "description": "Pollutant code: 'PM2.5', 'PM10', 'O3', 'NO2', 'SO2', 'CO'",
+                            "enum": ["PM2.5", "PM10", "O3", "NO2", "SO2", "CO"],
+                        },
+                        "hours": {
+                            "type": "integer",
+                            "description": "Number of hours of historical data (default: 24)",
+                            "default": 24,
+                        }
+                    },
+                    "required": ["pollutant"],
+                },
+            },
+        },
+    ]
+
+
 def get_document_tools() -> list[dict]:
     """Get document scanning tool definitions."""
     return [
@@ -617,6 +675,7 @@ def get_all_tools() -> list[dict]:
     all_tools.extend(get_carbon_intensity_tools())
     all_tools.extend(get_defra_tools())
     all_tools.extend(get_uba_tools())
+    all_tools.extend(get_nsw_tools())
     all_tools.extend(get_document_tools())
     all_tools.extend(get_geocoding_tools())
     return all_tools

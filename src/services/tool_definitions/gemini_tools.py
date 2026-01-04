@@ -442,6 +442,56 @@ def get_uba_tools() -> types.Tool:
     )
 
 
+def get_nsw_tools() -> types.Tool:
+    """Get NSW (New South Wales) air quality tool definitions."""
+    return types.Tool(
+        function_declarations=[
+            types.FunctionDeclaration(
+                name="get_nsw_air_quality",
+                description="Get current air quality data from NSW monitoring network. Provides raw pollutant concentrations and Air Quality Categories.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "location": types.Schema(
+                            type=types.Type.STRING,
+                            description="Optional location filter (city, region, or site name). If not provided, returns data from all sites.",
+                        ),
+                    },
+                    required=[],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="get_nsw_sites",
+                description="Get list of all air quality monitoring sites in NSW with their locations and details.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={},
+                    required=[],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="get_nsw_pollutant_data",
+                description="Get recent pollutant concentration data for a specific pollutant across NSW sites.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "pollutant": types.Schema(
+                            type=types.Type.STRING,
+                            description="Pollutant code: 'PM2.5', 'PM10', 'O3', 'NO2', 'SO2', 'CO'",
+                            enum=["PM2.5", "PM10", "O3", "NO2", "SO2", "CO"],
+                        ),
+                        "hours": types.Schema(
+                            type=types.Type.INTEGER,
+                            description="Number of hours of historical data (default: 24)",
+                        ),
+                    },
+                    required=["pollutant"],
+                ),
+            ),
+        ]
+    )
+
+
 def get_document_tools() -> types.Tool:
     """Get document scanning tool definitions."""
     return types.Tool(
@@ -539,6 +589,7 @@ def get_all_tools() -> list[types.Tool]:
         get_carbon_intensity_tools(),
         get_defra_tools(),
         get_uba_tools(),
+        get_nsw_tools(),
         get_document_tools(),
         get_geocoding_tools(),
     ]

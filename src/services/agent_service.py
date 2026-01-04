@@ -23,6 +23,7 @@ from src.services.cache import get_cache
 from src.services.carbon_intensity_service import CarbonIntensityService
 from src.services.defra_service import DefraService
 from src.services.geocoding_service import GeocodingService
+from src.services.nsw_service import NSWService
 from src.services.openmeteo_service import OpenMeteoService
 from src.services.prompts.system_instructions import get_response_parameters, get_system_instruction
 from src.services.providers.base_provider import BaseAIProvider
@@ -67,6 +68,7 @@ class AgentService:
         self.carbon_intensity = CarbonIntensityService() if 'carbon_intensity' in enabled_sources else None
         self.defra = DefraService() if 'defra' in enabled_sources else None
         self.uba = UbaService() if 'uba' in enabled_sources else None
+        self.nsw = NSWService() if 'nsw' in enabled_sources else None
         self.weather = WeatherService()  # Always enabled as it's used by other services
         self.scraper = RobustScraper()  # Always enabled for web scraping
         self.search = SearchService()  # Always enabled for web search
@@ -81,6 +83,7 @@ class AgentService:
             self.carbon_intensity,
             self.defra,
             self.uba,
+            self.nsw,
             self.weather,
             self.search,
             self.scraper,

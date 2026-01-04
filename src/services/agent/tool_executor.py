@@ -22,6 +22,7 @@ class ToolExecutor:
         carbon_intensity_service,
         defra_service,
         uba_service,
+        nsw_service,
         weather_service,
         search_service,
         scraper,
@@ -38,6 +39,7 @@ class ToolExecutor:
             carbon_intensity_service: UK carbon intensity service
             defra_service: UK DEFRA air quality service
             uba_service: German UBA air quality service
+            nsw_service: NSW air quality service
             weather_service: Weather service
             search_service: Web search service
             scraper: Web scraper
@@ -50,6 +52,7 @@ class ToolExecutor:
         self.carbon_intensity = carbon_intensity_service
         self.defra = defra_service
         self.uba = uba_service
+        self.nsw = nsw_service
         self.weather = weather_service
         self.search = search_service
         self.scraper = scraper
@@ -245,6 +248,25 @@ class ToolExecutor:
                     return {"success": False, "message": "UBA service is not enabled."}
                 return self.uba.get_measures(
                     component=args.get("component"), scope=args.get("scope", "1h")
+                )
+
+            # NSW tools
+            elif function_name == "get_nsw_air_quality":
+                if self.nsw is None:
+                    return {"success": False, "message": "NSW service is not enabled."}
+                return self.nsw.get_current_air_quality(args.get("location"))
+
+            elif function_name == "get_nsw_sites":
+                if self.nsw is None:
+                    return {"success": False, "message": "NSW service is not enabled."}
+                sites = self.nsw.get_site_details()
+                return {"success": True, "data": sites, "count": len(sites)}
+
+            elif function_name == "get_nsw_pollutant_data":
+                if self.nsw is None:
+                    return {"success": False, "message": "NSW service is not enabled."}
+                return self.nsw.get_pollutant_data(
+                    args.get("pollutant"), args.get("hours", 24)
                 )
 
             # Weather tools

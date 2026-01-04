@@ -50,6 +50,9 @@ class SearchService:
         "meteo.gov.ma",
         "eeaa.gov.eg",
         "saaois.org.za",
+        "environment.nsw.gov.au",
+        "airquality.nsw.gov.au",
+        "dpi.nsw.gov.au",
         # Research and academic
         "nature.com",
         "sciencedirect.com",

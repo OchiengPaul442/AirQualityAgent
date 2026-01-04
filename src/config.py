@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     AIRQO_API_TOKEN: str = ""  # AirQo Analytics API token
 
     # Data Source Configuration
-    ENABLED_DATA_SOURCES: str = "waqi,airqo,openmeteo,carbon_intensity,defra,uba"
+    ENABLED_DATA_SOURCES: str = "waqi,airqo,openmeteo,carbon_intensity,defra,uba,nsw"
 
     # Cache Configuration
     CACHE_TTL_SECONDS: int = 3600
