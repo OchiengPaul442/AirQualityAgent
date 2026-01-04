@@ -30,6 +30,11 @@ class SearchService:
         "waqi.info",
         "open-meteo.com",
         "carbonintensity.org.uk",
+        # Additional air quality monitoring platforms
+        "airgradient.com",
+        # Research and academic platforms
+        "sciencedirect.com",
+        "osf.io",
         # Global health and environment organizations
         "who.int",
         "unep.org",
@@ -52,7 +57,6 @@ class SearchService:
         "cdc.gov",
         "up.ac.za",
         "icraq.org",
-        # Satellite and remote sensing
         "copernicus.eu",
         "atmosphere.copernicus.eu",
         "earthdata.nasa.gov",
