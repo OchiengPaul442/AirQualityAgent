@@ -130,7 +130,45 @@ class AgentService:
 
         return provider_class(self.settings, self.tool_executor)
 
-    def _is_appreciation_message(self, message: str) -> bool:
+    def _has_location_consent(self, history: list[dict[str, Any]]) -> bool:
+        """
+        Check if the user has already consented to location sharing in the conversation history.
+
+        Args:
+            history: Conversation history
+
+        Returns:
+            bool: True if user has consented to location sharing
+        """
+        consent_keywords = [
+            "yes", "sure", "okay", "proceed", "go ahead", "allow", "consent", "please",
+            "yes please", "of course", "absolutely", "fine", "ok", "alright", "sure thing"
+        ]
+        
+        location_related_phrases = [
+            "location", "current location", "my location", "where i am", "local", "here",
+            "air quality", "pollution", "aqi", "gps", "coordinates"
+        ]
+        
+        has_location_question = False
+        has_consent = False
+        
+        for message in history:
+            content = message.get("content", "").lower().strip()
+            role = message.get("role", "")
+            
+            # Check assistant messages for location questions
+            if role == "assistant":
+                if any(phrase in content for phrase in location_related_phrases):
+                    has_location_question = True
+            
+            # Check user messages for consent
+            elif role == "user":
+                if any(keyword in content for keyword in consent_keywords):
+                    has_consent = True
+        
+        # Only consider consent valid if there was a location-related question before
+        return has_location_question and has_consent
         """
         Check if a message is a simple appreciation/acknowledgment.
 
@@ -335,6 +373,20 @@ class AgentService:
                     "cost_estimate": 0.0,
                     "cached": False,
                 }
+
+        # Check for location consent in history and modify message if needed
+        original_message = message
+        has_consent = self._has_location_consent(history)
+        is_location_query = any(keyword in message.lower() for keyword in ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local', 'air quality in my location'])
+        is_consent_response = any(keyword in message.lower() for keyword in ['yes', 'sure', 'okay', 'proceed', 'go ahead', 'allow', 'consent', 'please'])
+        
+        if has_consent and is_location_query:
+            message = f"User has already consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
+            logger.info(f"Detected location consent in history and location query, modified message: '{original_message}' -> '{message}'")
+        elif is_consent_response and not is_location_query:
+            # User is responding to consent request with just "yes" - treat as location query
+            message = f"User has consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
+            logger.info(f"Detected consent response without explicit location query, treating as location request: '{original_message}' -> '{message}'")
 
         # Check cost limits
         within_limits, error_msg = self.cost_tracker.check_limits()
