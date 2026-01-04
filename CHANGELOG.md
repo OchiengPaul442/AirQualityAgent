@@ -4,6 +4,52 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.1] - 2026-01-04
+
+### 🔧 Critical Token Management Fix
+
+**URGENT: Fixed response truncation issues affecting simple queries**
+
+#### Bug Fixes
+
+- **Token Configuration**: Uncommented `AI_MAX_TOKENS=8192` in .env file (was commented out)
+- **Style Preset Limits**: Increased max_tokens to appropriate values:
+
+  - Executive: 800 → 2000 tokens
+  - Technical: 1000 → 3000 tokens
+  - General: 800 → 2500 tokens
+  - Simple: 600 → 1500 tokens
+  - Policy: 1200 → 4000 tokens
+  - Default: 800 → 2500 tokens
+
+- **Response Quality**: Removed artificial word count limits that were causing incomplete responses
+- **System Prompt**: Updated to prioritize comprehensive answers over brevity
+- **Instruction Suffixes**: Removed restrictive word count targets (e.g., "Target 200-300 words")
+
+#### Enhanced Capabilities
+
+- **Complete Data Presentation**: Now includes all available pollutants (PM2.5, PM10, O3, NO2, SO2, CO)
+- **Comprehensive Health Advisories**: Separate guidance for general public and sensitive groups
+- **WHO Guideline Comparisons**: All measurements compared against WHO air quality guidelines
+- **Full Data Provenance**: Station name, device ID, network, coordinates, timestamp
+- **Forecasting & Predictions**: Historical trends, weather integration, scenario modeling
+- **Policy Analysis**: Comparative interventions with cost-benefit data and case studies
+
+#### Response Format Improvements
+
+- **Professional Report Structure**: Executive summaries, methodology sections, comprehensive tables
+- **Multi-Source Validation**: Parallel tool execution for data verification
+- **Complete Context**: Weather conditions, seasonal patterns, historical trends
+- **Evidence-Based**: 3-5 source citations for research questions
+
+#### Testing
+
+- Simple query test: "What's air quality in Gulu" now returns complete data without truncation
+- Complex analysis: Policy research questions return comprehensive reports with full citations
+- Document analysis: Large document responses no longer truncated
+
+---
+
 ## [2.9.0] - 2026-01-04
 
 ### 🚀 Major Performance & Professionalism Overhaul
