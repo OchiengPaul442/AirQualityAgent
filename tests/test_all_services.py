@@ -10,6 +10,8 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # Add src to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -388,6 +390,48 @@ class TestAgentService(unittest.TestCase):
         for msg in non_appreciation_messages:
             with self.subTest(msg=msg):
                 self.assertFalse(self.service._is_appreciation_message(msg), f"Incorrectly detected: {msg}")
+
+    def test_conversational_api_full_response(self):
+        """Test that conversational API returns full formatted response, not just ID"""
+        async def run_test():
+            # Test location queries that should return detailed air quality data
+            test_queries = [
+                "What's the air quality at Rakai?",
+                "How is the air in Kampala?",
+                "Air quality in Nairobi",
+            ]
+            
+            for query in test_queries:
+                with self.subTest(query=query):
+                    # Process the message
+                    response = await self.service.process_message(query, history=[])
+                    
+                    # Assert response is not empty
+                    self.assertIsNotNone(response.get("response"))
+                    self.assertNotEqual(response["response"].strip(), "")
+                    
+                    # Assert response is not just an ID (should be longer and contain formatting)
+                    response_text = response["response"]
+                    self.assertGreater(len(response_text), 50, "Response too short, likely just an ID")
+                    
+                    # Assert it contains expected formatting elements
+                    self.assertIn("#", response_text, "Response should contain headers")
+                    self.assertIn("**", response_text, "Response should contain bold formatting")
+                    
+                    # Assert tools were used (should call air quality tools)
+                    tools_used = response.get("tools_used", [])
+                    self.assertGreater(len(tools_used), 0, "No tools were used")
+                    
+                    # Assert no error in response
+                    self.assertNotIn("error", response_text.lower(), "Response contains error")
+                    
+                    # Assert it doesn't look like just a site ID (not a 24-char hex string)
+                    import re
+                    if re.match(r'^[a-f0-9]{24}$', response_text.strip()):
+                        self.fail(f"Response appears to be just a site ID: {response_text}")
+        
+        # Run the async test
+        asyncio.run(run_test())
 
 
 def run_tests():

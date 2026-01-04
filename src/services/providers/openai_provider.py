@@ -254,6 +254,7 @@ class OpenAIProvider(BaseAIProvider):
 
             # Add tool results
             for tool_result in tool_results:
+                # Attach raw tool output
                 messages.append(
                     {
                         "role": "tool",
@@ -262,7 +263,35 @@ class OpenAIProvider(BaseAIProvider):
                     }
                 )
 
+                # Also attach a short human-readable summary to help the model
+                summary = self._summarize_tool_result(tool_result.get("result"))
+                if summary:
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": str(tool_result["tool_call"].id) + "_summary",
+                            "content": json.dumps({"summary": summary}),
+                        }
+                    )
+
             # Get final response with retry logic
+            # Before finalizing, add an explicit assistant message that summarizes
+            # the tool results (human-readable). This gives the model a concrete
+            # formatted snippet to expand into a full user-facing reply.
+            combined_summaries = []
+            for tr in tool_results:
+                s = self._summarize_tool_result(tr.get("result"))
+                if s:
+                    combined_summaries.append(s)
+
+            if combined_summaries:
+                assistant_summary = "\n\n".join(combined_summaries)
+                assistant_summary = (
+                    "TOOL RESULTS SUMMARY:\n\n" + assistant_summary + "\n\n"
+                    "Please use the summary above to craft a complete, professional, and self-contained response to the user."
+                )
+                messages.append({"role": "assistant", "content": assistant_summary})
+
             for attempt in range(3):  # 3 attempts
                 try:
                     final_response = self.client.chat.completions.create(
@@ -346,6 +375,55 @@ class OpenAIProvider(BaseAIProvider):
             else:
                 logger.info(f"Skipping duplicate tool call: {tc.function.name}")
         return unique
+
+    def _summarize_tool_result(self, result: Any) -> str:
+        """Create a short human-readable summary for common tool results.
+
+        Currently focuses on AirQo measurement payloads so the assistant
+        always has a clear, formatted snippet to include in the final reply.
+        """
+        try:
+            if not isinstance(result, dict):
+                return ""  # Nothing to summarize
+
+            # AirQo-style response with measurements
+            if result.get("success") and result.get("measurements"):
+                measurements = result.get("measurements", [])
+                if measurements:
+                    m = measurements[0]
+                    site = m.get("siteDetails") or {}
+                    site_name = site.get("name") or site.get("formatted_name") or result.get("search_location") or "Unknown site"
+                    site_id = m.get("site_id") or site.get("site_id") or "Unknown"
+                    time = m.get("time") or m.get("timestamp") or "Unknown time"
+                    pm25 = m.get("pm2_5", {})
+                    pm10 = m.get("pm10", {})
+                    aqi = m.get("aqi") or m.get("pm2_5", {}).get("aqi") or m.get("aqi_category")
+
+                    summary_lines = [f"# Air Quality — {site_name}", ""]
+                    summary_lines.append(f"**Site ID**: {site_id} — **Time**: {time}")
+                    if isinstance(pm25, dict):
+                        summary_lines.append(f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})")
+                    if isinstance(pm10, dict):
+                        summary_lines.append(f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})")
+                    if aqi:
+                        summary_lines.append(f"- Overall AQI/Category: {aqi}")
+
+                    return "\n".join(summary_lines)
+
+            # Generic fallbacks
+            if "data" in result and isinstance(result["data"], dict):
+                keys = list(result["data"].keys())[:3]
+                return f"Returned data keys: {', '.join(keys)}"
+
+            # For other dicts, show top-level keys
+            top_keys = list(result.keys())[:4]
+            if top_keys:
+                return f"Result keys: {', '.join(top_keys)}"
+
+        except Exception:
+            pass
+
+        return ""
 
     async def _execute_tools(
         self, tool_calls: list, tools_used: list

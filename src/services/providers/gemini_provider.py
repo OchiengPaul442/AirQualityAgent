@@ -230,9 +230,33 @@ class GeminiProvider(BaseAIProvider):
                     for result in function_results
                 ]
 
-                response = chat.send_message(types.Content(parts=function_responses))
+                # Also attach human-readable summaries as additional parts to help model formatting
+                summary_parts = []
+                for result in function_results:
+                    summary_text = self._summarize_tool_result(result.get("result"))
+                    if summary_text:
+                        summary_parts.append(types.Part(text=summary_text))
+
+                all_parts = function_responses + summary_parts
+
+                response = chat.send_message(types.Content(parts=all_parts))
 
         # Get final response
+        # Inject a human-readable assistant summary part to guide the final reply
+        try:
+            summary_texts = []
+            if 'function_results' in locals():
+                for res in function_results:
+                    s = self._summarize_tool_result(res.get("result"))
+                    if s:
+                        summary_texts.append(s)
+            if summary_texts:
+                summary_part = types.Part(text=("TOOL RESULTS SUMMARY:\n\n" + "\n\n".join(summary_texts) + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."))
+                response = chat.send_message(types.Content(parts=[summary_part]))
+        except Exception:
+            # If anything goes wrong, proceed with the available response
+            pass
+
         final_response = response.text if response.text else ""
 
         # Check if response was truncated
@@ -284,6 +308,42 @@ class GeminiProvider(BaseAIProvider):
             else:
                 logger.info(f"Skipping duplicate function call: {fc.name}")
         return unique
+
+    def _summarize_tool_result(self, result: Any) -> str:
+        """Create a short human-readable summary for common tool results (AirQo focused)."""
+        try:
+            if not isinstance(result, dict):
+                return ""
+
+            if result.get("success") and result.get("measurements"):
+                measurements = result.get("measurements", [])
+                if measurements:
+                    m = measurements[0]
+                    site = m.get("siteDetails") or {}
+                    site_name = site.get("name") or site.get("formatted_name") or result.get("search_location") or "Unknown site"
+                    site_id = m.get("site_id") or site.get("site_id") or "Unknown"
+                    time = m.get("time") or m.get("timestamp") or "Unknown time"
+                    pm25 = m.get("pm2_5", {})
+                    pm10 = m.get("pm10", {})
+                    aqi = m.get("aqi") or m.get("pm2_5", {}).get("aqi") or m.get("aqi_category")
+
+                    summary_lines = [f"# Air Quality — {site_name}", ""]
+                    summary_lines.append(f"**Site ID**: {site_id} — **Time**: {time}")
+                    if isinstance(pm25, dict):
+                        summary_lines.append(f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})")
+                    if isinstance(pm10, dict):
+                        summary_lines.append(f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})")
+                    if aqi:
+                        summary_lines.append(f"- Overall AQI/Category: {aqi}")
+
+                    return "\n".join(summary_lines)
+
+            top_keys = list(result.keys())[:4]
+            if top_keys:
+                return f"Result keys: {', '.join(top_keys)}"
+        except Exception:
+            pass
+        return ""
 
     async def _execute_functions(
         self, function_calls: list, tools_used: list
