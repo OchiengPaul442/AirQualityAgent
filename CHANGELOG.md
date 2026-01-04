@@ -4,6 +4,90 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.0] - 2026-01-04
+
+### 🚀 Major Performance & Professionalism Overhaul
+
+**Critical improvements for speed, professionalism, and research quality**
+
+#### Performance Optimization
+
+- **Response Speed Enhancement**:
+
+  - Added `max_tokens` limits per style preset (600-1200 tokens) to prevent truncation
+  - Optimized system prompt for conciseness (target 150-300 words for standard queries)
+  - Fixed `max_tokens` parameter passing in agent_service.py
+  - Reduced unnecessary elaboration and verbose explanations
+  - Target response times: <5 seconds for simple queries, <15 seconds for research
+
+- **Token Management**:
+  - Executive style: 800 tokens max
+  - Technical style: 1000 tokens max
+  - General style: 800 tokens max
+  - Simple style: 600 tokens max
+  - Policy style: 1200 tokens max
+
+#### Professional Standards Implementation
+
+- **Reduced Emoji Usage**: Limited to functional use only (maximum 2-3 per response)
+  - Status indicators (✅ ⚠️) and data markers (📊) only
+  - Removed decorative and excessive emotional expressions
+- **WHO/EPA/World Bank Report Writing Standards**:
+
+  - Structured responses following professional environmental report formats
+  - Executive summary approach for complex analyses
+  - Proper data citation with monitoring station details
+  - Evidence-based health recommendations linked to AQI categories
+  - Comparative context (vs. WHO guidelines, national standards)
+
+- **Communication Style**:
+  - Professional, objective, data-driven tone
+  - Active voice and precise quantification
+  - Accessible technical language with jargon explanations
+  - Eliminated overly casual/friendly language
+
+#### Enhanced Research Capabilities
+
+- **Mandatory Web Search for**:
+
+  - Policy effectiveness and intervention analysis
+  - Health impact studies and medical research
+  - Regulations, standards, and compliance
+  - Cost-benefit analysis and economic assessments
+  - Best practices and case studies
+  - Recent developments and scientific literature
+
+- **Research Quality Standards**:
+  - Cite credible sources (WHO, EPA, peer-reviewed journals, government reports)
+  - Include publication dates and quantified findings
+  - Provide URLs when available
+  - Synthesize multiple sources for comprehensive answers
+  - Note evidence quality (pilot study vs. large-scale implementation)
+
+#### Analytical Capabilities
+
+- **Enhanced Competencies**:
+  - Forecasting & predictions using weather patterns and historical data
+  - Comparative analysis (locations, time periods, pollutants, interventions)
+  - Policy research and effectiveness evaluation
+  - Health impact assessment with evidence-based recommendations
+  - Quick thinking and efficient processing
+
+#### Bug Fixes
+
+- Fixed `max_tokens` parameter not being passed to provider (was using `max_output_tokens`)
+- Addressed response truncation issues by implementing proper token limits
+- Improved markdown formatting for faster rendering
+
+#### Documentation
+
+- Added comprehensive professional report writing guidelines
+- Incorporated WHO/World Bank/EPA formatting standards
+- Updated response templates for conciseness and professionalism
+- Enhanced research methodology documentation
+
+---
+
 ## [2.8.0] - 2026-01-03
 
 ### 🎨 Professional Markdown Formatting Enhancement

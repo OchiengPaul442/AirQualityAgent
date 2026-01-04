@@ -466,7 +466,7 @@ class AgentService:
                 temperature=response_params.get("temperature"),
                 top_p=response_params.get("top_p"),
                 top_k=response_params.get("top_k"),
-                max_tokens=response_params.get("max_output_tokens"),
+                max_tokens=response_params.get("max_tokens"),  # Fixed: use max_tokens not max_output_tokens
             )
 
             # Track costs
