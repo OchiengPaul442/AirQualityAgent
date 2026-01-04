@@ -423,17 +423,21 @@ async def chat(
                 from src.tools.document_scanner import DocumentScanner
 
                 scanner = DocumentScanner()
-                document_data = scanner.scan_document_from_bytes(file_content, file.filename)
+                scan_result = scanner.scan_document_from_bytes(file_content, file.filename)
 
                 # Clean up file buffer immediately after processing
                 file_content.close()
                 del file_content
 
-                if not document_data.get("success"):
+                if not scan_result.get("success"):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Failed to process document: {document_data.get('error', 'Unknown error')}",
+                        detail=f"Failed to process document: {scan_result.get('error', 'Unknown error')}",
                     )
+                
+                # Wrap in list for agent processing (expects list of documents)
+                document_data = [scan_result]
+                logger.info(f"Document scanned successfully: {file.filename}, type: {scan_result.get('file_type')}, size: {scan_result.get('full_length', 0)} chars")
 
             except HTTPException:
                 raise  # Re-raise HTTP exceptions
@@ -503,9 +507,11 @@ async def chat(
         for msg in history:
             tokens_used += len(msg["content"].split())
         if document_data:
-            # Add document content to token count
-            doc_content = document_data.get("content", "")
-            tokens_used += len(str(doc_content).split())
+            # Add document content to token count (document_data is a list)
+            for doc in document_data:
+                if isinstance(doc, dict):
+                    doc_content = doc.get("content", "")
+                    tokens_used += len(str(doc_content).split())
         tokens_used = int(tokens_used * 1.3)  # Rough multiplier for actual tokens
 
         # Get total message count for this session

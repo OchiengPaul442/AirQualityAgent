@@ -352,12 +352,46 @@ class AgentService:
         if not document_data:
             return ""
 
-        context_parts = ["\n\nUploaded Documents Context:"]
+        # Ensure document_data is a list
+        if not isinstance(document_data, list):
+            logger.warning(f"document_data should be a list, got {type(document_data)}")
+            return ""
 
-        for doc in document_data:
+        context_parts = ["\n\n=== UPLOADED DOCUMENTS ==="]
+
+        for idx, doc in enumerate(document_data, 1):
+            # Skip if not a dictionary
+            if not isinstance(doc, dict):
+                logger.warning(f"Skipping non-dict document: {type(doc)}")
+                continue
+            
             filename = doc.get("filename", "Unknown")
             content = doc.get("content", "")
-            context_parts.append(f"\nDocument: {filename}\n{content[:1000]}")
+            file_type = doc.get("file_type", "unknown")
+            truncated = doc.get("truncated", False)
+            full_length = doc.get("full_length", len(content))
+            
+            # Build document header
+            context_parts.append(f"\n--- Document {idx}: {filename} ---")
+            context_parts.append(f"Type: {file_type.upper()}")
+            
+            # Add metadata if available
+            metadata = doc.get("metadata", {})
+            if metadata:
+                metadata_str = ", ".join([f"{k}: {v}" for k, v in metadata.items() if k not in ['characters']])
+                if metadata_str:
+                    context_parts.append(f"Info: {metadata_str}")
+            
+            # Show truncation info
+            if truncated:
+                context_parts.append(f"Size: {full_length} chars (showing first 1000)")
+            
+            # Add content with clear delimiter
+            context_parts.append(f"\nContent:\n{content[:1000]}")
+            if truncated:
+                context_parts.append("[... content truncated ...]")
+        
+        context_parts.append("\n=== END DOCUMENTS ===\n")
 
         return "\n".join(context_parts)
 

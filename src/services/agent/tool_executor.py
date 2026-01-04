@@ -260,7 +260,10 @@ class ToolExecutor:
 
             # Document tools
             elif function_name == "scan_document":
-                return self.document_scanner.scan_document(args.get("file_path"))
+                file_path = args.get("file_path")
+                if not file_path:
+                    return {"error": "file_path parameter is required"}
+                return self.document_scanner.scan_file(file_path)
 
             else:
                 return {
