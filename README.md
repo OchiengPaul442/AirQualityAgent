@@ -18,6 +18,7 @@
 - ✅ **Configurable Response Styles**: Tailor AI responses for executives, policymakers, researchers, or public
 - ✅ **Multi-Source Data**: WAQI, AirQo, Open-Meteo with intelligent fallbacks
 - ✅ **Document Upload & Analysis**: PDF, CSV, Excel file support
+- ✅ **GPS Location Support**: Precise location-based queries with latitude/longitude coordinates
 - ✅ **Location Memory**: Remembers locations from conversation history
 - ✅ **Forecast Detection**: Automatically identifies when users want predictions
 - ✅ Simplified session management (automatic saving)

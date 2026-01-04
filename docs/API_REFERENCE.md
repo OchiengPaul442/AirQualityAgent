@@ -77,11 +77,13 @@ Send a message to the AI agent and receive a response with automatic conversatio
 
 **Form Fields:**
 
-| Field        | Type   | Required | Description                                                  |
-| ------------ | ------ | -------- | ------------------------------------------------------------ |
-| `message`    | string | Yes      | User's question or request                                   |
-| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new. |
-| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB         |
+| Field        | Type   | Required | Description                                                    |
+| ------------ | ------ | -------- | -------------------------------------------------------------- |
+| `message`    | string | Yes      | User's question or request                                     |
+| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new.   |
+| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB           |
+| `latitude`   | float  | No       | GPS latitude (-90 to 90) for precise location-based queries    |
+| `longitude`  | float  | No       | GPS longitude (-180 to 180) for precise location-based queries |
 
 **Without File (JSON):**
 
@@ -99,6 +101,15 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
   -F "message=Analyze this air quality data and find trends" \
   -F "session_id=10a28e5c-9dc2-4e1f-9e21-8109d27ba9df" \
   -F "file=@/path/to/data.csv"
+```
+
+**With GPS Location (multipart/form-data):**
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=What's the air quality here?" \
+  -F "latitude=40.7128" \
+  -F "longitude=-74.0060"
 ```
 
 ### Response
@@ -134,6 +145,7 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
 ✅ **Automatic Saving**: All messages are automatically saved to database  
 ✅ **Context Aware**: Remembers last 20 messages from the session  
 ✅ **Document Upload**: Upload PDF, CSV, or Excel files for analysis (max 8MB)  
+✅ **GPS Location Support**: Provide latitude/longitude for precise location-based air quality queries  
 ✅ **In-Memory Processing**: Files processed in memory, never stored on disk  
 ✅ **Cost Optimized**: Limited context window reduces token usage  
 ✅ **Caching**: Identical queries are cached for 1 hour

@@ -224,6 +224,8 @@ Natural language interface with automatic tool calling and session management.
 interface ChatRequest {
   message: string; // User's message
   session_id?: string; // Optional: continue existing session
+  latitude?: number; // Optional: GPS latitude (-90 to 90) for precise location queries
+  longitude?: number; // Optional: GPS longitude (-180 to 180) for precise location queries
 }
 ```
 
@@ -248,6 +250,7 @@ The agent can automatically:
 - Provide 7-day forecasts
 - Compare data across locations
 - Explain health implications
+- Use GPS coordinates for precise location-based queries
 - Use connected MCP servers for extended functionality
 
 ### 3. Session Management
