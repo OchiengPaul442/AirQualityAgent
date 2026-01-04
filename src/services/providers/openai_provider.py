@@ -88,7 +88,17 @@ class OpenAIProvider(BaseAIProvider):
         for msg in history:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
-
+        
+        # Debug: Log if documents are in system instruction
+        if "UPLOADED DOCUMENTS" in system_instruction:
+            doc_section_start = system_instruction.find("=== UPLOADED DOCUMENTS ===")
+            doc_section_end = system_instruction.find("=== END DOCUMENTS ===")
+            if doc_section_start >= 0 and doc_section_end >= 0:
+                doc_section_length = doc_section_end - doc_section_start
+                logger.info(f"✅ Document section present in system instruction ({doc_section_length} chars)")
+            else:
+                logger.warning("⚠️ Document markers found but section incomplete")
+        
         tools_used: list[str] = []
 
         # Retry configuration for network resilience

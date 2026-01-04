@@ -519,13 +519,13 @@ def get_document_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "scan_document",
-                "description": "Scan and extract data from uploaded documents (PDF, CSV, Excel).",
+                "description": "Scan and extract data from documents stored on disk. IMPORTANT: Do NOT use this tool if the user uploaded a document in the current conversation - uploaded documents are automatically scanned and their content is already provided to you in the UPLOADED DOCUMENTS section. Only use this tool if the user asks you to read a specific file from a file path on the server's disk.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "Path to the document file",
+                            "description": "Absolute file path to the document file on disk (e.g., /path/to/file.csv)",
                         }
                     },
                     "required": ["file_path"],

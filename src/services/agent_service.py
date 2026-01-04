@@ -293,6 +293,11 @@ class AgentService:
             style=style or "general",
             custom_suffix=self._build_document_context(document_data),
         )
+        
+        # Log if document context was added
+        if document_data:
+            doc_context_length = len(self._build_document_context(document_data))
+            logger.info(f"Document context added to system instruction: {doc_context_length} chars for {len(document_data)} document(s)")
 
         # Process with provider
         try:
@@ -357,7 +362,11 @@ class AgentService:
             logger.warning(f"document_data should be a list, got {type(document_data)}")
             return ""
 
-        context_parts = ["\n\n=== UPLOADED DOCUMENTS ==="]
+        context_parts = [
+            "\n\n=== UPLOADED DOCUMENTS ===",
+            "\n⚠️ IMPORTANT: The document data below is ALREADY PROVIDED to you. DO NOT use the scan_document tool.",
+            "You have direct access to this data - analyze it immediately without requesting file access.\n"
+        ]
 
         for idx, doc in enumerate(document_data, 1):
             # Skip if not a dictionary
@@ -372,26 +381,30 @@ class AgentService:
             full_length = doc.get("full_length", len(content))
             
             # Build document header
-            context_parts.append(f"\n--- Document {idx}: {filename} ---")
-            context_parts.append(f"Type: {file_type.upper()}")
+            context_parts.append(f"\n📄 Document {idx}: {filename}")
+            context_parts.append(f"File Type: {file_type.upper()}")
+            context_parts.append(f"Status: ✅ Scanned and Ready")
             
             # Add metadata if available
             metadata = doc.get("metadata", {})
             if metadata:
                 metadata_str = ", ".join([f"{k}: {v}" for k, v in metadata.items() if k not in ['characters']])
                 if metadata_str:
-                    context_parts.append(f"Info: {metadata_str}")
+                    context_parts.append(f"Details: {metadata_str}")
             
             # Show truncation info
             if truncated:
-                context_parts.append(f"Size: {full_length} chars (showing first 1000)")
+                context_parts.append(f"Size: {full_length} characters total (preview showing first 1,000)")
             
             # Add content with clear delimiter
-            context_parts.append(f"\nContent:\n{content[:1000]}")
+            context_parts.append(f"\n--- DATA START ---\n{content[:1000]}")
             if truncated:
-                context_parts.append("[... content truncated ...]")
+                context_parts.append("\n--- DATA TRUNCATED (use above preview) ---")
+            else:
+                context_parts.append("\n--- DATA END ---")
         
-        context_parts.append("\n=== END DOCUMENTS ===\n")
+        context_parts.append("\n\n✅ All document data above is ready for your analysis. Proceed with answering the user's question using this data.")
+        context_parts.append("=== END DOCUMENTS ===\n")
 
         return "\n".join(context_parts)
 
