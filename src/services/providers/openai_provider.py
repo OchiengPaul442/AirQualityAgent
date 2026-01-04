@@ -109,7 +109,7 @@ class OpenAIProvider(BaseAIProvider):
             try:
                 # Create completion
                 # Use higher max_tokens when tools are available (responses tend to be longer)
-                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
+                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 3 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
                 
                 response = self.client.chat.completions.create(
                     model=self.settings.AI_MODEL,
@@ -263,9 +263,19 @@ class OpenAIProvider(BaseAIProvider):
             
             response_text = self._clean_response(response_text)
 
-        # Handle empty responses
-        if not response_text or not response_text.strip():
-            response_text = await self._generate_fallback(message)
+        # Handle empty or very short responses
+        if not response_text or not response_text.strip() or len(response_text.strip()) < 20:
+            logger.warning(f"OpenAI returned empty or very short response (length: {len(response_text) if response_text else 0}). Tools used: {tools_used}")
+            
+            # Check if tools were called but response is still short
+            if tools_used:
+                response_text = (
+                    "I retrieved the data successfully, but encountered an issue formatting the response. "
+                    "Let me provide you with the key information:\n\n"
+                    "The data was fetched, but I need you to ask your question again, and I'll provide a complete, detailed response with air quality metrics, health implications, and recommendations."
+                )
+            else:
+                response_text = await self._generate_fallback(message)
 
         return {
             "response": response_text or "I apologize, but I couldn't generate a response. Please try again.",

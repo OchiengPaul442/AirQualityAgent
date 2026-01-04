@@ -103,8 +103,8 @@ class GeminiProvider(BaseAIProvider):
         # Add optional parameters if provided
         if top_k is not None:
             config_params["top_k"] = top_k
-        # Use higher max_tokens when tools are available
-        effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if tools else self.settings.AI_MAX_TOKENS)
+        # Use higher max_tokens when tools are available (tool responses need more space)
+        effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 3 if tools else self.settings.AI_MAX_TOKENS)
         if effective_max_tokens is not None:
             config_params["max_output_tokens"] = effective_max_tokens
 
@@ -207,16 +207,25 @@ class GeminiProvider(BaseAIProvider):
                 logger.warning("Gemini response was truncated due to max tokens")
                 final_response += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
 
-        if not final_response or not final_response.strip():
-            logger.warning("Gemini returned empty response. Providing fallback.")
-            final_response = (
-                "I apologize, but I wasn't able to retrieve the requested information at this time. "
-                "This could be due to data unavailability or connectivity issues. Please try:\n\n"
-                "1. Asking about a different location\n"
-                "2. Rephrasing your question\n"
-                "3. Checking back in a few moments\n\n"
-                "Is there anything else I can help you with?"
-            )
+        if not final_response or not final_response.strip() or len(final_response.strip()) < 20:
+            logger.warning(f"Gemini returned empty or very short response (length: {len(final_response) if final_response else 0}). Tools used: {tools_used}")
+            
+            # Check if tools were called but response is still empty
+            if tools_used:
+                final_response = (
+                    "I retrieved the data successfully, but encountered an issue formatting the response. "
+                    "Let me provide you with the key information:\n\n"
+                    "The data was fetched, but I need you to ask your question again, and I'll provide a complete, detailed response with air quality metrics, health implications, and recommendations."
+                )
+            else:
+                final_response = (
+                    "I apologize, but I wasn't able to retrieve the requested information at this time. "
+                    "This could be due to data unavailability or connectivity issues. Please try:\n\n"
+                    "1. Asking about a different location\n"
+                    "2. Rephrasing your question\n"
+                    "3. Checking back in a few moments\n\n"
+                    "Is there anything else I can help you with?"
+                )
 
         # Clean the response
         final_response = self._clean_response(final_response)
