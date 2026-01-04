@@ -92,12 +92,15 @@ class OpenAIProvider(BaseAIProvider):
         tools_used: list[str] = []
 
         # Create completion
+        # Use higher max_tokens when tools are available (responses tend to be longer)
+        effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 2 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
+        
         response = self.client.chat.completions.create(
             model=self.settings.AI_MODEL,
             messages=messages,
             tools=self.get_tool_definitions(),
             tool_choice="auto",
-            max_tokens=max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS,
+            max_tokens=effective_max_tokens,
             temperature=temperature,
             top_p=top_p,
         )
@@ -153,7 +156,7 @@ class OpenAIProvider(BaseAIProvider):
                 final_response = self.client.chat.completions.create(
                     model=self.settings.AI_MODEL,
                     messages=messages,
-                    max_tokens=max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS,
+                    max_tokens=effective_max_tokens,
                     temperature=temperature,
                     top_p=top_p,
                 )
@@ -293,6 +296,11 @@ class OpenAIProvider(BaseAIProvider):
         if not content:
             return ""
 
+        import re
+
+        # Remove HTML tags
+        content = re.sub(r'<[^>]+>', '', content)
+
         # Remove code markers
         unwanted_patterns = [
             "```markdown\n",
@@ -305,6 +313,42 @@ class OpenAIProvider(BaseAIProvider):
 
         for pattern in unwanted_patterns:
             content = content.replace(pattern, "")
+
+        # Fix common Markdown issues
+        # Ensure tables have proper separators
+        lines = content.split('\n')
+        cleaned_lines = []
+        in_table = False
+        table_header_count = 0
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            
+            # Check if this is a table row
+            if '|' in stripped and stripped.startswith('|') and stripped.endswith('|'):
+                if not in_table:
+                    in_table = True
+                    table_header_count = stripped.count('|') - 1  # Number of columns
+                    cleaned_lines.append(line)
+                else:
+                    current_count = stripped.count('|') - 1
+                    if current_count == table_header_count:
+                        cleaned_lines.append(line)
+                    else:
+                        # Skip malformed table rows
+                        logger.warning(f"Skipping malformed table row: {stripped}")
+                        continue
+            else:
+                if in_table and stripped and not stripped.startswith('|'):
+                    # End of table
+                    in_table = False
+                cleaned_lines.append(line)
+
+        content = '\n'.join(cleaned_lines)
+
+        # Ensure proper spacing in tables
+        content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
+        content = re.sub(r'\| +\|', r'| |', content)  # Remove extra spaces in empty cells
 
         return content.strip()
 

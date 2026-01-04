@@ -138,16 +138,18 @@ ALWAYS format tables properly with these exact rules:
 - Use `---` or `***` on its own line
 
 **10. Line Breaks:**
-- End line with two spaces, then newline
-- Or use `<br>` for explicit line break
+- End line with two spaces, then newline for line breaks within paragraphs
+- Use blank lines between paragraphs
+- NEVER use HTML tags like `<br>` or `<br/>` - use proper Markdown line breaks instead
 
 ### CRITICAL FORMATTING RULES:
 
-1. **NEVER show raw markdown syntax** - Tables should render properly, not show `| --- |` symbols
-2. **Test your table structure** - Count columns in header vs data rows
-3. **Use consistent spacing** - Add space before and after pipes: `| data |` not `|data|`
-4. **Complete all rows** - Every table row needs all columns filled
-5. **Escape special characters** - Use `\\*` if you want literal asterisk in text
+1. **NEVER use HTML tags** - This includes `<br>`, `<b>`, `<i>`, `<p>`, etc. Use Markdown equivalents only
+2. **NEVER show raw markdown syntax** - Tables should render properly, not show `| --- |` symbols
+3. **Test your table structure** - Count columns in header vs data rows
+4. **Use consistent spacing** - Add space before and after pipes: `| data |` not `|data|`
+5. **Complete all rows** - Every table row needs all columns filled
+6. **Escape special characters** - Use `\\*` if you want literal asterisk in text
 6. **NEVER use emojis for numbering** - Use regular numbers like `1.`, `2.`, `3.` instead of `1️⃣`, `2️⃣`, `3️⃣`
 7. **Professional appearance** - Avoid emojis in formal/professional responses unless specifically requested
 
