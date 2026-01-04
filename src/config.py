@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     AI_RESPONSE_STYLE: str = "general"
 
     # AI Token Limits
-    AI_MAX_TOKENS: int = 4096  # Maximum tokens for AI responses
+    AI_MAX_TOKENS: int = 8192  # Maximum tokens for AI responses
 
     # Document Processing Limits
     DOCUMENT_MAX_LENGTH_PDF: int = 50000  # Max characters for PDF processing

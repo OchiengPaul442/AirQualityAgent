@@ -32,6 +32,7 @@ from src.services.agent_service import AgentService
 from src.services.airqo_service import AirQoService
 from src.services.openmeteo_service import OpenMeteoService
 from src.services.waqi_service import WAQIService
+from src.utils.markdown_formatter import MarkdownFormatter
 from src.utils.security import ResponseFilter, validate_request_data
 
 router = APIRouter()
@@ -474,6 +475,8 @@ async def chat(
         final_response = sanitize_response(result["response"])
         # Apply response filtering to hide implementation details
         final_response = ResponseFilter.clean_response(final_response)
+        # Apply professional markdown formatting
+        final_response = MarkdownFormatter.format_response(final_response)
         tools_used = result.get("tools_used", [])
 
         # Add document processing tool to tools_used if document was processed

@@ -159,6 +159,15 @@ class GeminiProvider(BaseAIProvider):
         # Get final response
         final_response = response.text if response.text else ""
 
+        # Check if response was truncated
+        if response.candidates and response.candidates[0].finish_reason:
+            finish_reason = response.candidates[0].finish_reason
+            logger.info(f"Gemini response finish reason: {finish_reason}")
+            
+            if finish_reason == "MAX_TOKENS":
+                logger.warning("Gemini response was truncated due to max tokens")
+                final_response += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
+
         if not final_response or not final_response.strip():
             logger.warning("Gemini returned empty response. Providing fallback.")
             final_response = (

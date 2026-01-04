@@ -153,14 +153,21 @@ class OpenAIProvider(BaseAIProvider):
                 final_response = self.client.chat.completions.create(
                     model=self.settings.AI_MODEL,
                     messages=messages,
-                    max_tokens=self.settings.AI_MAX_TOKENS,
+                    max_tokens=max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS,
                     temperature=temperature,
                     top_p=top_p,
                 )
                 response_text = final_response.choices[0].message.content
+                finish_reason = final_response.choices[0].finish_reason
                 logger.info(
-                    f"Final response received. Length: {len(response_text) if response_text else 0}"
+                    f"Final response received. Length: {len(response_text) if response_text else 0}, Finish reason: {finish_reason}"
                 )
+                
+                # Check if response was truncated due to length limit
+                if finish_reason == "length":
+                    logger.warning("Response was truncated due to max_tokens limit")
+                    response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
+                
                 response_text = self._clean_response(response_text)
             except Exception as e:
                 logger.error(f"Final API call failed: {e}")
@@ -170,9 +177,16 @@ class OpenAIProvider(BaseAIProvider):
                 }
         else:
             response_text = response.choices[0].message.content
+            finish_reason = response.choices[0].finish_reason
             logger.info(
-                f"Direct response (no tools). Length: {len(response_text) if response_text else 0}"
+                f"Direct response (no tools). Length: {len(response_text) if response_text else 0}, Finish reason: {finish_reason}"
             )
+            
+            # Check if response was truncated due to length limit
+            if finish_reason == "length":
+                logger.warning("Response was truncated due to max_tokens limit")
+                response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
+            
             response_text = self._clean_response(response_text)
 
         # Handle empty responses
