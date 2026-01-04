@@ -754,10 +754,29 @@ class AirQoService:
                         params = {"site_id": ",".join(site_ids[:5])}  # Limit to first 5 sites
                         data = self._make_request("devices/readings/recent", params)
 
-                        # Add search context to help AI understand the data
+                        # Add search context and station metadata to help AI understand the data
                         if data.get("success"):
                             data["search_location"] = search_query
                             data["sites_queried"] = len(site_ids[:5])
+                            
+                            # Add detailed station information for transparency
+                            station_details = []
+                            for site in sites[:5]:
+                                station_info = {
+                                    "site_name": site.get("name", site.get("description", "Unknown")),
+                                    "site_id": site.get("_id"),
+                                    "location": site.get("location_name", site.get("city", "Unknown")),
+                                    "latitude": site.get("latitude"),
+                                    "longitude": site.get("longitude"),
+                                    "country": site.get("country")
+                                }
+                                # Only include if we have meaningful data
+                                if station_info["site_name"] and station_info["site_name"] != "Unknown":
+                                    station_details.append(station_info)
+                            
+                            if station_details:
+                                data["monitoring_stations"] = station_details
+                                data["_data_source_note"] = f"Data from {len(station_details)} AirQo monitoring station(s) in or near {search_query}"
 
                         return format_air_quality_data(data, source="airqo")
 

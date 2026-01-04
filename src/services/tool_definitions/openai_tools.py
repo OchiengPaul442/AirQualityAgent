@@ -187,6 +187,27 @@ def get_airqo_tools() -> list[dict]:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_airqo_sites",
+                "description": "**USE THIS to find monitoring stations in an area** - Search for AirQo monitoring sites by location name. Returns list of available monitoring stations with their names, IDs, and locations. CRITICAL: Use this when user asks 'what stations are in [area]?', 'which monitoring sites?', 'what locations have monitors?'. This tool provides transparency about data sources and helps users understand which stations exist in their area.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "Location name to search for monitoring sites (e.g., 'Wakiso', 'Kampala', 'Gulu', 'Nairobi')",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results to return (default: 50)",
+                        },
+                    },
+                    "required": ["location"],
+                },
+            },
+        },
     ]
 
 

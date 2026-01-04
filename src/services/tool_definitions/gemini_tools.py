@@ -168,6 +168,24 @@ def get_airqo_tools() -> types.Tool:
                     required=["location"],
                 ),
             ),
+            types.FunctionDeclaration(
+                name="search_airqo_sites",
+                description="**USE THIS to find monitoring stations in an area** - Search for AirQo monitoring sites by location name. Returns list of available monitoring stations with their names, IDs, and locations. CRITICAL: Use this when user asks 'what stations are in [area]?', 'which monitoring sites?', 'what locations have monitors?'. This tool provides transparency about data sources and helps users understand which stations exist in their area.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "location": types.Schema(
+                            type=types.Type.STRING,
+                            description="Location name to search for monitoring sites (e.g., 'Wakiso', 'Kampala', 'Gulu', 'Nairobi')",
+                        ),
+                        "limit": types.Schema(
+                            type=types.Type.INTEGER,
+                            description="Maximum number of results to return (default: 50)",
+                        ),
+                    },
+                    required=["location"],
+                ),
+            ),
         ]
     )
 

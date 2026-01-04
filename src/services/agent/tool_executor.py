@@ -167,6 +167,14 @@ class ToolExecutor:
                     latitude=args.get("latitude"), longitude=args.get("longitude")
                 )
 
+            elif function_name == "search_airqo_sites":
+                if self.airqo is None:
+                    return {"success": False, "message": "AirQo service is not enabled."}
+                return self.airqo.search_sites_by_location(
+                    location=args.get("location"),
+                    limit=args.get("limit", 50)
+                )
+
             # OpenMeteo tools
             elif function_name == "get_openmeteo_current_air_quality":
                 if self.openmeteo is None:

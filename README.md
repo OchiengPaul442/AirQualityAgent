@@ -10,7 +10,7 @@
 
 **Meet Aeris**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
 
-**Latest Updates (v2.1):**
+**Latest Updates (v2.8):**
 
 - ✅ **🆕 Optimized System Prompt**: Reduced from 33,000 to 500 characters (92% cost reduction)
 - ✅ **🆕 Tool-First Architecture**: Agent uses tools immediately instead of apologizing
