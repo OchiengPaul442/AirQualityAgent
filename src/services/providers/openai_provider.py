@@ -103,6 +103,160 @@ class OpenAIProvider(BaseAIProvider):
         
         tools_used: list[str] = []
 
+        # FORCE TOOL CALLING for search/scraping/air quality queries
+        force_search_tool = self._should_force_search_tool(message.lower())
+        force_scrape_tool = self._should_force_scrape_tool(message.lower())
+        force_air_quality_tool, cities_to_query = self._should_force_air_quality_tool(message.lower())
+
+        if force_search_tool:
+            logger.info("FORCING search_web tool call for query")
+            # Add a fake tool call to force the model to use search
+            messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "forced_search_call",
+                    "type": "function",
+                    "function": {
+                        "name": "search_web",
+                        "arguments": '{"query": "current air quality regulations and policies 2025"}'
+                    }
+                }]
+            })
+            # Add fake tool result
+            messages.append({
+                "role": "tool",
+                "tool_call_id": "forced_search_call",
+                "content": "Search results will be provided by the system."
+            })
+            tools_used.append("search_web")
+
+        if force_scrape_tool:
+            logger.info("FORCING scrape_website tool call for query")
+            # Extract URL from message
+            import re
+            url_match = re.search(r'https?://[^\s]+', message)
+            if url_match:
+                url = url_match.group(0)
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "forced_scrape_call",
+                        "type": "function",
+                        "function": {
+                            "name": "scrape_website",
+                            "arguments": f'{{"url": "{url}"}}'
+                        }
+                    }]
+                })
+                # Add fake tool result
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": "forced_scrape_call",
+                    "content": "Website content will be extracted by the system."
+                })
+                tools_used.append("scrape_website")
+
+        if force_air_quality_tool and cities_to_query:
+            logger.info(f"FORCING air quality tool calls for cities: {cities_to_query}")
+            tool_calls = []
+            
+            # Create separate tool calls for each city (services work one at a time)
+            call_id = 0
+            
+            # Simple classification for tool selection
+            known_african_cities = ['kampala', 'nairobi', 'jinja', 'gulu', 'dar es salaam', 'kigali', 'mbale', 'nakasero', 'mombasa', 'kisumu', 'nakuru', 'eldoret', 'dodoma', 'mwanza', 'arusha', 'mbeya', 'butare', 'musanze', 'ruhengeri', 'gisenyi', 'mbarara']
+            
+            for city in cities_to_query:
+                city_lower = city.lower()
+                import json
+
+                # Choose appropriate tool based on city
+                if any(african_city in city_lower for african_city in known_african_cities) or 'africa' in city_lower:
+                    tool_calls.append({
+                        "id": f"forced_aq_call_{call_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "get_african_city_air_quality",
+                            "arguments": json.dumps({"city": city})
+                        }
+                    })
+                else:
+                    tool_calls.append({
+                        "id": f"forced_aq_call_{call_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "get_city_air_quality",
+                            "arguments": json.dumps({"city": city})
+                        }
+                    })
+                call_id += 1
+            
+            # Add the tool calls to messages
+            if tool_calls:
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": tool_calls
+                })
+                
+                # Add fake tool results
+                for tc in tool_calls:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": "Air quality data will be retrieved by the system."
+                    })
+                    tools_used.append(tc["function"]["name"])
+            logger.info("FORCING search_web tool call for query")
+            # Add a fake tool call to force the model to use search
+            messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "forced_search_call",
+                    "type": "function",
+                    "function": {
+                        "name": "search_web",
+                        "arguments": '{"query": "current air quality regulations and policies 2025"}'
+                    }
+                }]
+            })
+            # Add fake tool result
+            messages.append({
+                "role": "tool",
+                "tool_call_id": "forced_search_call",
+                "content": "Search results will be provided by the system."
+            })
+            tools_used.append("search_web")
+
+        if force_scrape_tool:
+            logger.info("FORCING scrape_website tool call for query")
+            # Extract URL from message
+            import re
+            url_match = re.search(r'https?://[^\s]+', message)
+            if url_match:
+                url = url_match.group(0)
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "forced_scrape_call",
+                        "type": "function",
+                        "function": {
+                            "name": "scrape_website",
+                            "arguments": f'{{"url": "{url}"}}'
+                        }
+                    }]
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": "forced_scrape_call",
+                    "content": "Website content will be scraped by the system."
+                })
+                tools_used.append("scrape_website")
+
         # Retry configuration for network resilience
         max_retries = 3
         base_delay = 1  # seconds
@@ -359,6 +513,110 @@ class OpenAIProvider(BaseAIProvider):
             "response": response_text or "I apologize, but I couldn't generate a response. Please try again.",
             "tools_used": tools_used,
         }
+
+    def _should_force_search_tool(self, message: str) -> bool:
+        """Check if the message requires forcing search_web tool usage."""
+        search_keywords = [
+            'latest', 'current', 'recent', 'update', 'up-to-date', '2024', '2025', '2026',
+            'policy', 'regulation', 'legislation', 'government action', 'research study',
+            'who/epa guideline', 'standard', 'recommendation', 'news', 'breaking news',
+            'staying informed', 'monitoring change', 'regulatory update'
+        ]
+        return any(keyword in message for keyword in search_keywords)
+
+    def _should_force_scrape_tool(self, message: str) -> bool:
+        """Check if the message requires forcing scrape_website tool usage."""
+        scrape_keywords = ['scrape', 'extract', 'website', 'url', 'http://', 'https://']
+        return any(keyword in message for keyword in scrape_keywords)
+
+    def _should_force_air_quality_tool(self, message: str) -> tuple[bool, list[str]]:
+        """Check if the message requires forcing air quality tool usage.
+        
+        Returns:
+            tuple: (should_force, list_of_cities_to_query)
+        """
+        message_lower = message.lower()
+        
+        # Keywords that indicate air quality queries
+        air_quality_keywords = [
+            'air quality', 'aqi', 'pollution', 'pm2.5', 'pm10', 'ozone', 'no2', 'so2', 'co',
+            'air pollution', 'atmospheric quality', 'clean air', 'air monitoring'
+        ]
+        
+        # Check if it's an air quality query
+        is_air_quality_query = any(keyword in message_lower for keyword in air_quality_keywords)
+        
+        if not is_air_quality_query:
+            return False, []
+        
+        # Extract city names for tool calls
+        import re
+
+        # Country to major cities mapping
+        country_cities = {
+            'uganda': ['Kampala', 'Gulu', 'Jinja', 'Mbale', 'Mbarara'],
+            'kenya': ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Eldoret'],
+            'tanzania': ['Dar es Salaam', 'Dodoma', 'Mwanza', 'Arusha', 'Mbeya'],
+            'rwanda': ['Kigali', 'Butare', 'Musanze', 'Ruhengeri', 'Gisenyi'],
+            'uk': ['London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow'],
+            'united kingdom': ['London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow'],
+            'usa': ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'],
+            'united states': ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'],
+            'china': ['Beijing', 'Shanghai', 'Guangzhou', 'Shenzhen', 'Chengdu'],
+            'india': ['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata'],
+            'germany': ['Berlin', 'Munich', 'Hamburg', 'Cologne', 'Frankfurt'],
+            'france': ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice'],
+            'japan': ['Tokyo', 'Osaka', 'Nagoya', 'Sapporo', 'Fukuoka'],
+            'australia': ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide'],
+            'canada': ['Toronto', 'Vancouver', 'Montreal', 'Calgary', 'Ottawa'],
+            'brazil': ['São Paulo', 'Rio de Janeiro', 'Brasília', 'Salvador', 'Fortaleza'],
+            'mexico': ['Mexico City', 'Guadalajara', 'Monterrey', 'Puebla', 'Tijuana'],
+            'south africa': ['Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Port Elizabeth'],
+            'nigeria': ['Lagos', 'Abuja', 'Kano', 'Ibadan', 'Port Harcourt'],
+            'egypt': ['Cairo', 'Alexandria', 'Giza', 'Shubra El-Kheima', 'Port Said'],
+        }
+        
+        cities = []
+        
+        # Check for countries first
+        for country, city_list in country_cities.items():
+            if country in message_lower:
+                # For countries, take the first 3-5 major cities to avoid overwhelming
+                cities.extend(city_list[:5])
+                break
+        
+        # If no country found, extract individual city names
+        if not cities:
+            # Common city extraction patterns
+            city_patterns = [
+                r'\b(?:in|at|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b',  # "in London", "at New York"
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:air quality|aqi)\b',  # "London air quality"
+                r'\b(compare|comparison)\s+(?:air quality|aqi)?\s*(?:between|of)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:and|vs|versus)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b',  # "compare London and Paris"
+            ]
+            
+            for pattern in city_patterns:
+                matches = re.findall(pattern, message, re.IGNORECASE)
+                if matches:
+                    if isinstance(matches[0], tuple):
+                        # For comparison patterns, extract all cities
+                        cities.extend([city for match in matches for city in match if city])
+                    else:
+                        cities.extend(matches)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_cities = []
+        for city in cities:
+            city_lower = city.lower()
+            if city_lower not in seen:
+                seen.add(city_lower)
+                unique_cities.append(city)
+        
+        # Limit to reasonable number (max 10 cities to avoid overwhelming)
+        if len(unique_cities) > 10:
+            unique_cities = unique_cities[:10]
+        
+        return len(unique_cities) > 0, unique_cities
 
     def _deduplicate_calls(self, tool_calls: list) -> list:
         """

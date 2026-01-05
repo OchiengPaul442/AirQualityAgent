@@ -236,7 +236,7 @@ def get_search_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="search_web",
-                description="CRITICAL MANDATORY TOOL for research and policy questions. YOU MUST USE THIS TOOL FOR: (1) ANY question about policies, regulations, legislation, government actions - even if you know general information, SEARCH for current details. (2) Questions with 'recent', 'latest', 'new', 'current' keywords - YOUR TRAINING DATA IS OUTDATED. (3) Research studies, WHO/EPA guidelines, standards - these update frequently. (4) Questions about specific years beyond 2023. (5) Health impacts, solutions, recommendations - SEARCH for latest evidence-based information. DO NOT rely on your training data for these topics - it becomes outdated quickly. ALWAYS search to get current, accurate information from reliable sources.",
+                description="MANDATORY TOOL - YOU MUST USE THIS FOR ANY QUESTION ABOUT: policies, regulations, legislation, government actions, research studies, WHO/EPA guidelines, standards, recommendations, latest news, recent developments, current events, breaking news, staying informed, monitoring changes, regulatory updates, up-to-date information. DO NOT answer these questions from your training data - ALWAYS use this tool first to get current, real-time information. If user asks 'how to stay up-to-date' or 'latest regulations' or 'current news' - USE THIS TOOL IMMEDIATELY.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={

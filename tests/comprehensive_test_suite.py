@@ -468,6 +468,49 @@ class ComprehensiveTestRunner:
             {"concurrent_results": results}
         )
 
+    async def test_scraping_capabilities(self):
+        """Test Category 8: Web Scraping Capabilities"""
+        logger.info("\n" + "="*80)
+        logger.info("TEST CATEGORY 8: Web Scraping Capabilities")
+        logger.info("="*80)
+
+        test_cases = [
+            {
+                "query": "Can you scrape the WHO air quality guidelines from https://www.who.int/news-room/fact-sheets/detail/ambient-(outdoor)-air-quality-and-health and summarize the key points?",
+                "name": "WHO Website Scraping",
+                "expect_scraping": True
+            },
+            {
+                "query": "Extract information about air pollution from https://www.epa.gov/air-research/air-pollution-and-your-health",
+                "name": "EPA Website Scraping",
+                "expect_scraping": True
+            }
+        ]
+
+        for test_case in test_cases:
+            response = await self.send_message(test_case["query"])
+
+            if "error" in response:
+                self.log_result(test_case["name"], False, f"Request failed: {response['error']}", response)
+                continue
+
+            tools_used = response.get("tools_used", [])
+            scraping_used = any("scrape_website" in str(tool) for tool in tools_used)
+
+            if test_case.get("expect_scraping"):
+                passed = scraping_used
+                message = f"Web scraping {'used' if scraping_used else 'NOT used'} (Tools: {tools_used})"
+            else:
+                passed = True  # For now, just check it doesn't crash
+                message = f"Query handled (Tools: {tools_used})"
+
+            self.log_result(
+                test_case["name"],
+                passed,
+                message,
+                response
+            )
+
     async def run_all_tests(self):
         """Run all test categories."""
         logger.info("="*80)
@@ -487,6 +530,7 @@ class ComprehensiveTestRunner:
         await self.test_fallback_mechanisms()
         await self.test_edge_cases()
         await self.test_performance_and_concurrency()
+        await self.test_scraping_capabilities()
 
         # Generate summary
         self._generate_summary()

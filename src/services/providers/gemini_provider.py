@@ -90,7 +90,7 @@ class GeminiProvider(BaseAIProvider):
 
         # Get tools only for supported models
         tools = None
-        if self.settings.AI_MODEL in ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp"]:
+        if self.settings.AI_MODEL in ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash"]:
             tools = self.get_tool_definitions()
 
         # Create chat session

@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # AI Model Configuration
     # Single flexible configuration for the active model
     AI_API_KEY: str = ""
-    AI_MODEL: str = "gemini-2.5-flash"  # Default model
-    AI_PROVIDER: str = "gemini"  # gemini, openai, ollama, openrouter, deepseek, kimi
+    AI_MODEL: str = "gemini-1.5-flash"  # Default model
+    AI_PROVIDER: str = "openai"  # gemini, openai, ollama, openrouter, deepseek, kimi
 
     # Provider-specific base URLs
     OLLAMA_BASE_URL: str = "http://localhost:11434"

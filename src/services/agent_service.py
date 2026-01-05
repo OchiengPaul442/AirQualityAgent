@@ -285,12 +285,15 @@ class AgentService:
             "policy", "policies", "regulation", "regulations", "legislation", 
             "law", "laws", "enforcement", "enforce", "compliance",
             "research", "study", "studies", "findings", "latest", "recent", 
-            "current", "new", "update", "updates", "2024", "2025", "2026",
+            "new", "update", "updates", "2024", "2025", "2026",
             "who", "epa", "guidelines", "standards", "recommendations",
             "government", "ministry", "agency", "official", "gazette",
             "implementation", "adoption", "effectiveness", "impact",
             "cost-effective", "solutions", "mitigation", "reduction",
-            "traffic pollution", "industrial emissions", "vehicle emissions"
+            "news", "breaking news", "developments", "staying informed",
+            "monitoring changes", "regulatory updates", "up-to-date",
+            "real-time", "live feeds", "current events", "breaking",
+            "announcements", "policy changes", "environmental policy"
         ]
         
         # Check for research/policy keywords
@@ -298,17 +301,18 @@ class AgentService:
         
         # Additional context checks for air quality domain
         air_quality_context = [
-            "air quality", "air pollution", "pollution", "aqi", "pm2.5", "pm10",
+            "air quality", "air-quality", "air pollution", "pollution", "aqi", "pm2.5", "pm10",
             "emissions", "clean air", "environmental", "sustainability"
         ]
         
         has_air_quality_context = any(context in message_lower for context in air_quality_context)
         
-        # Force web search if query has both research keywords AND air quality context
-        # OR if it explicitly mentions policies/regulations/studies
+        # Force web search if query has research/policy keywords
+        # OR if it has air quality context with any research/policy terms
+        # OR if it explicitly mentions policies/regulations/studies/news/updates
         should_force = (
-            (has_research_keywords and has_air_quality_context) or
-            any(keyword in message_lower for keyword in ["policy", "policies", "regulation", "regulations", "research", "study", "studies", "latest", "recent", "current", "2024", "2025", "2026"])
+            has_research_keywords or
+            (has_air_quality_context and any(keyword in message_lower for keyword in ["policy", "policies", "regulation", "regulations", "research", "study", "studies", "latest", "recent", "current", "news", "update", "updates", "up-to-date", "2024", "2025", "2026"]))
         )
         
         if should_force:
@@ -641,9 +645,27 @@ class AgentService:
         # Detect queries that should use web search but AI might skip
         force_web_search = self._should_force_web_search(message.lower())
         if force_web_search:
-            logger.info(f"Forcing web search for research/policy query: {message[:100]}...")
-            # Modify system instruction to be even more explicit about web search
-            system_instruction += "\n\n**CRITICAL OVERRIDE**: This query requires current research/policy information. YOU MUST call the search_web tool FIRST before providing any response. Do not rely on training data - search for the latest information immediately."
+            logger.info(f"FORCED WEB SEARCH TRIGGERED for: {message[:100]}...")
+            # Automatically perform web search and add results to context
+            try:
+                search_query = f"current air quality regulations and news 2025"
+                search_results = self.tool_executor.search.search(search_query, max_results=5)
+                search_context = "\n\n=== WEB SEARCH RESULTS FOR CURRENT AIR QUALITY REGULATIONS AND NEWS ===\n"
+                search_context += "Use these current search results to provide up-to-date information. Do not rely on your training data.\n\n"
+                for i, result in enumerate(search_results, 1):
+                    search_context += f"{i}. **{result.get('title', 'No title')}**\n"
+                    search_context += f"   {result.get('body', 'No description')}\n"
+                    if result.get('href'):
+                        search_context += f"   Source: {result.get('href')}\n"
+                    search_context += "\n"
+                search_context += "=== END SEARCH RESULTS ===\n\n"
+                search_context += "**INSTRUCTION**: Base your response on these current search results. Provide specific, up-to-date information about air quality regulations and news from 2025.\n\n"
+                # Add search results to the message
+                message += search_context
+                logger.info(f"Added {len(search_results)} search results to query context")
+            except Exception as e:
+                logger.error(f"Failed to perform forced web search: {e}")
+                # Continue without search results
 
         # Process with provider
         try:

@@ -1,4 +1,7 @@
+import asyncio
 import logging
+import time
+from typing import Any, Dict, List
 
 try:
     from ddgs import DDGS  # type: ignore
@@ -11,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 class SearchService:
     """
-    Service for performing web searches using DuckDuckGo.
-    Enhanced for air quality and environmental information searches.
+    Enhanced service for performing web searches using multiple providers.
+    Supports DuckDuckGo, and fallback mechanisms for air quality and environmental information.
     """
 
     # Trusted air quality and environmental sources
@@ -74,17 +77,71 @@ class SearchService:
         "dataportal.afdb.org",
     ]
 
-    def search(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
+    def __init__(self):
+        """Initialize search service with multiple providers."""
+        self.providers = {
+            'duckduckgo': self._search_duckduckgo,
+            # Add more providers here in the future
+        }
+        self.default_provider = 'duckduckgo'
+
+    def search(self, query: str, max_results: int = 5, provider: str = None) -> list[dict[str, str]]:
         """
-        Performs a web search using DuckDuckGo.
+        Performs a web search using the specified provider or default provider.
         Returns a list of search results with 'title', 'href', and 'body' fields.
 
         Args:
             query: Search query string
             max_results: Maximum number of results to return (default: 5)
+            provider: Search provider to use (default: duckduckgo)
 
         Returns:
             List of search result dictionaries with title, href, and body
+        """
+        provider_name = provider or self.default_provider
+
+        if provider_name not in self.providers:
+            logger.warning(f"Unknown provider '{provider_name}', falling back to {self.default_provider}")
+            provider_name = self.default_provider
+
+        # Try the primary provider
+        try:
+            results = self.providers[provider_name](query, max_results)
+            if results and len(results) > 0:
+                # Prioritize trusted sources
+                results = self._prioritize_trusted_sources(results)
+                logger.info(f"Found {len(results)} search results for query: {query} using {provider_name}")
+                return results
+        except Exception as e:
+            logger.error(f"Error with provider {provider_name}: {e}")
+
+        # Fallback to other providers if available
+        for fallback_provider, search_func in self.providers.items():
+            if fallback_provider == provider_name:
+                continue
+            try:
+                logger.info(f"Trying fallback provider: {fallback_provider}")
+                results = search_func(query, max_results)
+                if results and len(results) > 0:
+                    results = self._prioritize_trusted_sources(results)
+                    logger.info(f"Found {len(results)} search results using fallback provider {fallback_provider}")
+                    return results
+            except Exception as e:
+                logger.error(f"Fallback provider {fallback_provider} also failed: {e}")
+
+        # All providers failed
+        logger.error(f"All search providers failed for query: {query}")
+        return [
+            {
+                "title": "Search Unavailable",
+                "body": "All search providers are currently unavailable. Please try again later or contact support.",
+                "href": "",
+            }
+        ]
+
+    def _search_duckduckgo(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
+        """
+        Search using DuckDuckGo.
         """
         try:
             with DDGS() as ddgs:
@@ -92,29 +149,13 @@ class SearchService:
 
             if not results:
                 logger.warning(f"No search results found for query: {query}")
-                return [
-                    {
-                        "title": "No results",
-                        "body": "No search results found for this query.",
-                        "href": "",
-                    }
-                ]
+                return []
 
-            # Prioritize trusted sources
-            results = self._prioritize_trusted_sources(results)
-
-            logger.info(f"Found {len(results)} search results for query: {query}")
             return results
 
         except Exception as e:
-            logger.error(f"Error performing search for '{query}': {e}")
-            return [
-                {
-                    "title": "Search Error",
-                    "body": f"Failed to perform search: {str(e)}",
-                    "href": "",
-                }
-            ]
+            logger.error(f"DuckDuckGo search failed for '{query}': {e}")
+            raise
 
     def _prioritize_trusted_sources(self, results: list[dict]) -> list[dict]:
         """
