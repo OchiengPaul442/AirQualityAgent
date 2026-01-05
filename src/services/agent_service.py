@@ -111,6 +111,52 @@ class AgentService:
             f"AgentService initialized with provider: {self.settings.AI_PROVIDER}"
         )
 
+        # Memory management and loop prevention
+        self.conversation_memory: list[dict] = []
+        self.max_conversation_length = 50  # Prevent memory bloat
+        self.loop_detection_window = 10  # Check last N messages for loops
+        self.max_response_length = 8000  # Prevent extremely long responses
+
+    def _check_for_loops(self, user_message: str) -> bool:
+        """
+        Check for potential conversation loops or repetitive patterns.
+
+        Returns True if a loop is detected, False otherwise.
+        """
+        if len(self.conversation_memory) < self.loop_detection_window:
+            return False
+
+        # Check for exact message repetition
+        recent_messages = [msg.get('user', '') for msg in self.conversation_memory[-self.loop_detection_window:]]
+        if recent_messages.count(user_message) > 2:
+            return True
+
+        # Check for similar patterns (basic heuristic)
+        if len(set(recent_messages)) < len(recent_messages) * 0.3:  # Less than 30% unique messages
+            return True
+
+        return False
+
+    def _manage_memory(self):
+        """Manage conversation memory to prevent bloat and loops."""
+        if len(self.conversation_memory) > self.max_conversation_length:
+            # Keep only the most recent messages
+            self.conversation_memory = self.conversation_memory[-self.max_conversation_length:]
+
+    def _add_to_memory(self, user_message: str, ai_response: str):
+        """Add conversation turn to memory with safeguards."""
+        self.conversation_memory.append({
+            'user': user_message[:1000],  # Limit message length
+            'ai': ai_response[:2000],     # Limit response length
+            'timestamp': self._get_timestamp()
+        })
+        self._manage_memory()
+
+    def _get_timestamp(self) -> str:
+        """Get current timestamp for memory tracking."""
+        from datetime import datetime
+        return datetime.now().isoformat()
+
     def _create_provider(self) -> BaseAIProvider:
         """
         Factory method to create the appropriate AI provider.
@@ -465,6 +511,20 @@ class AgentService:
             self.tool_executor.client_location = None
             logger.info(f"Set IP location for tool executor (fallback): {client_ip}")
 
+        # Check for conversation loops before processing
+        if self._check_for_loops(message):
+            logger.warning("Conversation loop detected, providing safe response")
+            return {
+                "response": (
+                    "I notice we're going in circles. Let me help you with a fresh perspective. "
+                    "Could you please rephrase your question or tell me what specific air quality information you're looking for?"
+                ),
+                "tokens_used": 0,
+                "cost_estimate": 0.0,
+                "cached": False,
+                "loop_detected": True,
+            }
+
         # Process with provider
         try:
             response_data = await self.provider.process_message(
@@ -488,6 +548,18 @@ class AgentService:
             response_data["cached"] = False
             # cache.set expects (namespace, key, value, ttl)
             self.cache.set("agent", cache_key, response_data, ttl=3600)  # 1 hour TTL
+
+            # SECURITY: Filter out any sensitive information from response
+            response_data = self._filter_sensitive_info(response_data)
+
+            # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
+            ai_response = response_data.get("response", "")
+            if len(ai_response) > self.max_response_length:
+                ai_response = ai_response[:self.max_response_length] + "... [Response truncated for length]"
+                response_data["response"] = ai_response
+                response_data["truncated"] = True
+
+            self._add_to_memory(message, ai_response)
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "
@@ -658,6 +730,99 @@ class AgentService:
             Dict with cost and usage statistics
         """
         return self.cost_tracker.get_status()
+
+    def _filter_sensitive_info(self, response_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Filter out any sensitive information from the response.
+
+        This includes API keys, tokens, internal methods, tool calls, internal IDs, etc.
+        Based on best practices from leading AI companies (OpenAI, Gemini, Kimi).
+
+        If sensitive information is detected, provide a professional response instead of
+        showing redaction markers to maintain user trust and professionalism.
+        """
+        import re
+
+        if "response" in response_data and isinstance(response_data["response"], str):
+            response_text = response_data["response"]
+
+            # Check if response contains sensitive information
+            sensitive_indicators = [
+                r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]',
+                r'(?i)(site[_-]?id|device[_-]?id|station[_-]?id|sensor[_-]?id)\s*[:=]',
+                r'https?://[^\s]+',  # URLs
+                r'\{"type":\s*"function"',  # Tool calls
+                r'\[REDACTED\]|\[ID REDACTED\]|\[URL REDACTED\]|\[METHOD REDACTED\]|\[TOOL CALL REDACTED\]',
+                r'(?i)using\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
+                r'(?i)calling\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
+            ]
+
+            contains_sensitive = any(re.search(pattern, response_text) for pattern in sensitive_indicators)
+
+            if contains_sensitive:
+                # Replace with professional response instead of showing redaction markers
+                logger.warning(f"Sensitive information detected in response, replacing with professional message. Original: {response_text[:200]}...")
+                response_data["response"] = (
+                    "I apologize, but I cannot provide the specific technical details you're requesting. "
+                    "This is to ensure security and protect sensitive information. "
+                    "Please rephrase your question or ask about air quality data, health recommendations, or environmental information instead."
+                )
+                response_data["sensitive_content_filtered"] = True
+                return response_data
+
+            # If no sensitive content detected, proceed with normal cleaning
+            # Remove API keys and tokens (common patterns)
+            response_text = re.sub(r'(?i)(api\s+key|token|secret|password|auth\s+key)\s*[:=]\s*\S+', '[FILTERED]', response_text)
+            response_text = re.sub(r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+', '[FILTERED]', response_text)
+
+            # Remove references to internal methods or services FIRST (before JSON removal)
+            sensitive_patterns = [
+                r'(?i)using\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
+                r'(?i)calling\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
+                r'(?i)executing\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
+                r'(?i)(tool|service|api|method|function)\s+["\']?[\w_]+["\']?\s+(returned|provided|gave)',
+                r'(?i)querying\s+(database|api|service|endpoint)[\s:]+["\']?[^"\']+["\']?',
+            ]
+
+            for pattern in sensitive_patterns:
+                response_text = re.sub(pattern, 'using our data sources', response_text)
+
+            # Remove any remaining tool call syntax that might have leaked
+            response_text = re.sub(r'\{"type":\s*"function".*?\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
+            response_text = re.sub(r'\(\w+="[^"]*"\)', '[TECHNICAL DETAILS REMOVED]', response_text)
+
+            # Remove raw JSON data that might leak from tool results
+            response_text = re.sub(r'\{[^}]*"code"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
+            response_text = re.sub(r'\{[^}]*"id"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
+            response_text = re.sub(r'\{[^}]*"name"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
+            response_text = re.sub(r'\{[^}]*"location"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
+
+            # Remove internal IDs and site identifiers (specific to air quality domain)
+            internal_id_patterns = [
+                r'(?i)(site[_-]?id|device[_-]?id|station[_-]?id|sensor[_-]?id)\s*[:=]\s*["\']?[\w\-]+["\']?',
+                r'(?i)(location[_-]?id|monitor[_-]?id|node[_-]?id)\s*[:=]\s*["\']?[\w\-]+["\']?',
+                r'(?i)(api[_-]?endpoint|service[_-]?url|base[_-]?url)\s*[:=]\s*["\']?[^"\']+["\']?',
+                r'(?i)(database[_-]?id|table[_-]?id|record[_-]?id)\s*[:=]\s*["\']?[\w\-]+["\']?',
+                # Also match without quotes
+                r'(?i)(site[_-]?id|device[_-]?id|station[_-]?id|sensor[_-]?id)\s*[:=]\s*\S+',
+                r'(?i)(location[_-]?id|monitor[_-]?id|node[_-]?id)\s*[:=]\s*\S+',
+                r'(?i)(api[_-]?endpoint|service[_-]?url|base[_-]?url)\s*[:=]\s*\S+',
+                r'(?i)(database[_-]?id|table[_-]?id|record[_-]?id)\s*[:=]\s*\S+',
+            ]
+
+            for pattern in internal_id_patterns:
+                response_text = re.sub(pattern, '[DETAILS REMOVED]', response_text)
+
+            # Remove escaped JSON
+            response_text = re.sub(r'\\"[^"]*\\":', '', response_text)
+            response_text = re.sub(r'\\n', ' ', response_text)
+
+            # Remove any remaining technical artifacts
+            response_text = re.sub(r'\b\d{10,}\b', '[NUMBER REMOVED]', response_text)  # Long numbers that might be IDs
+            response_text = re.sub(r'\b[a-f0-9]{8,}\b', '[CODE REMOVED]', response_text)  # Hex hashes
+            response_text = re.sub(r'https?://[^\s]+', '[LINK REMOVED]', response_text)  # URLs
+
+        return response_data
 
     async def cleanup(self):
         """Clean up resources (MCP clients, provider connections)."""

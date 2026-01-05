@@ -197,9 +197,16 @@ class OpenAIProvider(BaseAIProvider):
                     import time
                     time.sleep(delay)
                 else:
+                    # Log the full error for developers but provide user-friendly message
+                    logger.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
                     return {
-                        "response": f"I encountered an unexpected error: {str(e)}. Please try again.",
+                        "response": (
+                            "I apologize, but I'm experiencing technical difficulties at the moment. "
+                            "This is likely a temporary issue. Please try again in a few moments, "
+                            "or rephrase your question about air quality information."
+                        ),
                         "tools_used": [],
+                        "error_logged": True,  # Flag for internal tracking
                     }
 
         # Validate response before accessing
@@ -520,6 +527,28 @@ class OpenAIProvider(BaseAIProvider):
 
         import re
 
+        # CRITICAL: Remove any leaked tool call syntax or internal function calls
+        # Remove JSON-like function call patterns
+        content = re.sub(r'\{"type":\s*"function".*?\}', '', content, flags=re.DOTALL)
+        content = re.sub(r'\{"name":\s*".*?".*?\}', '', content, flags=re.DOTALL)
+        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', '', content, flags=re.DOTALL)
+        
+        # Remove function call syntax like (city="Gulu")
+        content = re.sub(r'\(\w+="[^"]*"\)', '', content)
+        
+        # Remove any remaining JSON objects that look like tool calls
+        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', '', content, flags=re.DOTALL)
+        
+        # Remove raw JSON data that might leak from tool results
+        content = re.sub(r'\{[^}]*"code"[^}]*\}', '', content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"id"[^}]*\}', '', content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"name"[^}]*\}', '', content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"location"[^}]*\}', '', content, flags=re.DOTALL)
+        
+        # Remove escaped JSON
+        content = re.sub(r'\\"[^"]*\\":', '', content)
+        content = re.sub(r'\\n', ' ', content)
+        
         # Remove HTML tags
         content = re.sub(r'<[^>]+>', '', content)
 
