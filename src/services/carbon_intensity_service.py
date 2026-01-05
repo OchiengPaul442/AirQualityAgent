@@ -35,10 +35,18 @@ class CarbonIntensityService:
 
         Note: No API key required for access
         """
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+
         from ..config import get_settings
 
         settings = get_settings()
         self.session = requests.Session()
+        
+        # Configure retries
+        retries = Retry(total=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
+        self.session.mount('https://', HTTPAdapter(max_retries=retries))
+        
         self.cache_service = get_cache()
         self.cache_ttl = settings.CACHE_TTL_SECONDS
 

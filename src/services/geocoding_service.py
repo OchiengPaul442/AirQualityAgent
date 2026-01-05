@@ -29,6 +29,10 @@ class GeocodingService:
         })
         self.cache_service = get_cache()
 
+    def geocode(self, address: str, limit: int = 1) -> Dict[str, Any]:
+        """Alias for geocode_address"""
+        return self.geocode_address(address, limit)
+
     def geocode_address(self, address: str, limit: int = 1) -> Dict[str, Any]:
         """
         Geocode an address to coordinates.

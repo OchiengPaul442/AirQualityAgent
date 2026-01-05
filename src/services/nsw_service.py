@@ -78,6 +78,25 @@ class NSWService:
         except requests.exceptions.RequestException as e:
             raise Exception(f"NSW API request failed: {str(e)}") from e
 
+    def get_air_quality(self, region: str | None = None) -> dict[str, Any]:
+        """
+        Get current air quality observations.
+        
+        Args:
+            region: Optional region name to filter by (not currently used but kept for interface consistency)
+            
+        Returns:
+            Observation data
+        """
+        # Default to getting all observations for today
+        today = datetime.now().strftime("%Y-%m-%d")
+        request_data = {
+            "StartDate": today,
+            "EndDate": today,
+            "Categories": ["Good", "Fair", "Poor", "Very Poor", "Extremely Poor"]
+        }
+        return self.get_observations(request_data)
+
     def get_site_details(self) -> list[dict[str, Any]]:
         """
         Get details of all air quality monitoring sites in NSW

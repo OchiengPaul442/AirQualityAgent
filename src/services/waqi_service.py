@@ -130,6 +130,10 @@ class WAQIService:
 
         return formatted
 
+    def get_by_coordinates(self, lat: float, lon: float) -> dict[str, Any]:
+        """Alias for get_station_by_coords"""
+        return self.get_station_by_coords(lat, lon)
+
     def get_station_by_coords(self, lat: float, lon: float) -> dict[str, Any]:
         """
         Get nearest station data by coordinates

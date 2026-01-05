@@ -67,7 +67,11 @@ class DefraService:
             response = self.session.get(url, params=params, timeout=30)
             response.raise_for_status()
 
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                logger.error(f"DEFRA API returned non-JSON response for site {site_id}")
+                return {"error": "DEFRA API returned invalid data. Please try OpenMeteoService for UK data."}
 
             # Format the data
             formatted_data = self._format_station_data(data, site_id, species_code)
