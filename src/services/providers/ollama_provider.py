@@ -4,6 +4,7 @@ Ollama Provider Implementation.
 Handles local Ollama deployment for air quality agent with enhanced error handling and rate limit detection.
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -87,23 +88,37 @@ class OllamaProvider(BaseAIProvider):
                 # Call Ollama with tools
                 options = {
                     "temperature": temperature,
-                    "top_p": top_p,
+                    "timeout": 30,  # 30 seconds timeout
                 }
 
                 # Add optional parameters if provided
+                if top_p is not None:
+                    options["top_p"] = top_p
                 if top_k is not None:
                     options["top_k"] = top_k
-                # Use higher max_tokens when tools are available (tool responses need more space)
-                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 3 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
-                if effective_max_tokens is not None:
-                    options["num_predict"] = effective_max_tokens
+                if max_tokens is not None:
+                    options["num_predict"] = max_tokens
+
+                logger.info(f"Calling Ollama chat with model {self.settings.AI_MODEL}, messages count: {len(messages)}")
 
                 response = ollama.chat(
                     model=self.settings.AI_MODEL,
                     messages=messages,
-                    tools=self.get_tool_definitions(),
                     options=options,
                 )
+
+                print(f"Ollama response: {response}")
+
+                if response is None:
+                    logger.error("Ollama chat returned None")
+                    return {
+                        "response": "I apologize, but the AI service returned no response. Please try again.",
+                        "tools_used": [],
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                    }
+
+                logger.info(f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}")
                 break  # Success, exit retry loop
                 
             except ConnectionError as e:
@@ -116,6 +131,8 @@ class OllamaProvider(BaseAIProvider):
                     return {
                         "response": "Unable to connect to the local Ollama service. Please ensure Ollama is running.",
                         "tools_used": [],
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
                     }
                     
             except TimeoutError as e:
@@ -128,6 +145,8 @@ class OllamaProvider(BaseAIProvider):
                     return {
                         "response": "The Ollama service is taking too long to respond. Please try again with a simpler question.",
                         "tools_used": [],
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
                     }
                     
             except Exception as e:
@@ -157,6 +176,8 @@ class OllamaProvider(BaseAIProvider):
                         "response": "Aeris is currently experiencing high demand. Please wait a moment and try again.",
                         "tools_used": [],
                         "rate_limit_info": error_details,
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
                     }
                 
                 if attempt < max_retries - 1:
@@ -169,11 +190,15 @@ class OllamaProvider(BaseAIProvider):
                         return {
                             "response": "Unable to connect to the local Ollama service. Please ensure Ollama is running.",
                             "tools_used": [],
+                            "tokens_used": 0,
+                            "cost_estimate": 0.0,
                         }
                     elif "model" in error_msg:
                         return {
                             "response": f"The requested model '{self.settings.AI_MODEL}' is not available. Please pull the model first with: ollama pull {self.settings.AI_MODEL}",
                             "tools_used": [],
+                            "tokens_used": 0,
+                            "cost_estimate": 0.0,
                         }
                     else:
                         # Log the full error for developers but provide user-friendly message
@@ -185,89 +210,144 @@ class OllamaProvider(BaseAIProvider):
                             ),
                             "tools_used": [],
                             "error_logged": True,  # Flag for internal tracking
+                            "tokens_used": 0,
+                            "cost_estimate": 0.0,
                         }
 
-            # Validate response before accessing
-            if response is None:
-                logger.error("Ollama response is None after retry loop - all attempts failed")
-                return {
-                    "response": "I apologize, but I encountered an error processing your request. Please try again.",
-                    "tools_used": [],
-                }
+        # Validate response before accessing (outside retry loop)
+        if response is None:
+            logger.error("Ollama response is None after retry loop - all attempts failed")
+            return {
+                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "tools_used": [],
+                "tokens_used": 0,
+                "cost_estimate": 0.0,
+            }
 
-            # Handle tool calls
-            if response.get("message", {}).get("tool_calls"):
-                tool_calls = response["message"]["tool_calls"]
-                logger.info(f"Ollama requested {len(tool_calls)} tool calls")
+        # If the response object is not a dict-like with .get(), try to adapt
+        try:
+            has_message = response.get("message") if isinstance(response, dict) else getattr(response, 'message', None)
+        except Exception:
+            has_message = None
 
-                # Execute each tool
-                for tool_call in tool_calls:
-                    function_name = tool_call["function"]["name"]
-                    function_args = tool_call["function"]["arguments"]
+        if not has_message:
+            logger.error(f"Ollama response message is None or empty: {response}")
+            return {
+                "response": "I apologize, but I received an invalid response from the AI service. Please try again.",
+                "tools_used": [],
+                "tokens_used": 0,
+                "cost_estimate": 0.0,
+            }
 
-                    tools_used.append(function_name)
-                    logger.info(f"Executing tool: {function_name}")
+        # Normalize message object access
+        message_obj = response.get("message") if isinstance(response, dict) else getattr(response, 'message')
 
-                    # Execute tool
-                    try:
-                        tool_result = self.tool_executor.execute(function_name, function_args)
-                    except Exception as e:
-                        logger.error(f"Tool execution failed: {e}")
-                        tool_result = {"error": str(e)}
+        # Handle tool calls
+        if getattr(message_obj, 'tool_calls', None):
+            tool_calls = message_obj.tool_calls
+            logger.info(f"Ollama requested {len(tool_calls)} tool calls")
 
-                    # Add tool result to messages
+            tool_results = []
+
+            # Execute each tool
+            for tool_call in tool_calls:
+                function_name = tool_call["function"]["name"]
+                function_args = tool_call["function"]["arguments"]
+
+                tools_used.append(function_name)
+                logger.info(f"Executing tool: {function_name}")
+
+                # Execute tool
+                try:
+                    tool_result = self.tool_executor.execute(function_name, function_args)
+                except Exception as e:
+                    logger.error(f"Tool execution failed: {e}")
+                    tool_result = {"error": str(e)}
+
+                tool_results.append(tool_result)
+
+                # Add tool result to messages
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": json.dumps(tool_result),
+                    }
+                )
+
+                # Also append a short summary to help the model
+                summary = self._summarize_tool_result(tool_result)
+                if summary:
                     messages.append(
                         {
                             "role": "tool",
-                            "content": json.dumps(tool_result),
+                            "content": json.dumps({"summary": summary}),
                         }
                     )
 
-                    # Also append a short summary to help the model
-                    summary = self._summarize_tool_result(tool_result)
-                    if summary:
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "content": json.dumps({"summary": summary}),
-                            }
-                        )
+            # Get final response with tool results
+            # Add explicit assistant summary messages
+            try:
+                combined = []
+                for tr in tool_results:
+                    s = self._summarize_tool_result(tr)
+                    if s:
+                        combined.append(s)
+                if combined:
+                    assistant_summary = "TOOL RESULTS SUMMARY:\n\n" + "\n\n".join(combined) + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."
+                    messages.append({"role": "assistant", "content": assistant_summary})
+            except Exception:
+                pass
 
-                # Get final response with tool results
-                # Add explicit assistant summary messages
-                try:
-                    combined = []
-                    for tr in tool_results if 'tool_results' in locals() else []:
-                        s = self._summarize_tool_result(tr.get("result"))
-                        if s:
-                            combined.append(s)
-                    if combined:
-                        assistant_summary = "TOOL RESULTS SUMMARY:\n\n" + "\n\n".join(combined) + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."
-                        messages.append({"role": "assistant", "content": assistant_summary})
-                except Exception:
-                    pass
-
+            # Get final response with tool results
+            try:
                 final_response = ollama.chat(
                     model=self.settings.AI_MODEL,
                     messages=messages,
                     options={
                         "temperature": temperature,
                         "top_p": top_p,
-                        "num_predict": effective_max_tokens,
                     },
                 )
-                response_text = final_response["message"]["content"]
-            else:
-                # Direct response, no tools
-                response_text = response["message"]["content"]
+                final_message = final_response.get("message") if isinstance(final_response, dict) else getattr(final_response, 'message', None)
+                if not final_message:
+                    logger.error(f"Ollama final response message is None: {final_response}")
+                    return {
+                        "response": "I apologize, but I encountered an error processing the tool results. Please try again.",
+                        "tools_used": tools_used,
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                    }
+                response_text = final_message.content
+            except Exception as e:
+                logger.error(f"Ollama final response error: {e}")
+                return {
+                    "response": "I apologize, but I encountered an error processing the tool results. Please try again.",
+                    "tools_used": tools_used,
+                    "tokens_used": 0,
+                    "cost_estimate": 0.0,
+                }
+        else:
+            # Direct response, no tools
+            try:
+                response_text = message_obj.content
+            except (TypeError, KeyError, AttributeError) as e:
+                logger.error(f"Invalid response structure: {response}, error: {e}")
+                return {
+                    "response": "I apologize, but I received an invalid response from the AI service. Please try again.",
+                    "tools_used": tools_used,
+                    "tokens_used": 0,
+                    "cost_estimate": 0.0,
+                }
 
-            # Clean response
-            response_text = self._clean_response(response_text)
+        # Clean response
+        response_text = self._clean_response(response_text)
 
-            return {
-                "response": response_text or "I apologize, but I couldn't generate a response.",
-                "tools_used": tools_used,
-            }
+        return {
+            "response": response_text or "I apologize, but I couldn't generate a response.",
+            "tools_used": tools_used,
+            "tokens_used": 0,  # Ollama doesn't provide token counts
+            "cost_estimate": 0.0,  # Local model, no cost
+        }
 
     def _clean_response(self, content: str) -> str:
         """

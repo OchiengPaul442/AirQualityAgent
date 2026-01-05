@@ -537,6 +537,19 @@ class AgentService:
                 max_tokens=response_params.get("max_tokens"),  # Fixed: use max_tokens not max_output_tokens
             )
 
+            # Defensive: provider may (incorrectly) return None in some error paths
+            if response_data is None:
+                logger.error("Provider.process_message returned None (unexpected). Returning safe error response.")
+                return {
+                    "response": (
+                        "I apologize, but the AI service returned no data. "
+                        "Please try again or check the AI service logs."
+                    ),
+                    "tokens_used": 0,
+                    "cost_estimate": 0.0,
+                    "error": "provider_no_response",
+                }
+
             # Track costs
             tokens_used = response_data.get("tokens_used", 0)
             cost_estimate = response_data.get("cost_estimate", 0.0)
