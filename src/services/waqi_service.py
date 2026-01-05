@@ -120,6 +120,12 @@ class WAQIService:
         data = self._make_request(f"feed/{city}/")
         formatted = format_air_quality_data(data, source="waqi")
 
+        # Add success flag based on WAQI API status
+        if data.get("status") == "ok" and "data" in data:
+            formatted["success"] = True
+        else:
+            formatted["success"] = False
+
         # Add explicit warning about data type
         if "data" in formatted:
             formatted["data"]["_important_note"] = (
@@ -150,6 +156,12 @@ class WAQIService:
         """
         data = self._make_request(f"feed/geo:{lat};{lon}/")
         formatted = format_air_quality_data(data, source="waqi")
+
+        # Add success flag based on WAQI API status
+        if data.get("status") == "ok" and "data" in data:
+            formatted["success"] = True
+        else:
+            formatted["success"] = False
 
         if "data" in formatted:
             formatted["data"]["_important_note"] = (

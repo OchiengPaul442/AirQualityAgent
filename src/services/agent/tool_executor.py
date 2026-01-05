@@ -102,12 +102,17 @@ class ToolExecutor:
 
     def _get_city_air_quality_with_fallback(self, city: str) -> dict[str, Any]:
         """
-        Get city air quality with intelligent fallback strategy.
+        Get city air quality with comprehensive fallback strategy.
         
-        Tries multiple data sources in order:
+        Tries ALL available data sources in intelligent order:
         1. WAQI (global coverage, 13k+ stations)
-        2. Geocode + OpenMeteo (works anywhere with coordinates)
-        3. Web search (last resort)
+        2. AirQo (if African city)
+        3. Geocode + OpenMeteo (works anywhere with coordinates)
+        4. DEFRA (UK cities)
+        5. UBA (German cities) 
+        6. NSW (Australian cities)
+        7. Carbon Intensity (UK only)
+        8. Web search (last resort)
         
         Args:
             city: City name
@@ -115,13 +120,17 @@ class ToolExecutor:
         Returns:
             Result dictionary with success flag and data/message
         """
-        # Try WAQI first
+        tried_services = []
+        
+        # 1. Try WAQI first (global coverage)
         if self.waqi and not self._is_circuit_open('waqi'):
             try:
                 logger.info(f"Trying WAQI for {city}")
+                tried_services.append('WAQI')
                 result = self.waqi.get_city_feed(city)
                 if result.get("success"):
                     self._record_success('waqi')
+                    result["data_source"] = "WAQI"
                     return result
                 logger.info(f"WAQI returned no data for {city}")
                 self._record_failure('waqi')
@@ -129,10 +138,27 @@ class ToolExecutor:
                 logger.error(f"WAQI error for {city}: {e}")
                 self._record_failure('waqi')
         
-        # Fallback to Geocode + OpenMeteo
+        # 2. Try AirQo (good for African cities, but also try globally)
+        if self.airqo and not self._is_circuit_open('airqo'):
+            try:
+                logger.info(f"Trying AirQo for {city}")
+                tried_services.append('AirQo')
+                result = self.airqo.get_recent_measurements(city=city)
+                if result.get("success"):
+                    self._record_success('airqo')
+                    result["data_source"] = "AirQo"
+                    return result
+                logger.info(f"AirQo returned no data for {city}")
+                self._record_failure('airqo')
+            except Exception as e:
+                logger.error(f"AirQo error for {city}: {e}")
+                self._record_failure('airqo')
+        
+        # 3. Try Geocode + OpenMeteo (works anywhere with coordinates)
         if self.geocoding and self.openmeteo and not self._is_circuit_open('openmeteo'):
             try:
-                logger.info(f"Trying Geocoding + OpenMeteo fallback for {city}")
+                logger.info(f"Trying Geocoding + OpenMeteo for {city}")
+                tried_services.append('OpenMeteo')
                 geocode_result = self.geocoding.geocode_address(city, limit=1)
                 if geocode_result.get("success") and geocode_result.get("results"):
                     location = geocode_result["results"][0]
@@ -143,23 +169,93 @@ class ToolExecutor:
                         if aq_result.get("success"):
                             self._record_success('openmeteo')
                             # Enhance result to indicate fallback was used
-                            aq_result["data_source"] = "OpenMeteo (via geocoding fallback)"
+                            aq_result["data_source"] = "OpenMeteo (via geocoding)"
                             aq_result["location_name"] = city
                             aq_result["note"] = f"Data retrieved using coordinates for {city}"
                             return aq_result
-                logger.info(f"Geocoding fallback failed for {city}")
+                logger.info(f"Geocoding + OpenMeteo failed for {city}")
                 self._record_failure('openmeteo')
             except Exception as e:
-                logger.error(f"Geocoding + OpenMeteo fallback error for {city}: {e}")
+                logger.error(f"Geocoding + OpenMeteo error for {city}: {e}")
                 self._record_failure('openmeteo')
         
-        # Last resort: suggest web search
+        # 4. Try DEFRA (UK cities)
+        if self.defra and not self._is_circuit_open('defra'):
+            try:
+                logger.info(f"Trying DEFRA for {city}")
+                tried_services.append('DEFRA')
+                result = self.defra.get_city_air_quality(city)
+                if result.get("success"):
+                    self._record_success('defra')
+                    result["data_source"] = "DEFRA (UK)"
+                    return result
+                logger.info(f"DEFRA returned no data for {city}")
+                self._record_failure('defra')
+            except Exception as e:
+                logger.error(f"DEFRA error for {city}: {e}")
+                self._record_failure('defra')
+        
+        # 5. Try UBA (German cities)
+        if self.uba and not self._is_circuit_open('uba'):
+            try:
+                logger.info(f"Trying UBA for {city}")
+                tried_services.append('UBA')
+                result = self.uba.get_city_air_quality(city)
+                if result.get("success"):
+                    self._record_success('uba')
+                    result["data_source"] = "UBA (Germany)"
+                    return result
+                logger.info(f"UBA returned no data for {city}")
+                self._record_failure('uba')
+            except Exception as e:
+                logger.error(f"UBA error for {city}: {e}")
+                self._record_failure('uba')
+        
+        # 6. Try NSW (Australian cities)
+        if self.nsw and not self._is_circuit_open('nsw'):
+            try:
+                logger.info(f"Trying NSW for {city}")
+                tried_services.append('NSW')
+                result = self.nsw.get_city_air_quality(city)
+                if result.get("success"):
+                    self._record_success('nsw')
+                    result["data_source"] = "NSW (Australia)"
+                    return result
+                logger.info(f"NSW returned no data for {city}")
+                self._record_failure('nsw')
+            except Exception as e:
+                logger.error(f"NSW error for {city}: {e}")
+                self._record_failure('nsw')
+        
+        # 7. Try Carbon Intensity (UK only, but worth a try)
+        if self.carbon_intensity and not self._is_circuit_open('carbon_intensity'):
+            try:
+                logger.info(f"Trying Carbon Intensity for {city}")
+                tried_services.append('Carbon Intensity')
+                # This is UK-specific, so only try if city might be in UK
+                uk_cities = ['london', 'manchester', 'birmingham', 'leeds', 'glasgow', 'sheffield', 'bradford', 'liverpool', 'edinburgh', 'leicester']
+                if any(uk_city in city.lower() for uk_city in uk_cities):
+                    result = self.carbon_intensity.get_current_intensity()
+                    if result.get("success"):
+                        self._record_success('carbon_intensity')
+                        result["data_source"] = "Carbon Intensity (UK)"
+                        result["note"] = "UK carbon intensity data (not specific air quality)"
+                        return result
+                logger.info(f"Carbon Intensity not applicable for {city}")
+                self._record_failure('carbon_intensity')
+            except Exception as e:
+                logger.error(f"Carbon Intensity error for {city}: {e}")
+                self._record_failure('carbon_intensity')
+        
+        # Last resort: web search with comprehensive query
+        logger.info(f"All services failed for {city}. Tried: {', '.join(tried_services)}")
         return {
             "success": False,
-            "message": f"No air quality monitoring stations found for {city}. I recommend checking nearby major cities or using web search for local environmental agency data. Try cities like Dar es Salaam (Tanzania's largest city) or Nairobi (Kenya's capital) for comparison data.",
+            "message": f"Unable to retrieve air quality data for {city} from any available monitoring networks. Tried {len(tried_services)} different services: {', '.join(tried_services)}.",
+            "tried_services": tried_services,
             "suggestion": "search_web",
-            "search_query": f"current air quality {city}",
-            "fallback_advice": f"No monitoring station found for {city}. Try nearby cities like the closest major urban area, or check with local environmental agencies for alternative monitoring data."
+            "search_query": f"current air quality {city} site:epa.gov OR site:airnow.gov OR site:who.int",
+            "fallback_advice": f"No monitoring station data found for {city} from {len(tried_services)} services. Try searching official environmental agency websites or nearby major cities."
         }
 
     def _get_african_city_with_fallback(self, city: str, site_id: str = None) -> dict[str, Any]:
