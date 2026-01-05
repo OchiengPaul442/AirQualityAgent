@@ -178,6 +178,28 @@ def format_air_quality_data(data: dict[str, Any], source: str = "unknown") -> di
     formatted["_formatted"] = True
     formatted["_source"] = source
 
+    # Add health impact assessment (inspired by AERIS Spain IAM)
+    pm25_value = None
+    o3_value = None
+
+    # Extract PM2.5 and O3 values from formatted data
+    if source == "waqi" and "data" in formatted and "pollutant_details" in formatted["data"]:
+        if "pm25" in formatted["data"]["pollutant_details"]:
+            pm25_value = formatted["data"]["pollutant_details"]["pm25"].get("concentration_ugm3")
+        if "o3" in formatted["data"]["pollutant_details"]:
+            o3_value = formatted["data"]["pollutant_details"]["o3"].get("concentration_ugm3")
+    elif source in ["airqo", "openmeteo"]:
+        # For concentration-based sources
+        if "current" in formatted and isinstance(formatted["current"], dict):
+            current = formatted["current"]
+            if "pm2_5_concentration" in current:
+                pm25_value = current["pm2_5_concentration"]
+            if "o3_concentration" in current:
+                o3_value = current["o3_concentration"]
+
+    if pm25_value is not None or o3_value is not None:
+        formatted["health_impacts"] = assess_health_impacts(pm25_value, o3_value)
+
     return formatted
 
 
@@ -200,3 +222,59 @@ def round_to_decimal(value: Any, places: int = 1) -> Any:
         return round(num, places)
     except (ValueError, TypeError):
         return value
+
+
+def assess_health_impacts(pm25: float | None, o3: float | None) -> dict[str, Any]:
+    """
+    Assess health impacts from air quality data, inspired by AERIS Spain IAM.
+    Estimates impacts on human health for PM2.5 and O3.
+
+    Based on AERIS (UPM) model: Evaluates emission abatement strategies and health-related impacts.
+    Simplified assessment based on WHO guidelines and research.
+
+    Args:
+        pm25: PM2.5 concentration in µg/m³
+        o3: O3 concentration in µg/m³
+
+    Returns:
+        Dict with health impact assessments
+    """
+    impacts = {
+        "pm25_impact": "Unknown",
+        "o3_impact": "Unknown",
+        "overall_risk": "Low",
+        "recommendations": []
+    }
+
+    if pm25 is not None:
+        if pm25 <= 10:
+            impacts["pm25_impact"] = "Low risk"
+        elif pm25 <= 25:
+            impacts["pm25_impact"] = "Moderate risk - May affect sensitive individuals"
+            impacts["recommendations"].append("Limit outdoor activities for sensitive groups")
+        elif pm25 <= 50:
+            impacts["pm25_impact"] = "High risk - Health effects possible"
+            impacts["recommendations"].extend(["Avoid prolonged outdoor exposure", "Use air purifiers"])
+        else:
+            impacts["pm25_impact"] = "Very high risk - Serious health effects"
+            impacts["recommendations"].extend(["Stay indoors", "Wear masks", "Seek medical advice"])
+            impacts["overall_risk"] = "High"
+
+    if o3 is not None:
+        if o3 <= 50:
+            impacts["o3_impact"] = "Low risk"
+        elif o3 <= 100:
+            impacts["o3_impact"] = "Moderate risk - May cause respiratory issues"
+            impacts["recommendations"].append("Reduce outdoor exercise")
+        elif o3 <= 180:
+            impacts["o3_impact"] = "High risk - Health effects likely"
+            impacts["recommendations"].extend(["Avoid outdoor activities", "Monitor symptoms"])
+        else:
+            impacts["o3_impact"] = "Very high risk - Severe effects"
+            impacts["recommendations"].extend(["Stay indoors during peak hours", "Use air conditioning"])
+            impacts["overall_risk"] = "High"
+
+    if impacts["overall_risk"] == "Low" and (pm25 and pm25 > 25 or o3 and o3 > 100):
+        impacts["overall_risk"] = "Moderate"
+
+    return impacts

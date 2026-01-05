@@ -987,9 +987,9 @@ class AgentService:
             sensitive_indicators = [
                 r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+',  # ACTUAL keys with values
                 r'(?i)(site[_-]?id|device[_-]?id)\s*[:=]\s*\S+',  # ACTUAL IDs with values
-                r'\{"type":\s*"function".*?"name":\s*"[^"]+"}',  # Full tool call JSON structure
+                r'\{"type":\s*"function".*?\}',  # Full tool call JSON structure
                 r'\[REDACTED\]|\[ID REDACTED\]|\[URL REDACTED\]|\[METHOD REDACTED\]|\[TOOL CALL REDACTED\]',
-                # REMOVED: URL pattern - public URLs are fine and helpful
+                r'https?://[^\s]+',  # URLs (especially internal ones)
                 # REMOVED: "using tool/service" - we WANT transparency about data sources
                 # REMOVED: "calling tool/service" - we WANT transparency about data sources
             ]

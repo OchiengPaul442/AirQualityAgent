@@ -401,6 +401,49 @@ _Version: Enhanced Production Release_
 
 ---
 
+## Related AERIS Organizations
+
+As AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) focuses on air quality monitoring, weather predictions, and atmospheric intelligence, several other organizations and projects named AERIS align closely with our mission. Below is a summary of these entities, based on publicly available information from their official websites and publications. All information is used in accordance with copyright guidelines for U.S. Government works, open access repositories, and fair use for educational purposes.
+
+### 1. AERIS (France) - National Atmospheric Data Center
+
+- **Description**: AERIS is France's national Atmosphere Data Centre, dedicated to bringing together observation and campaign data produced by the French atmospheric science community. It provides data and services for atmospheric research in dynamics, physics, and chemistry.
+- **Relevance to AERIS-AQ**: Supports atmospheric science research, which includes air quality and weather data. Could provide valuable datasets for enhancing our air quality predictions.
+- **Website**: [aeris-data.fr](https://www.aeris-data.fr)
+- **Copyright Note**: As a French national research infrastructure, data and descriptions are publicly available for scientific use.
+
+### 2. Aeris, LLC (USA) - Atmospheric Science & Software Company
+
+- **Description**: A Colorado-based company specializing in atmospheric science and engineering services, founded by scientists from the National Center for Atmospheric Research (NCAR). They develop software solutions for defense, national security, aerospace, and apply expertise to aviation, renewable energy, air quality, and wildfires. They have contracts with the U.S. Department of Defense for atmospheric modeling.
+- **Relevance to AERIS-AQ**: Expertise in atmospheric modeling and air quality applications. Their work on environmental monitoring could complement our AI-driven predictions.
+- **Website**: [aerisllc.com](https://aerisllc.com)
+- **Copyright Note**: Company website content is copyrighted, but summaries and references are used here for informational purposes.
+
+### 3. AERIS (Argonne National Lab) - AI Earth Systems Model
+
+- **Description**: The Argonne Earth Systems Model for Reliable and Skillful Predictions (AERIS) is an AI foundation model developed at Argonne National Laboratory. It uses diffusion models trained on high-resolution data to provide weather forecasts beyond the typical 10-day limit, extending to subseasonal-to-seasonal scales (up to 90 days). It outperforms models like IFS ENS and demonstrates the potential of billion-parameter AI models for Earth systems science.
+- **Relevance to AERIS-AQ**: Highly relevant for weather prediction capabilities. As an AI model for Earth systems, it could enhance our weather-related predictions and air quality forecasting by integrating advanced AI techniques.
+- **Publications**: Available on [anl.gov](https://www.anl.gov) and [arxiv.org](https://arxiv.org/pdf/2509.13523)
+- **Copyright Note**: U.S. Department of Energy work; public domain under government copyright guidelines.
+
+### 4. AERIS (U.S. DOT) - Applications for the Environment: Real-Time Information Synthesis
+
+- **Description**: A U.S. Department of Transportation program focused on real-time information synthesis for environmental applications. It identifies transformative concepts for reducing GHG emissions, criteria air pollutants, and fuel consumption through eco-signal operations and integrated applications.
+- **Relevance to AERIS-AQ**: Directly addresses air pollutants and environmental real-time data, aligning with our air quality monitoring and prediction goals.
+- **Reports**: Available on [rosap.ntl.bts.gov](https://rosap.ntl.bts.gov)
+- **Copyright Note**: U.S. Government work; public domain.
+
+### 5. AERIS (Spain) - Air Quality Integrated Assessment Model
+
+- **Description**: Developed by Universidad Politécnica de Madrid (UPM), AERIS (Atmospheric Evaluation and Research Integrated model for Spain) is an Integrated Assessment Model (IAM) for evaluating air quality impacts. It assesses emission abatement strategies and their effects on human health (PM2.5, O3), crops, and vegetation.
+- **Relevance to AERIS-AQ**: Core focus on air quality modeling and health impacts, directly complementary to our system's air pollution analysis and predictions.
+- **Publications**: Open access on [oa.upm.es](https://oa.upm.es)
+- **Copyright Note**: Open access repository; licensed for reuse with attribution.
+
+These organizations demonstrate the breadth of AERIS-related work in atmospheric science, AI modeling, and environmental monitoring. Potential collaborations or integrations could enhance AERIS-AQ's capabilities in weather prediction and air quality intelligence. For any direct use of their data or models, refer to their respective terms of use and contact them for permissions.
+
+---
+
 ## ✅ Testing Results
 
 ### Agent Identity Test
