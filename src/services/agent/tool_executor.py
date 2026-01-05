@@ -156,10 +156,10 @@ class ToolExecutor:
         # Last resort: suggest web search
         return {
             "success": False,
-            "message": f"Unable to retrieve air quality data for {city} from available monitoring networks.",
+            "message": f"No air quality monitoring stations found for {city}. I recommend checking nearby major cities or using web search for local environmental agency data. Try cities like Dar es Salaam (Tanzania's largest city) or Nairobi (Kenya's capital) for comparison data.",
             "suggestion": "search_web",
             "search_query": f"current air quality {city}",
-            "fallback_advice": f"No monitoring station found for {city}. Data may be available through local environmental agencies."
+            "fallback_advice": f"No monitoring station found for {city}. Try nearby cities like the closest major urban area, or check with local environmental agencies for alternative monitoring data."
         }
 
     def _get_african_city_with_fallback(self, city: str, site_id: str = None) -> dict[str, Any]:

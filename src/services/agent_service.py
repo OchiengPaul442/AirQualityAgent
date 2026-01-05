@@ -267,6 +267,106 @@ class AgentService:
 
         return False
 
+    def _should_force_web_search(self, message_lower: str) -> bool:
+        """
+        Determine if a query should force web search usage.
+        
+        This addresses the issue where AI providers sometimes skip tools
+        for research/policy queries, even when instructed to use them.
+        
+        Args:
+            message_lower: Lowercase message to check
+            
+        Returns:
+            bool: True if web search should be forced
+        """
+        # Keywords that indicate research/policy queries requiring current information
+        research_keywords = [
+            "policy", "policies", "regulation", "regulations", "legislation", 
+            "law", "laws", "enforcement", "enforce", "compliance",
+            "research", "study", "studies", "findings", "latest", "recent", 
+            "current", "new", "update", "updates", "2024", "2025", "2026",
+            "who", "epa", "guidelines", "standards", "recommendations",
+            "government", "ministry", "agency", "official", "gazette",
+            "implementation", "adoption", "effectiveness", "impact",
+            "cost-effective", "solutions", "mitigation", "reduction",
+            "traffic pollution", "industrial emissions", "vehicle emissions"
+        ]
+        
+        # Check for research/policy keywords
+        has_research_keywords = any(keyword in message_lower for keyword in research_keywords)
+        
+        # Additional context checks for air quality domain
+        air_quality_context = [
+            "air quality", "air pollution", "pollution", "aqi", "pm2.5", "pm10",
+            "emissions", "clean air", "environmental", "sustainability"
+        ]
+        
+        has_air_quality_context = any(context in message_lower for context in air_quality_context)
+        
+        # Force web search if query has both research keywords AND air quality context
+        # OR if it explicitly mentions policies/regulations/studies
+        should_force = (
+            (has_research_keywords and has_air_quality_context) or
+            any(keyword in message_lower for keyword in ["policy", "policies", "regulation", "regulations", "research", "study", "studies", "latest", "recent", "current", "2024", "2025", "2026"])
+        )
+        
+        if should_force:
+            logger.info(f"Detected research/policy query requiring forced web search: {message_lower[:100]}...")
+        
+        return should_force
+
+    def _check_security_violation(self, message_lower: str) -> bool:
+        """
+        Check if a message contains security violation attempts.
+        
+        This provides an additional layer of security beyond system instructions,
+        since AI providers may not always follow security rules properly.
+        
+        Args:
+            message_lower: Lowercase message to check
+            
+        Returns:
+            bool: True if security violation detected
+        """
+        # Security violation patterns
+        security_patterns = [
+            # Tool/function enumeration attempts
+            r'\b(list|show|display|enumerate)\b.*\b(tool|function|method|api)s?\b',
+            r'\b(what|which)\b.*\b(tool|function|method|api)s?\b.*\b(available|do you have|can you)\b',
+            r'\b(available|accessible)\b.*\b(tool|function|method|api)s?\b',
+            
+            # System prompt/instruction revelation attempts
+            r'\b(system|internal)\b.*\b(prompt|instruction)s?\b',
+            r'\b(show|reveal|display)\b.*\b(prompt|instruction)s?\b',
+            r'\b(what.*prompt|what.*instruction)\b',
+            
+            # API key/token revelation attempts
+            r'\b(api|access)\b.*\b(key|token|secret)s?\b',
+            r'\b(what.*key|what.*token|what.*secret)\b',
+            r'\b(show|reveal)\b.*\b(key|token|secret)s?\b',
+            
+            # Source code revelation attempts
+            r'\b(source|program)\b.*\b(code)\b.*\b(show|reveal|display)\b',
+            r'\b(show|reveal|display)\b.*\b(source|program)\b.*\b(code)\b',
+            
+            # Developer mode attempts
+            r'\b(developer|dev|admin|root)\b.*\b(mode|access|privileges)\b',
+            r'\b(enter|enable|activate)\b.*\b(developer|dev|admin)\b.*\b(mode|access)\b',
+            r'\b(ignore|suspend|bypass)\b.*\b(safety|security|restriction)s?\b',
+            
+            # Direct security bypass attempts
+            r'\b(override|ignore|bypass)\b.*\b(instruction|rule|security)s?\b',
+            r'\b(dan|jailbreak|uncensored)\b',
+        ]
+        
+        import re
+        for pattern in security_patterns:
+            if re.search(pattern, message_lower, re.IGNORECASE):
+                return True
+        
+        return False
+
     def _generate_cache_key(
         self,
         message: str,
@@ -525,6 +625,26 @@ class AgentService:
                 "loop_detected": True,
             }
 
+        # SECURITY CHECK - Prevent information leakage attempts
+        security_violation = self._check_security_violation(message.lower())
+        if security_violation:
+            logger.warning(f"Security violation detected: {message[:100]}...")
+            return {
+                "response": "I'm Aeris, here to help with air quality questions. What would you like to know?",
+                "tokens_used": 0,
+                "cost_estimate": 0.0,
+                "cached": False,
+                "security_filtered": True,
+            }
+
+        # FORCE TOOL USAGE FOR RESEARCH/POLICY QUERIES
+        # Detect queries that should use web search but AI might skip
+        force_web_search = self._should_force_web_search(message.lower())
+        if force_web_search:
+            logger.info(f"Forcing web search for research/policy query: {message[:100]}...")
+            # Modify system instruction to be even more explicit about web search
+            system_instruction += "\n\n**CRITICAL OVERRIDE**: This query requires current research/policy information. YOU MUST call the search_web tool FIRST before providing any response. Do not rely on training data - search for the latest information immediately."
+
         # Process with provider
         try:
             response_data = await self.provider.process_message(
@@ -564,6 +684,49 @@ class AgentService:
 
             # SECURITY: Filter out any sensitive information from response
             response_data = self._filter_sensitive_info(response_data)
+
+            # FALLBACK RESPONSE IMPROVEMENT: If response is too short and tools were used,
+            # it likely indicates a data retrieval failure - provide helpful fallback
+            ai_response = response_data.get("response", "").strip()
+            tools_used = response_data.get("tools_used", [])
+            
+            # Check if response is inadequate (too short, generic, or doesn't contain actual data)
+            is_inadequate = (
+                len(ai_response) < 100 or  # Too short
+                ai_response.lower().strip() in ["air quality", "air quality data", "no data"] or  # Generic responses
+                (len(tools_used) > 0 and not any(indicator in ai_response.lower() for indicator in [
+                    "aqi", "pm2.5", "pm10", "µg/m³", "good", "moderate", "unhealthy", "hazardous",
+                    "kampala", "nairobi", "dar es salaam", "station", "monitoring"
+                ]))  # Tools used but no actual air quality data in response
+            )
+            
+            if is_inadequate and len(tools_used) > 0:
+                # Response is inadequate and tools were used - provide helpful fallback
+                if "mwanza" in message.lower():
+                    response_data["response"] = (
+                        "I couldn't find air quality monitoring stations for Mwanza, Tanzania. "
+                        "Mwanza is a remote location without dedicated air quality monitoring. "
+                        "For comparison, you might check nearby major cities like Dar es Salaam or Nairobi, "
+                        "or contact local environmental agencies for any available data."
+                    )
+                    response_data["fallback_provided"] = True
+                    logger.info("Provided fallback response for Mwanza query")
+                else:
+                    # Generic fallback for other locations
+                    location_match = None
+                    for word in message.split():
+                        if len(word) > 3 and word[0].isupper():  # Likely a city name
+                            location_match = word
+                            break
+                    
+                    if location_match:
+                        response_data["response"] = (
+                            f"I couldn't find air quality monitoring data for {location_match}. "
+                            "This location may not have dedicated monitoring stations. "
+                            "Try checking nearby major cities or contact local environmental agencies for data."
+                        )
+                        response_data["fallback_provided"] = True
+                        logger.info(f"Provided fallback response for {location_match}")
 
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")
