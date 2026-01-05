@@ -57,6 +57,9 @@ class AgentService:
         self.settings = get_settings()
         self.cache = get_cache()
         self.mcp_clients: dict[str, MCPClient] = {}
+        
+        # Document accumulation cache per session
+        self.document_cache: dict[str, list[dict[str, Any]]] = {}
 
         # Parse enabled data sources
         enabled_sources = set(src.strip().lower() for src in self.settings.ENABLED_DATA_SOURCES.split(',') if src.strip())
@@ -379,6 +382,7 @@ class AgentService:
         style: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        session_id: str | None = None,
     ) -> str:
         """
         Generate a unique cache key for the request.
@@ -390,6 +394,7 @@ class AgentService:
             style: Response style
             temperature: Temperature parameter
             top_p: Top-p parameter
+            session_id: Session identifier for document accumulation
 
         Returns:
             str: MD5 hash cache key
@@ -422,6 +427,7 @@ class AgentService:
             style or "",
             str(temperature) if temperature is not None else "",
             str(top_p) if top_p is not None else "",
+            session_id or "",
         ]
 
         cache_string = "|".join(cache_parts)
@@ -437,6 +443,7 @@ class AgentService:
         top_p: float | None = None,
         client_ip: str | None = None,
         location_data: dict[str, Any] | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Process a user message and generate a response.
@@ -459,6 +466,7 @@ class AgentService:
             location_data: GPS or IP location data with format:
                 {"source": "gps", "latitude": float, "longitude": float} or
                 {"source": "ip", "ip_address": str}
+            session_id: Session identifier for document accumulation
 
         Returns:
             Dict containing:
@@ -565,7 +573,7 @@ class AgentService:
 
         # Check cache
         cache_key = self._generate_cache_key(
-            message, history, document_data, style, temperature, top_p
+            message, history, document_data, style, temperature, top_p, session_id
         )
 
         # cache.get expects (namespace, key)
@@ -578,23 +586,49 @@ class AgentService:
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
 
-        # Get system instruction with document context (pass history for new doc detection)
+        # Accumulate documents in session cache
+        if document_data:
+            if session_id not in self.document_cache:
+                self.document_cache[session_id] = []
+            
+            # Add new documents, avoiding duplicates by filename
+            existing_filenames = {doc.get("filename", "") for doc in self.document_cache[session_id]}
+            for doc in document_data:
+                filename = doc.get("filename", "")
+                if filename not in existing_filenames:
+                    self.document_cache[session_id].append(doc)
+                    existing_filenames.add(filename)
+            
+            # Limit to last 3 documents to manage memory
+            if len(self.document_cache[session_id]) > 3:
+                self.document_cache[session_id] = self.document_cache[session_id][-3:]
+
+        # Get system instruction with document context
         location_context = ""
         if location_data and location_data.get("source") == "gps":
             location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
 
+        # Use accumulated documents for context
+        accumulated_docs = self.document_cache.get(session_id, []) if session_id else (document_data or [])
+        
+        # Fallback safety net: If multiple documents and issues occur, prioritize the newest document
+        if len(accumulated_docs) > 1 and document_data:
+            # Check if the newest document is in the accumulated list
+            newest_doc = document_data[0] if document_data else None
+            if newest_doc and newest_doc.get("filename") not in [doc.get("filename") for doc in accumulated_docs]:
+                # If newest document failed to accumulate, use only the newest one as fallback
+                logger.warning(f"Document accumulation issue detected, using newest document as fallback: {newest_doc.get('filename')}")
+                accumulated_docs = [newest_doc]
+        
         system_instruction = get_system_instruction(
             style=style or "general",
-            custom_suffix=self._build_document_context(document_data, history) + location_context,
+            custom_suffix=self._build_document_context(accumulated_docs, history) + location_context,
         )
         
         # Log if document context was added
-        if document_data:
-            doc_context_length = len(self._build_document_context(document_data, history))
-            has_previous = any("UPLOADED DOCUMENTS" in msg.get("content", "") for msg in (history or []))
-            if has_previous:
-                logger.info(f"NEW document uploaded in existing session - replacing previous document(s)")
-            logger.info(f"Document context added to system instruction: {doc_context_length} chars for {len(document_data)} document(s)")
+        if accumulated_docs:
+            doc_context_length = len(self._build_document_context(accumulated_docs, history))
+            logger.info(f"Document context added to system instruction: {doc_context_length} chars for {len(accumulated_docs)} document(s)")
 
         # Set location data for geocoding services (GPS takes precedence over IP)
         if location_data:
@@ -799,35 +833,39 @@ class AgentService:
             logger.warning(f"document_data should be a list, got {type(document_data)}")
             return ""
         
-        # Check if there was a previous document upload in this session
-        has_previous_document = False
-        if history:
-            for msg in history:
-                content = msg.get("content", "")
-                if "UPLOADED DOCUMENTS" in content or "Document:" in content or "📄 Document" in content:
-                    has_previous_document = True
-                    break
-
+        # Note: Document accumulation is now handled by the document_cache in process_message
+        # This method now receives pre-accumulated documents
+        all_documents = document_data
+        
+        # Remove duplicates based on filename
+        seen_filenames = set()
+        unique_documents = []
+        for doc in all_documents:
+            filename = doc.get("filename", "")
+            if filename not in seen_filenames:
+                seen_filenames.add(filename)
+                unique_documents.append(doc)
+        
+        # Limit to last 3 documents to avoid resource issues
+        if len(unique_documents) > 3:
+            unique_documents = unique_documents[-3:]
+        
         context_parts = [
             "\n\n=== UPLOADED DOCUMENTS ===",
         ]
         
-        # Add explicit replacement notice if this is a new document in existing session
-        if has_previous_document:
+        if len(unique_documents) > 1:
             context_parts.append(
-                "\n🔄 NEW DOCUMENT UPLOADED - IMPORTANT NOTICE:"
+                "\n🔄 MULTIPLE DOCUMENTS IN CONTEXT:"
             )
             context_parts.append(
-                "The user has uploaded a NEW document that REPLACES any previous documents."
+                f"You have access to {len(unique_documents)} document(s) from this conversation."
             )
             context_parts.append(
-                "⚠️ DISREGARD all previous document references from earlier in this conversation."
+                "⚠️ Analyze and reference ALL relevant documents when appropriate."
             )
             context_parts.append(
-                "⚠️ ONLY analyze and reference the document(s) shown below."
-            )
-            context_parts.append(
-                "⚠️ DO NOT mention, compare, or reference any previously uploaded files.\n"
+                "⚠️ Maintain context across documents for comprehensive analysis.\n"
             )
         else:
             context_parts.append(
@@ -837,7 +875,7 @@ class AgentService:
                 "You have direct access to this data - analyze it immediately without requesting file access.\n"
             )
 
-        for idx, doc in enumerate(document_data, 1):
+        for idx, doc in enumerate(unique_documents, 1):
             # Skip if not a dictionary
             if not isinstance(doc, dict):
                 logger.warning(f"Skipping non-dict document: {type(doc)}")

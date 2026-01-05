@@ -77,13 +77,14 @@ Send a message to the AI agent and receive a response with automatic conversatio
 
 **Form Fields:**
 
-| Field        | Type   | Required | Description                                                    |
-| ------------ | ------ | -------- | -------------------------------------------------------------- |
-| `message`    | string | Yes      | User's question or request                                     |
-| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new.   |
-| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB           |
-| `latitude`   | float  | No       | GPS latitude (-90 to 90) for precise location-based queries    |
-| `longitude`  | float  | No       | GPS longitude (-180 to 180) for precise location-based queries |
+| Field        | Type   | Required | Description                                                             |
+| ------------ | ------ | -------- | ----------------------------------------------------------------------- |
+| `message`    | string | Yes      | User's question or request                                              |
+| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new.            |
+| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB                    |
+| `latitude`   | float  | No       | GPS latitude (-90 to 90) for precise location-based queries             |
+| `longitude`  | float  | No       | GPS longitude (-180 to 180) for precise location-based queries          |
+| `role`       | string | No       | Response style: `general`, `executive`, `technical`, `simple`, `policy` |
 
 **Without File (JSON):**
 
@@ -110,6 +111,25 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
   -F "message=What's the air quality here?" \
   -F "latitude=40.7128" \
   -F "longitude=-74.0060"
+```
+
+**With Role Specification (multipart/form-data):**
+
+```bash
+# Executive summary style
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=What's the air quality in Tokyo?" \
+  -F "role=executive"
+
+# Technical analysis style
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=Explain PM2.5 pollution" \
+  -F "role=technical"
+
+# Simple explanations
+curl -X POST "http://localhost:8000/api/v1/agent/chat" \
+  -F "message=What causes air pollution?" \
+  -F "role=simple"
 ```
 
 ### Response

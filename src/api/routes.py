@@ -9,6 +9,8 @@ from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from src.api.models import (
@@ -34,6 +36,8 @@ from src.services.openmeteo_service import OpenMeteoService
 from src.services.waqi_service import WAQIService
 from src.utils.markdown_formatter import MarkdownFormatter
 from src.utils.security import ResponseFilter, validate_request_data
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 settings = get_settings()
@@ -305,6 +309,7 @@ async def chat(
     file: UploadFile | None = File(None, description="Optional file upload (PDF, CSV, Excel)"),
     latitude: float | None = Form(None, description="Optional GPS latitude for location-based queries"),
     longitude: float | None = Form(None, description="Optional GPS longitude for location-based queries"),
+    role: str | None = Form(None, description="Optional agent role/style: general, executive, technical, simple, policy"),
     db: Session = Depends(get_db),
 ):
     """
@@ -329,6 +334,15 @@ async def chat(
     - Enables accurate local air quality data instead of approximate IP-based location
     - Frontend should request browser geolocation permission when user asks about "my location"
     
+    **Agent Role/Style (Optional):**
+    - Specify the agent's communication style and expertise level
+    - Available roles: general, executive, technical, simple, policy
+    - general: Professional and complete with clear explanations (default)
+    - executive: Data-driven with key insights and bullet points
+    - technical: Includes measurements, standards, and methodologies with citations
+    - simple: Plain language without jargon, explains concepts clearly
+    - policy: Formal, evidence-based with citations and recommendations
+    
     **Request Format:**
     - Content-Type: multipart/form-data
     - Fields:
@@ -337,6 +351,7 @@ async def chat(
       - file (optional): Document file to analyze
       - latitude (optional): GPS latitude (-90 to 90)
       - longitude (optional): GPS longitude (-180 to 180)
+      - role (optional): Agent role/style (general, executive, technical, simple, policy)
     
     **IMPORTANT - Session Persistence:**
     - The agent references previous messages in the session for context-aware responses
@@ -523,11 +538,12 @@ async def chat(
             message, 
             history, 
             document_data=document_data,
-            style=settings.AI_RESPONSE_STYLE,
+            style=role or settings.AI_RESPONSE_STYLE,
             temperature=settings.AI_RESPONSE_TEMPERATURE,
             top_p=settings.AI_RESPONSE_TOP_P,
             client_ip=client_ip,
-            location_data=location_data
+            location_data=location_data,
+            session_id=session_id
         )
         processing_time = time.time() - start_time
 
