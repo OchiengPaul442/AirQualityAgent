@@ -22,10 +22,10 @@ DANGEROUS_PATTERNS = [
     r'--\s*$',  # SQL comments
     r'/\*.*\*/',  # SQL block comments
 
-    # Command injection patterns
-    r'[;&|`$()<>]',  # Shell metacharacters
-    r'\b(rm|del|format|shutdown|reboot|halt|poweroff)\b',
-    r'\b(cmd|bash|sh|powershell|exe)\b',
+    # Command injection patterns (REFINED - allow safe punctuation)
+    r'[;&|`$]\s',  # Shell metacharacters with space (avoid false positives)
+    r'\b(rm|del|format|shutdown|reboot|halt|poweroff)\s',  # Dangerous commands
+    r'\b(cmd|bash|sh|powershell)\.exe\b',  # Executable shells
 
     # Path traversal
     r'\.\./',  # Directory traversal
@@ -44,8 +44,8 @@ DANGEROUS_PATTERNS = [
     r'\b(open|file|input)\s*\(',
 ]
 
-# Safe characters for different contexts
-SAFE_CHARS = re.compile(r'[^a-zA-Z0-9\s\.,!?\-\'\"():;]')
+# Safe characters for different contexts (EXPANDED for international support)
+SAFE_CHARS = re.compile(r'[^a-zA-Z0-9\s\.,!?\-\'\"():;°µ²³/]')
 
 class InputSanitizer:
     """Comprehensive input sanitization and validation."""

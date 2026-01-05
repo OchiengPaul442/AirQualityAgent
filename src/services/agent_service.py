@@ -759,15 +759,16 @@ class AgentService:
         if "response" in response_data and isinstance(response_data["response"], str):
             response_text = response_data["response"]
 
-            # Check if response contains sensitive information
+            # Check if response contains ACTUAL sensitive information (not tool usage mentions)
+            # We WANT the agent to mention data sources and services used - that's transparent and helpful
             sensitive_indicators = [
-                r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]',
-                r'(?i)(site[_-]?id|device[_-]?id|station[_-]?id|sensor[_-]?id)\s*[:=]',
-                r'https?://[^\s]+',  # URLs
-                r'\{"type":\s*"function"',  # Tool calls
+                r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+',  # ACTUAL keys with values
+                r'(?i)(site[_-]?id|device[_-]?id)\s*[:=]\s*\S+',  # ACTUAL IDs with values
+                r'\{"type":\s*"function".*?"name":\s*"[^"]+"}',  # Full tool call JSON structure
                 r'\[REDACTED\]|\[ID REDACTED\]|\[URL REDACTED\]|\[METHOD REDACTED\]|\[TOOL CALL REDACTED\]',
-                r'(?i)using\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
-                r'(?i)calling\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
+                # REMOVED: URL pattern - public URLs are fine and helpful
+                # REMOVED: "using tool/service" - we WANT transparency about data sources
+                # REMOVED: "calling tool/service" - we WANT transparency about data sources
             ]
 
             contains_sensitive = any(re.search(pattern, response_text) for pattern in sensitive_indicators)
@@ -784,56 +785,39 @@ class AgentService:
                 return response_data
 
             # If no sensitive content detected, proceed with normal cleaning
-            # Remove API keys and tokens (common patterns)
+            # Remove API keys and tokens (common patterns) - but only actual key VALUES
             response_text = re.sub(r'(?i)(api\s+key|token|secret|password|auth\s+key)\s*[:=]\s*\S+', '[FILTERED]', response_text)
             response_text = re.sub(r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+', '[FILTERED]', response_text)
 
-            # Remove references to internal methods or services FIRST (before JSON removal)
-            sensitive_patterns = [
-                r'(?i)using\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
-                r'(?i)calling\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
-                r'(?i)executing\s+(tool|service|api|method|function)[\s:]+["\']?[\w_]+["\']?',
-                r'(?i)(tool|service|api|method|function)\s+["\']?[\w_]+["\']?\s+(returned|provided|gave)',
-                r'(?i)querying\s+(database|api|service|endpoint)[\s:]+["\']?[^"\']+["\']?',
-            ]
+            # DO NOT remove tool/service mentions - we WANT transparency about data sources!
+            # User requirement #4: "AI AGENT MAKE USE OF ALL THE TOOLS, SERVICES"
+            # Users need to know where data comes from for trust and verification
+            
+            # Remove only FULL tool call JSON structures (internal implementation details)
+            response_text = re.sub(r'\{"type":\s*"function"[^}]*"name":\s*"[^"]+"\}', '[technical details removed]', response_text, flags=re.DOTALL)
+            
+            # Remove only function call syntax like function_name(arg="value")
+            response_text = re.sub(r'\b\w+\([^)]*=\s*"[^"]*"\)', '[technical details removed]', response_text)
 
-            for pattern in sensitive_patterns:
-                response_text = re.sub(pattern, 'using our data sources', response_text)
-
-            # Remove any remaining tool call syntax that might have leaked
-            response_text = re.sub(r'\{"type":\s*"function".*?\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
-            response_text = re.sub(r'\(\w+="[^"]*"\)', '[TECHNICAL DETAILS REMOVED]', response_text)
-
-            # Remove raw JSON data that might leak from tool results
-            response_text = re.sub(r'\{[^}]*"code"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
-            response_text = re.sub(r'\{[^}]*"id"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
-            response_text = re.sub(r'\{[^}]*"name"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
-            response_text = re.sub(r'\{[^}]*"location"[^}]*\}', '[TECHNICAL DETAILS REMOVED]', response_text, flags=re.DOTALL)
-
-            # Remove internal IDs and site identifiers (specific to air quality domain)
+            # Remove internal IDs and site identifiers ONLY when they appear with assignment operators
+            # Public reference URLs and general mentions of services are fine and helpful
             internal_id_patterns = [
                 r'(?i)(site[_-]?id|device[_-]?id|station[_-]?id|sensor[_-]?id)\s*[:=]\s*["\']?[\w\-]+["\']?',
                 r'(?i)(location[_-]?id|monitor[_-]?id|node[_-]?id)\s*[:=]\s*["\']?[\w\-]+["\']?',
                 r'(?i)(api[_-]?endpoint|service[_-]?url|base[_-]?url)\s*[:=]\s*["\']?[^"\']+["\']?',
                 r'(?i)(database[_-]?id|table[_-]?id|record[_-]?id)\s*[:=]\s*["\']?[\w\-]+["\']?',
-                # Also match without quotes
-                r'(?i)(site[_-]?id|device[_-]?id|station[_-]?id|sensor[_-]?id)\s*[:=]\s*\S+',
-                r'(?i)(location[_-]?id|monitor[_-]?id|node[_-]?id)\s*[:=]\s*\S+',
-                r'(?i)(api[_-]?endpoint|service[_-]?url|base[_-]?url)\s*[:=]\s*\S+',
-                r'(?i)(database[_-]?id|table[_-]?id|record[_-]?id)\s*[:=]\s*\S+',
             ]
 
             for pattern in internal_id_patterns:
-                response_text = re.sub(pattern, '[DETAILS REMOVED]', response_text)
+                response_text = re.sub(pattern, '[details removed]', response_text)
 
-            # Remove escaped JSON
+            # Remove escaped JSON artifacts from parsing
             response_text = re.sub(r'\\"[^"]*\\":', '', response_text)
             response_text = re.sub(r'\\n', ' ', response_text)
 
-            # Remove any remaining technical artifacts
-            response_text = re.sub(r'\b\d{10,}\b', '[NUMBER REMOVED]', response_text)  # Long numbers that might be IDs
-            response_text = re.sub(r'\b[a-f0-9]{8,}\b', '[CODE REMOVED]', response_text)  # Hex hashes
-            response_text = re.sub(r'https?://[^\s]+', '[LINK REMOVED]', response_text)  # URLs
+            # DO NOT remove URLs, long numbers, or hex codes - these could be legitimate data references
+            # Public reference URLs are helpful for users to verify information
+            # Monitoring station IDs and codes may be public and useful
 
         return response_data
 

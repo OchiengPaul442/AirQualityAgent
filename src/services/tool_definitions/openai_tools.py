@@ -282,13 +282,13 @@ def get_search_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "search_web",
-                "description": "MANDATORY TOOL: Use this for ANY question requiring research, current information, health data, policy information, solutions, safety guidelines, or general knowledge. ALWAYS use this instead of saying 'data not available' or giving generic advice. Search for specific, accurate information from reliable sources. Use for health impacts, cost-effective solutions, policy effectiveness, safety recommendations, research findings, and any topic needing up-to-date web information.",
+                "description": "CRITICAL MANDATORY TOOL for research and policy questions. YOU MUST USE THIS TOOL FOR: (1) ANY question about policies, regulations, legislation, government actions - even if you know general information, SEARCH for current details. (2) Questions with 'recent', 'latest', 'new', 'current' keywords - YOUR TRAINING DATA IS OUTDATED. (3) Research studies, WHO/EPA guidelines, standards - these update frequently. (4) Questions about specific years beyond 2023. (5) Health impacts, solutions, recommendations - SEARCH for latest evidence-based information. DO NOT rely on your training data for these topics - it becomes outdated quickly. ALWAYS search to get current, accurate information from reliable sources.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "Specific search query for accurate, current information. Make it detailed and targeted for best results (e.g., 'air pollution effects on pregnancy and fetal development 2025 studies', 'cost effective indoor PM2.5 reduction methods research', 'effective traffic pollution reduction policies near schools')",
+                            "description": "Specific search query for accurate, current information. Make it detailed and targeted for best results (e.g., 'air pollution effects on pregnancy and fetal development 2025 studies', 'cost effective indoor PM2.5 reduction methods research', 'effective traffic pollution reduction policies near schools', 'Uganda air quality policy 2024')",
                         }
                     },
                     "required": ["query"],
