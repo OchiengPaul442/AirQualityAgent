@@ -12,10 +12,19 @@ def get_waqi_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_city_air_quality",
-                "description": """Get CURRENT real-time air quality data for a city. Use this when:
+                "description": """Get CURRENT real-time air quality data for ONE SINGLE city at a time.
+
+WHEN TO USE:
 - User asks "what is the air quality in [city]"
-- User wants current/now/today air quality
-- City is in UK, Europe, Americas, Asia (not Africa - use get_african_city_air_quality for African cities)
+- User wants current/now/today air quality for a specific location
+- City is in UK, Europe, Americas, Asia (NOT Africa - use get_african_city_air_quality for African cities)
+
+IMPORTANT FOR COMPARISONS:
+- This tool returns data for ONE city only
+- To compare multiple cities: Call this function MULTIPLE TIMES (once per city)
+- Example: "Compare London and Tokyo" → Call twice with city="London", then city="Tokyo"
+- You CAN make parallel tool calls - use this capability for comparisons
+
 Returns: AQI, pollutants (PM2.5, PM10, NO2, O3, SO2, CO), station name, timestamp""",
                 "parameters": {
                     "type": "object",

@@ -354,16 +354,37 @@ class OpenAIProvider(BaseAIProvider):
         }
 
     def _deduplicate_calls(self, tool_calls: list) -> list:
-        """Remove duplicate tool calls."""
+        """
+        Remove duplicate tool calls (same function with same arguments).
+        
+        Allows multiple calls to the same function with DIFFERENT arguments
+        (e.g., get_city_air_quality for London AND Paris).
+        """
         seen = set()
         unique = []
         for tc in tool_calls:
-            key = f"{tc.function.name}_{tc.function.arguments}"
+            # Create key from function name AND normalized arguments
+            # This ensures get_city_air_quality("London") != get_city_air_quality("Paris")
+            try:
+                # Parse arguments to ensure consistent ordering for comparison
+                args_str = tc.function.arguments if isinstance(tc.function.arguments, str) else json.dumps(tc.function.arguments, sort_keys=True)
+                args_dict = json.loads(args_str) if isinstance(args_str, str) else args_str
+                # Sort keys for consistent comparison
+                normalized_args = json.dumps(args_dict, sort_keys=True)
+                key = f"{tc.function.name}::{normalized_args}"
+            except:
+                # Fallback to string comparison if JSON parsing fails
+                key = f"{tc.function.name}::{tc.function.arguments}"
+            
             if key not in seen:
                 seen.add(key)
                 unique.append(tc)
             else:
-                logger.info(f"Skipping duplicate tool call: {tc.function.name}")
+                logger.info(f"Skipping duplicate tool call: {tc.function.name} with args {tc.function.arguments}")
+        
+        if len(unique) < len(tool_calls):
+            logger.info(f"Deduplicated {len(tool_calls)} tool calls to {len(unique)} unique calls")
+        
         return unique
 
     def _summarize_tool_result(self, result: Any) -> str:
