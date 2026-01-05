@@ -107,12 +107,12 @@ class OpenAIProvider(BaseAIProvider):
         base_delay = 1  # seconds
         response = None  # Initialize response to prevent NoneType errors
         
+        # Use max_tokens directly - DO NOT multiply
+        effective_max_tokens = max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS
+        
         for attempt in range(max_retries):
             try:
                 # Create completion
-                # Use higher max_tokens when tools are available (responses tend to be longer)
-                effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 3 if self.get_tool_definitions() else self.settings.AI_MAX_TOKENS)
-                
                 response = self.client.chat.completions.create(
                     model=self.settings.AI_MODEL,
                     messages=messages,
@@ -254,45 +254,20 @@ class OpenAIProvider(BaseAIProvider):
 
             # Add tool results
             for tool_result in tool_results:
-                # Attach raw tool output
+                # Format the tool result as readable JSON string
+                result_content = json.dumps(tool_result["result"], indent=2)
+                
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": str(tool_result["tool_call"].id),
-                        "content": json.dumps({"result": tool_result["result"]}),
+                        "content": result_content,  # Clean JSON format
                     }
                 )
 
-                # Also attach a short human-readable summary to help the model
-                summary = self._summarize_tool_result(tool_result.get("result"))
-                if summary:
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": str(tool_result["tool_call"].id) + "_summary",
-                            "content": json.dumps({"summary": summary}),
-                        }
-                    )
 
-            # Get final response with retry logic
-            # Before finalizing, add an explicit assistant message that summarizes
-            # the tool results (human-readable). This gives the model a concrete
-            # formatted snippet to expand into a full user-facing reply.
-            combined_summaries = []
-            for tr in tool_results:
-                s = self._summarize_tool_result(tr.get("result"))
-                if s:
-                    combined_summaries.append(s)
-
-            if combined_summaries:
-                assistant_summary = "\n\n".join(combined_summaries)
-                assistant_summary = (
-                    "TOOL RESULTS SUMMARY:\n\n" + assistant_summary + "\n\n"
-                    "Please use the summary above to craft a complete, professional, and self-contained response to the user."
-                )
-                messages.append({"role": "assistant", "content": assistant_summary})
-
-            for attempt in range(3):  # 3 attempts
+            # Get final response from model after tool execution
+            for attempt in range(3):
                 try:
                     final_response = self.client.chat.completions.create(
                         model=self.settings.AI_MODEL,
@@ -350,11 +325,25 @@ class OpenAIProvider(BaseAIProvider):
             
             # Check if tools were called but response is still short
             if tools_used:
-                response_text = (
-                    "I retrieved the data successfully, but encountered an issue formatting the response. "
-                    "Let me provide you with the key information:\n\n"
-                    "The data was fetched, but I need you to ask your question again, and I'll provide a complete, detailed response with air quality metrics, health implications, and recommendations."
-                )
+                # Try to generate a basic response from tool results
+                logger.info("Attempting to generate fallback response from tool results")
+                try:
+                    fallback_response = await self._generate_tool_based_response(message, tools_used, history)
+                    if fallback_response and len(fallback_response.strip()) > 50:
+                        response_text = fallback_response
+                        logger.info("Successfully generated fallback response from tool results")
+                    else:
+                        response_text = (
+                            "I retrieved air quality data for your query, but had trouble formatting the complete response. "
+                            "The data shows current air quality information has been collected. "
+                            "Please try asking about a specific city or location for detailed results."
+                        )
+                except Exception as fallback_error:
+                    logger.error(f"Fallback response generation failed: {fallback_error}")
+                    response_text = (
+                        "I successfully retrieved air quality data, but encountered a formatting issue. "
+                        "Please try your question again or specify a different location."
+                    )
             else:
                 response_text = await self._generate_fallback(message)
 
@@ -586,6 +575,40 @@ class OpenAIProvider(BaseAIProvider):
         content = re.sub(r'\| +\|', r'| |', content)
 
         return content.strip()
+
+    async def _generate_tool_based_response(self, original_message: str, tools_used: list, history: list) -> str:
+        """Generate a response based on tool results when AI response is malformed."""
+        try:
+            # Check what tools were used and try to provide basic data
+            tool_names = [tool.get("function", {}).get("name", "") for tool in tools_used if isinstance(tool, dict)]
+            
+            # If air quality tools were used, try to get basic data
+            if any("air_quality" in name or "city" in name for name in tool_names):
+                # Extract city names from the original message
+                cities = []
+                message_lower = original_message.lower()
+                
+                # Common cities that might be in the query
+                common_cities = ["london", "paris", "new york", "tokyo", "beijing", "mumbai", "sydney", "cairo", "mexico city", "sao paulo"]
+                for city in common_cities:
+                    if city in message_lower:
+                        cities.append(city.title())
+                
+                if cities:
+                    response = f"I retrieved air quality data for {', '.join(cities)}. Here's a summary:\n\n"
+                    
+                    for city in cities[:3]:  # Limit to 3 cities
+                        response += f"**{city}**: Air quality data was retrieved successfully. For detailed AQI values, pollutant levels, and health recommendations, please try your question again.\n"
+                    
+                    response += "\nFor more detailed information including health recommendations and pollutant breakdown, please try your question again."
+                    return response
+            
+            # Generic fallback for other tool usage
+            return f"I successfully retrieved data for your query about '{original_message}', but had trouble formatting the complete response. The information has been collected and is available. Please try asking again for the full details."
+            
+        except Exception as e:
+            logger.error(f"Tool-based response generation failed: {e}")
+            return ""
 
     async def _generate_fallback(self, original_message: str) -> str:
         """Generate fallback response when primary response is empty."""

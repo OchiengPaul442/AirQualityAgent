@@ -289,7 +289,8 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
                 # Basic UUID validation
                 if not re.match(r'^[a-f0-9\-]{36}$', value):
                     raise ValueError("Invalid session ID format")
-                sanitized[key] = value
+            # Always include session_id in sanitized data, even if None
+            sanitized[key] = value
         elif key == 'file':
             # File validation is handled separately in the route
             sanitized[key] = value

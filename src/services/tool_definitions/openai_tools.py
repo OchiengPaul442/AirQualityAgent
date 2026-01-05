@@ -12,13 +12,17 @@ def get_waqi_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_city_air_quality",
-                "description": "Get real-time air quality data for a specific city using WAQI.",
+                "description": """Get CURRENT real-time air quality data for a city. Use this when:
+- User asks "what is the air quality in [city]"
+- User wants current/now/today air quality
+- City is in UK, Europe, Americas, Asia (not Africa - use get_african_city_air_quality for African cities)
+Returns: AQI, pollutants (PM2.5, PM10, NO2, O3, SO2, CO), station name, timestamp""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "city": {
                             "type": "string",
-                            "description": "The name of the city (e.g., London, Paris, Kampala)",
+                            "description": "City name like 'London', 'Paris', 'New York', 'Beijing' (NOT African cities)",
                         }
                     },
                     "required": ["city"],
@@ -29,13 +33,13 @@ def get_waqi_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "search_waqi_stations",
-                "description": "Search for air quality monitoring stations by name or keyword.",
+                "description": "Search for specific air quality monitoring stations by name or location keyword",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "keyword": {
                             "type": "string",
-                            "description": "Search term (e.g., 'Bangalore', 'US Embassy')",
+                            "description": "Search term like 'Bangalore', 'US Embassy', station name",
                         }
                     },
                     "required": ["keyword"],
@@ -52,17 +56,21 @@ def get_airqo_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_african_city_air_quality",
-                "description": "**PRIMARY TOOL for African cities** - Get real-time air quality from AirQo monitoring network. Use this FIRST for ANY African location (Uganda, Kenya, Tanzania, Rwanda, etc.). Searches by city/location name (e.g., Gulu, Kampala, Nakasero, Mbale, Nairobi). Returns actual measurements from local monitoring stations. Coverage includes major and minor cities across East Africa.",
+                "description": """Get CURRENT real-time air quality for African cities. MUST USE for ANY African location. Use this when:
+- User asks about air quality in ANY African city (Uganda, Kenya, Tanzania, Rwanda, etc.)
+- Cities like: Kampala, Gulu, Nairobi, Dar es Salaam, Kigali, Nakasero, Mbale
+- User mentions African locations or universities (e.g., "Gulu University")
+Returns: PM2.5, PM10, AQI, station details, device ID, precise measurements from local sensors""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "city": {
                             "type": "string",
-                            "description": "City or location name in Africa (e.g., 'Gulu', 'Kampala', 'Nakasero', 'Nairobi', 'Dar es Salaam')",
+                            "description": "African city/location name like 'Gulu', 'Kampala', 'Nairobi' (REQUIRED)",
                         },
                         "site_id": {
                             "type": "string",
-                            "description": "Optional site ID if known from previous searches",
+                            "description": "Optional site ID if known from previous search",
                         },
                     },
                     "required": ["city"],
@@ -73,14 +81,17 @@ def get_airqo_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_multiple_african_cities_air_quality",
-                "description": "Get real-time air quality for MULTIPLE African cities simultaneously. Use this when user asks about multiple locations (e.g., 'air quality in Kampala and Gulu', 'compare air quality between Nairobi and Dar es Salaam'). Returns data for all requested cities in one response for easy comparison.",
+                "description": """Get air quality for MULTIPLE African cities at once. Use when:
+- User asks to compare multiple African cities
+- User mentions 2+ African locations ("Kampala and Gulu", "compare Nairobi with Dar es Salaam")
+Returns: Data for all cities for easy side-by-side comparison""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "cities": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of city names in Africa (e.g., ['Gulu', 'Kampala', 'Nairobi'])",
+                            "description": "List of African city names like ['Kampala', 'Gulu', 'Nairobi']",
                         },
                     },
                     "required": ["cities"],

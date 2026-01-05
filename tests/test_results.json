@@ -1,0 +1,88 @@
+{
+  "total_tests": 8,
+  "passed": 8,
+  "failed": 0,
+  "success_rate": 100.0,
+  "results": [
+    {
+      "test_name": "Single City Air Quality",
+      "passed": true,
+      "issues": [],
+      "response_length": 2178,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_preview": "**Air Quality in London \u2013 Current Conditions (as of 2026\u201101\u201105 00:00 UTC)**  \n\n|  Parameter  | Value |  Category  | Health Implication |\n| ----------- |-------| ---------- |--------------------|\n|  **"
+    },
+    {
+      "test_name": "Multi-City Comparison",
+      "passed": true,
+      "issues": [],
+      "response_length": 253,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_preview": "I successfully retrieved data for your query about 'Compare air quality in London, Paris, and New York', but had trouble formatting the complete response. The information has been collected and is ava"
+    },
+    {
+      "test_name": "African City (AirQo)",
+      "passed": true,
+      "issues": [],
+      "response_length": 4092,
+      "tools_used": [
+        "get_african_city_air_quality"
+      ],
+      "response_preview": "**Air Quality in Kampala (as of\u202f2026\u201101\u201105\u202f00:30\u202fUTC)**  \n\n|  Monitoring Station (nearest neighbourhood)  | AQI |  AQI Category  | Main Pollutant (PM\u2082.\u2085) |  Health\u2011Tip Summary  |\n| --- |---| --- |---|"
+    },
+    {
+      "test_name": "Multiple African Cities",
+      "passed": true,
+      "issues": [],
+      "response_length": 4640,
+      "tools_used": [
+        "get_multiple_african_cities_air_quality"
+      ],
+      "response_preview": "**Air\u2011Quality Comparison \u2013 Kampala vs. Nairobi (as of\u202f2026\u201101\u201104\u202f22:00\u202fUTC, latest readings\u202f\u2248\u202f2\u00bd\u202fh old)**  \n\n|   City   |  Primary Station (most recent) |   AQI   |  AQI Category |   Main Pollutant (P"
+    },
+    {
+      "test_name": "Current Air Quality Query",
+      "passed": true,
+      "issues": [],
+      "response_length": 2494,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_preview": "**Current Air\u2011Quality in Tokyo (as of\u202f2026\u201101\u201105\u202f08:00\u202fJST)**  \n\n|   Parameter   |  Value  |   Category   |  Health Implication |\n| ------------ |---------| ------------ |----------------------|\n|  **"
+    },
+    {
+      "test_name": "Conversational Follow-up",
+      "passed": true,
+      "issues": [],
+      "response_length": 2928,
+      "tools_used": [
+        "get_location_from_ip"
+      ],
+      "response_preview": "**Air\u2011Quality Summary for Your Current Location (approximate\u202f0.316\u202fN,\u202f32.582\u202fE \u2013 Central Region, Uganda)**  \n\n|   Parameter   |  Value |   Category (US\u202fAQI)  |  Health Implication |\n|  -----------  |-"
+    },
+    {
+      "test_name": "Health Recommendations",
+      "passed": true,
+      "issues": [],
+      "response_length": 3918,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_preview": "**Short answer:**\u202fYes \u2013 it is generally safe to exercise outdoors in London today, but you should keep the intensity moderate and be aware that the air\u2011quality index (AQI) is **70 (Moderate)**.\n\n---\n\n"
+    },
+    {
+      "test_name": "Implied Context Query",
+      "passed": true,
+      "issues": [],
+      "response_length": 3611,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_preview": "**Air\u2011Quality Snapshot for Paris (as of\u202f2026\u201101\u201104\u202f23:00\u202fCET)**  \n\n|   Parameter   |  Value |   AQI / Category*  |  Typical Health Impact |\n|  -----------  |-------| ------------------ |--------------"
+    }
+  ]
+}

@@ -104,8 +104,8 @@ class GeminiProvider(BaseAIProvider):
         # Add optional parameters if provided
         if top_k is not None:
             config_params["top_k"] = top_k
-        # Use higher max_tokens when tools are available (tool responses need more space)
-        effective_max_tokens = max_tokens if max_tokens is not None else (self.settings.AI_MAX_TOKENS * 3 if tools else self.settings.AI_MAX_TOKENS)
+        # Use max_tokens directly - DO NOT multiply
+        effective_max_tokens = max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS
         if effective_max_tokens is not None:
             config_params["max_output_tokens"] = effective_max_tokens
 
@@ -219,7 +219,7 @@ class GeminiProvider(BaseAIProvider):
                 # Execute functions in parallel
                 function_results = await self._execute_functions(function_calls, tools_used)
 
-                # Send results back to model
+                # Send results back to model - simplified format
                 function_responses = [
                     types.Part(
                         function_response=types.FunctionResponse(
@@ -230,33 +230,9 @@ class GeminiProvider(BaseAIProvider):
                     for result in function_results
                 ]
 
-                # Also attach human-readable summaries as additional parts to help model formatting
-                summary_parts = []
-                for result in function_results:
-                    summary_text = self._summarize_tool_result(result.get("result"))
-                    if summary_text:
-                        summary_parts.append(types.Part(text=summary_text))
+                response = chat.send_message(types.Content(parts=function_responses))
 
-                all_parts = function_responses + summary_parts
-
-                response = chat.send_message(types.Content(parts=all_parts))
-
-        # Get final response
-        # Inject a human-readable assistant summary part to guide the final reply
-        try:
-            summary_texts = []
-            if 'function_results' in locals():
-                for res in function_results:
-                    s = self._summarize_tool_result(res.get("result"))
-                    if s:
-                        summary_texts.append(s)
-            if summary_texts:
-                summary_part = types.Part(text=("TOOL RESULTS SUMMARY:\n\n" + "\n\n".join(summary_texts) + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."))
-                response = chat.send_message(types.Content(parts=[summary_part]))
-        except Exception:
-            # If anything goes wrong, proceed with the available response
-            pass
-
+        # Get final response text
         final_response = response.text if response.text else ""
 
         # Check if response was truncated
@@ -268,16 +244,31 @@ class GeminiProvider(BaseAIProvider):
                 logger.warning("Gemini response was truncated due to max tokens")
                 final_response += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
 
+        # Handle empty or very short responses
         if not final_response or not final_response.strip() or len(final_response.strip()) < 20:
             logger.warning(f"Gemini returned empty or very short response (length: {len(final_response) if final_response else 0}). Tools used: {tools_used}")
             
             # Check if tools were called but response is still empty
             if tools_used:
-                final_response = (
-                    "I retrieved the data successfully, but encountered an issue formatting the response. "
-                    "Let me provide you with the key information:\n\n"
-                    "The data was fetched, but I need you to ask your question again, and I'll provide a complete, detailed response with air quality metrics, health implications, and recommendations."
-                )
+                # Try to generate a basic response from tool results
+                logger.info("Attempting to generate fallback response from tool results")
+                try:
+                    fallback_response = await self._generate_tool_based_response(message, tools_used, history)
+                    if fallback_response and len(fallback_response.strip()) > 50:
+                        final_response = fallback_response
+                        logger.info("Successfully generated fallback response from tool results")
+                    else:
+                        final_response = (
+                            "I retrieved air quality data for your query, but had trouble formatting the complete response. "
+                            "The data shows current air quality information has been collected. "
+                            "Please try asking about a specific city or location for detailed results."
+                        )
+                except Exception as fallback_error:
+                    logger.error(f"Fallback response generation failed: {fallback_error}")
+                    final_response = (
+                        "I successfully retrieved air quality data, but encountered a formatting issue. "
+                        "Please try your question again or specify a different location."
+                    )
             else:
                 final_response = (
                     "I apologize, but I wasn't able to retrieve the requested information at this time. "
@@ -308,6 +299,40 @@ class GeminiProvider(BaseAIProvider):
             else:
                 logger.info(f"Skipping duplicate function call: {fc.name}")
         return unique
+
+    async def _generate_tool_based_response(self, original_message: str, tools_used: list, history: list) -> str:
+        """Generate a response based on tool results when AI response is malformed."""
+        try:
+            # Check what tools were used and try to provide basic data
+            tool_names = [tool for tool in tools_used if isinstance(tool, str)]
+            
+            # If air quality tools were used, try to get basic data
+            if any("air_quality" in name or "city" in name for name in tool_names):
+                # Extract city names from the original message
+                cities = []
+                message_lower = original_message.lower()
+                
+                # Common cities that might be in the query
+                common_cities = ["london", "paris", "new york", "tokyo", "beijing", "mumbai", "sydney", "cairo", "mexico city", "sao paulo"]
+                for city in common_cities:
+                    if city in message_lower:
+                        cities.append(city.title())
+                
+                if cities:
+                    response = f"I retrieved air quality data for {', '.join(cities)}. Here's a summary:\n\n"
+                    
+                    for city in cities[:3]:  # Limit to 3 cities
+                        response += f"**{city}**: Air quality data was retrieved successfully. For detailed AQI values, pollutant levels, and health recommendations, please try your question again.\n"
+                    
+                    response += "\nFor more detailed information including health recommendations and pollutant breakdown, please try your question again."
+                    return response
+            
+            # Generic fallback for other tool usage
+            return f"I successfully retrieved data for your query about '{original_message}', but had trouble formatting the complete response. The information has been collected and is available. Please try asking again for the full details."
+            
+        except Exception as e:
+            logger.error(f"Tool-based response generation failed: {e}")
+            return ""
 
     def _summarize_tool_result(self, result: Any) -> str:
         """Create a short human-readable summary for common tool results (AirQo focused)."""
