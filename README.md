@@ -1,6 +1,6 @@
 # 🌬️ AERIS-AQ - Artificial Environmental Real-time Intelligence System (Air Quality)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 🌍 **Production-ready air quality monitoring and AI agent with industry-standard patterns**
 
@@ -368,16 +368,17 @@ isort src/
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU AGPL v3 License - see the [LICENSE](LICENSE) file for details.
 
-The MIT License allows for:
+The GNU AGPL v3 License allows for:
 
 - ✅ Commercial use
 - ✅ Private use
 - ✅ Modification
 - ✅ Distribution
-- ✅ Sublicensing
 
 While requiring:
 
 - 📄 License and copyright notice preservation
+- 🔗 Source code availability for network services
+- 📋 Copyleft protection for derivative works

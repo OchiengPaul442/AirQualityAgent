@@ -1,8 +1,8 @@
 [project]
 name = "airquality-agent"
-version = "2.9.3"
+version = "2.9.4"
 description = "AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) - Production-ready air quality monitoring and AI assistant"
-license = {text = "MIT"}
+license = {text = "AGPL-3.0"}
 authors = [
     {name = "Paul Ochieng", email = "ochiengpaul442@gmail.com"}
 ]

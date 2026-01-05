@@ -4,6 +4,28 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.4] - 2026-01-05
+
+### 📜 License Update to AGPL v3
+
+**CRITICAL: Enhanced protection against unrestricted commercial copying**
+
+#### License Migration
+
+- **From MIT to AGPL v3**: Changed license to provide stronger copyleft protection
+- **Source Code Availability**: Requires source code availability for network services
+- **Derivative Work Protection**: Prevents unrestricted commercial exploitation
+- **Community Standards**: Aligns with open source principles while protecting against abuse
+
+#### Documentation Updates
+
+- **README Badge**: Updated license badge from MIT to AGPL v3
+- **License Text**: Updated license section with AGPL v3 requirements
+- **Package Configuration**: Updated pyproject.toml license field
+- **Full License File**: Replaced MIT license with complete GNU AGPL v3 text
+
+---
+
 ## [2.9.3] - 2026-01-05
 
 ### 🔧 System Instructions Optimization & Error Handling
