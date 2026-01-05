@@ -383,7 +383,13 @@ class AgentService:
         original_message = message
         has_consent = self._has_location_consent(history)
         is_location_query = any(keyword in message.lower() for keyword in ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local', 'air quality in my location'])
-        is_consent_response = any(keyword in message.lower() for keyword in ['yes', 'sure', 'okay', 'proceed', 'go ahead', 'allow', 'consent', 'please'])
+        
+        # Only treat as consent if message is ONLY/PRIMARILY consent - not if it's a real question with "please" at the end
+        is_consent_response = (
+            len(message.split()) <= 5 and  # Short messages only
+            any(keyword in message.lower() for keyword in ['yes', 'sure', 'okay', 'proceed', 'go ahead', 'allow', 'consent']) and
+            not any(question in message.lower() for question in ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'effects', 'impact', 'affect'])
+        )
         
         if has_consent and is_location_query:
             message = f"User has already consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."

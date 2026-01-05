@@ -1,0 +1,54 @@
+{
+  "timestamp": "270121.2704273",
+  "provider": "openai",
+  "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+  "total_tests": 5,
+  "passed": 4,
+  "pass_rate": 80.0,
+  "results": [
+    {
+      "test": "General Health Effects",
+      "message": "What are the effects of high AQI values on a person's health in simple terms please",
+      "success": true,
+      "tools_used": [],
+      "response_length": 3494,
+      "response_preview": "### How High AQI Can Affect Your Health (Simple Terms)\n\n**AQI** (Air Quality Index) is a scale that tells you how polluted the air is. When the number climbs above 100, the air quality is considered \u201c..."
+    },
+    {
+      "test": "Explanation Question",
+      "message": "How does PM2.5 affect the human body?",
+      "success": true,
+      "tools_used": [],
+      "response_length": 5936,
+      "response_preview": "**PM2.5\u202f\u2014\u202fthe tiny particles that slip deep into your lungs**\n\nPM2.5 refers to airborne particles that are **2.5\u202fmicrometers or smaller** in diameter\u2014about\u202f1/30th the width of a human hair. Their size..."
+    },
+    {
+      "test": "Specific City Data",
+      "message": "What is the air quality in London right now?",
+      "success": true,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_length": 2588,
+      "response_preview": "**Current Air Quality in London (as of\u202f2026\u201101\u201105\u202f00:00\u202fUTC)**  \n\n|  Parameter  | Value |\n| ----------- |-------|\n|  **AQI**  | **70** |\n|  **Category**  | **Moderate** (51\u2011100) |\n|  **Dominant Pollut..."
+    },
+    {
+      "test": "City Comparison",
+      "message": "Compare the air quality in New York and Tokyo",
+      "success": false,
+      "tools_used": [
+        "get_city_air_quality"
+      ],
+      "response_length": 248,
+      "response_preview": "I successfully retrieved data for your query about 'Compare the air quality in New York and Tokyo', but had trouble formatting the complete response. The information has been collected and is availabl..."
+    },
+    {
+      "test": "Context Follow-Up",
+      "message": "What are the health effects of high pollution? (after asking about Paris)",
+      "success": true,
+      "tools_used": [],
+      "response_length": 7794,
+      "response_preview": "### How High Air\u2011Pollution Affects Human Health  \n\nWhen the concentration of pollutants\u2014especially fine particles (PM\u2082.\u2085), coarse particles (PM\u2081\u2080), ground\u2011level ozone (O\u2083), nitrogen dioxide (NO\u2082), sul..."
+    }
+  ]
+}

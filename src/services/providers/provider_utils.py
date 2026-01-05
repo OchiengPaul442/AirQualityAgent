@@ -6,12 +6,30 @@ Provides both synchronous and asynchronous utilities for maximum flexibility.
 """
 
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Union
 
 logger = logging.getLogger(__name__)
+
+
+def format_tool_result_as_json(result: Any) -> str:
+    """
+    Format tool result as readable JSON string.
+    
+    Args:
+        result: Tool result to format (dict, list, or primitive)
+        
+    Returns:
+        Formatted JSON string
+    """
+    try:
+        return json.dumps(result, indent=2, ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Failed to format tool result as JSON: {e}")
+        return str(result)
 
 
 def retry_with_exponential_backoff(

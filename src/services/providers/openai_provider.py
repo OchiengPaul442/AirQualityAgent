@@ -14,6 +14,7 @@ import openai
 
 from ..tool_definitions import openai_tools
 from .base_provider import BaseAIProvider
+from .provider_utils import format_tool_result_as_json
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +256,7 @@ class OpenAIProvider(BaseAIProvider):
             # Add tool results
             for tool_result in tool_results:
                 # Format the tool result as readable JSON string
-                result_content = json.dumps(tool_result["result"], indent=2)
+                result_content = format_tool_result_as_json(tool_result["result"])
                 
                 messages.append(
                     {
