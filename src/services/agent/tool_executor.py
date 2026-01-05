@@ -1,10 +1,11 @@
 """
 Tool execution module for AI agent.
 
-Handles execution of various data source and utility tools.
+Handles execution of various data source and utility tools with intelligent fallbacks and retry logic.
 """
 
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolExecutor:
-    """Executes tools for the AI agent."""
+    """Executes tools for the AI agent with intelligent fallbacks and error handling."""
 
     def __init__(
         self,
@@ -60,10 +61,180 @@ class ToolExecutor:
         self.geocoding = geocoding_service
         self.client_ip = None  # Will be set by agent service
         self.client_location = None  # Will be set by agent service (GPS data)
+        
+        # Circuit breaker for failing services
+        self.service_failures = {}  # Track failures per service
+        self.circuit_breaker_threshold = 5  # Failures before circuit opens
+        self.circuit_breaker_timeout = 300  # 5 minutes before retry
+
+    def _is_circuit_open(self, service_name: str) -> bool:
+        """Check if circuit breaker is open for a service."""
+        if service_name not in self.service_failures:
+            return False
+        
+        failure_data = self.service_failures[service_name]
+        if failure_data['count'] >= self.circuit_breaker_threshold:
+            # Check if timeout has passed
+            if time.time() - failure_data['last_failure'] < self.circuit_breaker_timeout:
+                logger.warning(f"Circuit breaker OPEN for {service_name}")
+                return True
+            else:
+                # Reset circuit breaker
+                self.service_failures[service_name] = {'count': 0, 'last_failure': 0}
+                logger.info(f"Circuit breaker RESET for {service_name}")
+                return False
+        return False
+
+    def _record_failure(self, service_name: str):
+        """Record a service failure."""
+        if service_name not in self.service_failures:
+            self.service_failures[service_name] = {'count': 0, 'last_failure': 0}
+        
+        self.service_failures[service_name]['count'] += 1
+        self.service_failures[service_name]['last_failure'] = time.time()
+        logger.warning(f"Service failure recorded for {service_name}: {self.service_failures[service_name]['count']} failures")
+
+    def _record_success(self, service_name: str):
+        """Record a successful service call."""
+        if service_name in self.service_failures:
+            # Reset failure count on success
+            self.service_failures[service_name] = {'count': 0, 'last_failure': 0}
+
+    def _get_city_air_quality_with_fallback(self, city: str) -> dict[str, Any]:
+        """
+        Get city air quality with intelligent fallback strategy.
+        
+        Tries multiple data sources in order:
+        1. WAQI (global coverage, 13k+ stations)
+        2. Geocode + OpenMeteo (works anywhere with coordinates)
+        3. Web search (last resort)
+        
+        Args:
+            city: City name
+            
+        Returns:
+            Result dictionary with success flag and data/message
+        """
+        # Try WAQI first
+        if self.waqi and not self._is_circuit_open('waqi'):
+            try:
+                logger.info(f"Trying WAQI for {city}")
+                result = self.waqi.get_city_feed(city)
+                if result.get("success"):
+                    self._record_success('waqi')
+                    return result
+                logger.info(f"WAQI returned no data for {city}")
+                self._record_failure('waqi')
+            except Exception as e:
+                logger.error(f"WAQI error for {city}: {e}")
+                self._record_failure('waqi')
+        
+        # Fallback to Geocode + OpenMeteo
+        if self.geocoding and self.openmeteo and not self._is_circuit_open('openmeteo'):
+            try:
+                logger.info(f"Trying Geocoding + OpenMeteo fallback for {city}")
+                geocode_result = self.geocoding.geocode_address(city, limit=1)
+                if geocode_result.get("success") and geocode_result.get("results"):
+                    location = geocode_result["results"][0]
+                    lat = location.get("latitude")
+                    lon = location.get("longitude")
+                    if lat and lon:
+                        aq_result = self.openmeteo.get_current_air_quality(lat, lon)
+                        if aq_result.get("success"):
+                            self._record_success('openmeteo')
+                            # Enhance result to indicate fallback was used
+                            aq_result["data_source"] = "OpenMeteo (via geocoding fallback)"
+                            aq_result["location_name"] = city
+                            aq_result["note"] = f"Data retrieved using coordinates for {city}"
+                            return aq_result
+                logger.info(f"Geocoding fallback failed for {city}")
+                self._record_failure('openmeteo')
+            except Exception as e:
+                logger.error(f"Geocoding + OpenMeteo fallback error for {city}: {e}")
+                self._record_failure('openmeteo')
+        
+        # Last resort: suggest web search
+        return {
+            "success": False,
+            "message": f"Unable to retrieve air quality data for {city} from available monitoring networks.",
+            "suggestion": "search_web",
+            "search_query": f"current air quality {city}",
+            "fallback_advice": f"No monitoring station found for {city}. Data may be available through local environmental agencies."
+        }
+
+    def _get_african_city_with_fallback(self, city: str, site_id: str = None) -> dict[str, Any]:
+        """
+        Get African city air quality with fallback to WAQI and OpenMeteo.
+        
+        Args:
+            city: City name
+            site_id: Optional AirQo site ID
+            
+        Returns:
+            Result dictionary
+        """
+        # Try AirQo first (primary for Africa)
+        if self.airqo and not self._is_circuit_open('airqo'):
+            try:
+                logger.info(f"Trying AirQo for {city}")
+                result = self.airqo.get_recent_measurements(city=city, site_id=site_id)
+                if result.get("success"):
+                    self._record_success('airqo')
+                    return result
+                logger.info(f"AirQo returned no data for {city}")
+                self._record_failure('airqo')
+            except Exception as e:
+                logger.error(f"AirQo error for {city}: {e}")
+                self._record_failure('airqo')
+        
+        # Fallback to WAQI
+        if self.waqi and not self._is_circuit_open('waqi'):
+            try:
+                logger.info(f"Trying WAQI fallback for {city}")
+                result = self.waqi.get_city_feed(city)
+                if result.get("success"):
+                    self._record_success('waqi')
+                    result["data_source"] = "WAQI (fallback from AirQo)"
+                    result["note"] = f"AirQo data unavailable. Using WAQI station data for {city}"
+                    return result
+                self._record_failure('waqi')
+            except Exception as e:
+                logger.error(f"WAQI fallback error for {city}: {e}")
+                self._record_failure('waqi')
+        
+        # Fallback to Geocode + OpenMeteo
+        if self.geocoding and self.openmeteo and not self._is_circuit_open('openmeteo'):
+            try:
+                logger.info(f"Trying Geocoding + OpenMeteo fallback for {city}")
+                geocode_result = self.geocoding.geocode_address(city, limit=1)
+                if geocode_result.get("success") and geocode_result.get("results"):
+                    location = geocode_result["results"][0]
+                    lat = location.get("latitude")
+                    lon = location.get("longitude")
+                    if lat and lon:
+                        aq_result = self.openmeteo.get_current_air_quality(lat, lon)
+                        if aq_result.get("success"):
+                            self._record_success('openmeteo')
+                            aq_result["data_source"] = "OpenMeteo (fallback)"
+                            aq_result["location_name"] = city
+                            aq_result["note"] = f"Local monitoring data unavailable. Using modeled data for {city}"
+                            return aq_result
+                self._record_failure('openmeteo')
+            except Exception as e:
+                logger.error(f"Geocoding + OpenMeteo fallback error for {city}: {e}")
+                self._record_failure('openmeteo')
+        
+        return {
+            "success": False,
+            "message": f"Unable to retrieve air quality data for {city}. This location may not have active monitoring coverage.",
+            "suggestion": "search_web",
+            "search_query": f"air quality {city} Africa",
+            "fallback_advice": f"Consider checking local environmental agencies or nearby cities with monitoring stations."
+        }
 
     def execute(self, function_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """
-        Execute a tool synchronously.
+        Execute a tool synchronously with intelligent fallback handling.
 
         Args:
             function_name: Name of the tool/function to execute
@@ -73,53 +244,40 @@ class ToolExecutor:
             Result dictionary from the tool execution
         """
         try:
-            # WAQI tools
+            # WAQI tools - with intelligent fallback
             if function_name == "get_city_air_quality":
-                if self.waqi is None:
-                    return {"success": False, "message": "WAQI service is not enabled."}
-                return self.waqi.get_city_feed(args.get("city"))
+                if self.waqi is None and self.openmeteo is None:
+                    return {"success": False, "message": "Air quality services are not enabled."}
+                return self._get_city_air_quality_with_fallback(args.get("city"))
 
             elif function_name == "search_waqi_stations":
                 if self.waqi is None:
                     return {"success": False, "message": "WAQI service is not enabled."}
-                return self.waqi.search_stations(args.get("keyword"))
-
-            # AirQo tools
-            elif function_name == "get_african_city_air_quality":
-                if self.airqo is None:
-                    return {"success": False, "message": "AirQo service is not enabled."}
-                city = args.get("city")
-                site_id = args.get("site_id")
+                if self._is_circuit_open('waqi'):
+                    return {"success": False, "message": "WAQI service temporarily unavailable. Try again later."}
                 try:
-                    result = self.airqo.get_recent_measurements(city=city, site_id=site_id)
-                    if result.get("success"):
-                        return result
-                    logger.info(f"AirQo returned no data for {city}: {result.get('message')}")
+                    result = self.waqi.search_stations(args.get("keyword"))
+                    self._record_success('waqi')
                     return result
                 except Exception as e:
-                    logger.error(f"AirQo API error for {city}: {e}")
-                    return {
-                        "success": False,
-                        "message": f"Could not retrieve AirQo data for {city}. The location may not have AirQo monitoring coverage.",
-                        "error": str(e),
-                    }
+                    self._record_failure('waqi')
+                    raise
+
+            # AirQo tools - with intelligent fallback
+            elif function_name == "get_african_city_air_quality":
+                if self.airqo is None and self.waqi is None and self.openmeteo is None:
+                    return {"success": False, "message": "Air quality services are not enabled."}
+                city = args.get("city")
+                site_id = args.get("site_id")
+                return self._get_african_city_with_fallback(city, site_id)
 
             elif function_name == "get_multiple_african_cities_air_quality":
-                if self.airqo is None:
-                    return {"success": False, "message": "AirQo service is not enabled."}
+                if self.airqo is None and self.waqi is None and self.openmeteo is None:
+                    return {"success": False, "message": "Air quality services are not enabled."}
                 cities = args.get("cities", [])
                 results = {}
                 for city in cities:
-                    try:
-                        result = self.airqo.get_recent_measurements(city=city)
-                        results[city] = result
-                    except Exception as e:
-                        logger.error(f"Error getting data for {city}: {e}")
-                        results[city] = {
-                            "success": False,
-                            "message": f"Error retrieving data for {city}",
-                            "error": str(e),
-                        }
+                    results[city] = self._get_african_city_with_fallback(city)
                 return {"success": True, "data": results, "cities_count": len(cities)}
 
             elif function_name == "get_airqo_history":
