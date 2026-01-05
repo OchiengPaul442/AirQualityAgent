@@ -1,14 +1,23 @@
-# Aeris System Architecture
+# AERIS-AQ System Architecture
 
-This document describes the architecture and design of **Aeris**, your Air Quality AI Assistant.
+This document describes the architecture and design of **AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality)**, your Air Quality AI Assistant.
 
-## Meet Aeris
+## Meet AERIS-AQ
 
-**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
+**AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality)** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address AERIS-AQ by name in your conversations!
+
+**AERIS-AQ** represents:
+
+- **Artificial**: Advanced AI/ML core powering predictions and analysis
+- **Environmental**: Specialized focus on air quality and atmospheric conditions
+- **Real-time**: Live monitoring with immediate alerts and updates
+- **Intelligence**: Machine learning capabilities for pattern recognition and forecasting
+- **System**: Complete integrated platform with sensors, dashboard, and APIs
+- **Air Quality**: Dedicated to comprehensive air pollution monitoring and analysis
 
 ## Overview
 
-Aeris is a stateless, scalable AI system built with FastAPI that provides real-time air quality monitoring, analysis, and recommendations through multiple AI providers.
+AERIS-AQ is a stateless, scalable AI system built with FastAPI that provides real-time air quality monitoring, analysis, and recommendations through multiple AI providers.
 
 ## System Components
 

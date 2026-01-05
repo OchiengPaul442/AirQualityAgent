@@ -1,10 +1,19 @@
-# Docker Deployment Guide for Aeris
+# Docker Deployment Guide for AERIS-AQ
 
-This guide explains how to deploy **Aeris**, your Air Quality AI Assistant, using Docker.
+This guide explains how to deploy **AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality)**, your Air Quality AI Assistant, using Docker.
 
-## Meet Aeris
+## Meet AERIS-AQ
 
-**Aeris** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
+**AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality)** is your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address AERIS-AQ by name in your conversations!
+
+**AERIS-AQ** represents:
+
+- **Artificial**: Advanced AI/ML core powering predictions and analysis
+- **Environmental**: Specialized focus on air quality and atmospheric conditions
+- **Real-time**: Live monitoring with immediate alerts and updates
+- **Intelligence**: Machine learning capabilities for pattern recognition and forecasting
+- **System**: Complete integrated platform with sensors, dashboard, and APIs
+- **Air Quality**: Dedicated to comprehensive air pollution monitoring and analysis
 
 ## Prerequisites
 

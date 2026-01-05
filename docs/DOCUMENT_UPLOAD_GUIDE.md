@@ -1,12 +1,21 @@
-# Aeris Document Upload & Analysis Guide
+# AERIS-AQ Document Upload & Analysis Guide
 
 ## Overview
 
 Upload and analyze PDF, CSV, or Excel files **directly through the chat endpoint** with **in-memory processing** for cost-effective analysis. Files are **never stored** on the server - processed entirely in RAM and immediately discarded.
 
-**Important:** Document upload is now integrated into the `/api/v1/agent/chat` endpoint. You can upload a file along with your message to **Aeris**, your Air Quality AI Assistant, for analysis.
+**Important:** Document upload is now integrated into the `/api/v1/agent/chat` endpoint. You can upload a file along with your message to **AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality)**, your Air Quality AI Assistant, for analysis.
 
-**Meet Aeris**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
+**Meet AERIS-AQ**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address AERIS-AQ by name in your conversations!
+
+**AERIS-AQ** represents:
+
+- **Artificial**: Advanced AI/ML core powering predictions and analysis
+- **Environmental**: Specialized focus on air quality and atmospheric conditions
+- **Real-time**: Live monitoring with immediate alerts and updates
+- **Intelligence**: Machine learning capabilities for pattern recognition and forecasting
+- **System**: Complete integrated platform with sensors, dashboard, and APIs
+- **Air Quality**: Dedicated to comprehensive air pollution monitoring and analysis
 
 **Key Benefits:**
 

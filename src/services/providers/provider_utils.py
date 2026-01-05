@@ -264,7 +264,7 @@ def get_user_friendly_error_message(
 
     # Rate limit and quota errors
     if is_rate_limit_error(error):
-        base_msg = "Aeris is currently experiencing high demand. Please wait a moment and try again."
+        base_msg = "AERIS-AQ is currently experiencing high demand. Please wait a moment and try again."
 
         # Add reset time info if available (OpenAI)
         if error_details and provider == "openai":

@@ -25,7 +25,7 @@ class GeocodingService:
         self.session = requests.Session()
         # Set user agent as required by Nominatim
         self.session.headers.update({
-            'User-Agent': 'Aeris-AirQualityAgent/1.0'
+            'User-Agent': 'AERIS-AQ-AirQualityAgent/1.0'
         })
         self.cache_service = get_cache()
 

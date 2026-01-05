@@ -1,4 +1,4 @@
-# 🌬️ Aeris - Air Quality AI Agent
+# 🌬️ AERIS-AQ - Artificial Environmental Real-time Intelligence System (Air Quality)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -6,9 +6,18 @@
 
 ## Overview
 
-**Aeris** is a sophisticated, scalable AI system designed for air quality monitoring, research, and policy development. It provides real-time data analysis, intelligent recommendations, and comprehensive research capabilities.
+**AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality)** is a sophisticated, scalable AI system designed for air quality monitoring, research, and policy development. It provides real-time data analysis, intelligent recommendations, and comprehensive research capabilities.
 
-**Meet Aeris**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris by name in your conversations!
+**AERIS-AQ** represents:
+
+- **Artificial**: Advanced AI/ML core powering predictions and analysis
+- **Environmental**: Specialized focus on air quality and atmospheric conditions
+- **Real-time**: Live monitoring with immediate alerts and updates
+- **Intelligence**: Machine learning capabilities for pattern recognition and forecasting
+- **System**: Complete integrated platform with sensors, dashboard, and APIs
+- **Air Quality**: Dedicated to comprehensive air pollution monitoring and analysis
+
+**Meet AERIS-AQ**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address AERIS-AQ by name in your conversations!
 
 **Latest Updates (v2.9.3):**
 

@@ -165,7 +165,7 @@ class GeminiProvider(BaseAIProvider):
                         logger.warning("🚨 GEMINI RATE LIMIT EXCEEDED", extra=error_details)
 
                         return {
-                            "response": "Aeris is currently experiencing high demand. Please wait a moment and try again.",
+                            "response": "AERIS-AQ is currently experiencing high demand. Please wait a moment and try again.",
                             "tools_used": [],
                             "rate_limit_info": error_details,  # Include for debugging
                         }
