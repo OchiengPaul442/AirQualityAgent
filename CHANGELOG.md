@@ -4,6 +4,33 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.5] - 2026-01-06
+
+### 🔧 Forecast Functionality Fix
+
+**CRITICAL: Resolved AI forecast tool selection and routing issues**
+
+#### Tool Conflict Resolution
+
+- **Removed Duplicate Tools**: Eliminated redundant `get_airqo_forecast` tool that was conflicting with intelligent `get_air_quality_forecast`
+- **Intelligent Routing**: Ensured `get_air_quality_forecast` properly routes London→WAQI, Nairobi→AirQo
+- **Tool Executor Cleanup**: Removed obsolete `get_airqo_forecast` handler from tool executor
+- **Cross-Provider Consistency**: Updated both OpenAI and Gemini tool definitions
+
+#### Test Coverage Enhancement
+
+- **Forecast Test Added**: Added "London Forecast Query" test to comprehensive test suite
+- **Validation Confirmed**: All forecast tests passing (6/6) with proper service routing
+- **Production Verification**: Comprehensive test suite maintains 100% pass rate
+
+#### Frontend Issue Resolution
+
+- **Tool Selection Fix**: AI now correctly uses `get_air_quality_forecast` for all forecast queries
+- **JSON Parsing**: Resolved malformed tool argument issues by eliminating conflicting tools
+- **Response Quality**: Forecast queries now return proper structured markdown responses
+
+---
+
 ## [2.9.4] - 2026-01-05
 
 ### 📜 License Update to AGPL v3

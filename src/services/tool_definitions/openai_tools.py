@@ -143,29 +143,21 @@ Returns: Data for all cities for easy side-by-side comparison""",
         {
             "type": "function",
             "function": {
-                "name": "get_airqo_forecast",
-                "description": "Get air quality forecast for a location, site, or device. Can search by city name or location if site_id is unknown.",
+                "name": "get_air_quality_forecast",
+                "description": "Get air quality FORECAST for any city worldwide. Use this when user asks about future air quality, tomorrow's air quality, air quality predictions, or upcoming air quality conditions. Automatically routes to the best available service (WAQI for global cities, AirQo for African cities). Returns 3-8 day forecast with AQI predictions and pollutant levels.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "site_id": {
-                            "type": "string",
-                            "description": "The ID of the site (optional)",
-                        },
-                        "device_id": {
-                            "type": "string",
-                            "description": "The ID of the device (optional)",
-                        },
                         "city": {
                             "type": "string",
-                            "description": "City or location name to search for (optional)",
+                            "description": "City name (e.g., 'London', 'New York', 'Nairobi', 'Tokyo')",
                         },
-                        "frequency": {
-                            "type": "string",
-                            "description": "Frequency: 'daily' or 'hourly'",
+                        "days": {
+                            "type": "integer",
+                            "description": "Number of forecast days (1-8, default: 3)",
                         },
                     },
-                    "required": ["frequency"],
+                    "required": ["city"],
                 },
             },
         },

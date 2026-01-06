@@ -114,6 +114,11 @@ class ComprehensiveTestRunner:
                 "expect_tools": True
             },
             {
+                "query": "What will the air quality be like tomorrow in London?",
+                "name": "London Forecast Query",
+                "expect_tools": True
+            },
+            {
                 "query": "Tell me about recent air pollution studies in East Africa",
                 "name": "Web Search Fallback",
                 "expect_tools": True

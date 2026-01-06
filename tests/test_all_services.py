@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.config import get_settings
+from src.services.agent.tool_executor import ToolExecutor
 from src.services.agent_service import AgentService
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
@@ -608,6 +609,122 @@ class TestSecurityValidation(unittest.TestCase):
         self.assertLessEqual(len(last_memory['ai']), self.agent.max_response_length + 50)  # Some buffer
 
 
+class TestAirQualityForecast(unittest.TestCase):
+    """Test air quality forecast functionality with intelligent routing"""
+
+    def setUp(self):
+        # Mock all services
+        self.waqi_service = MagicMock()
+        self.airqo_service = MagicMock()
+        self.openmeteo_service = MagicMock()
+        self.carbon_intensity_service = MagicMock()
+        self.defra_service = MagicMock()
+        self.uba_service = MagicMock()
+        self.nsw_service = MagicMock()
+        self.weather_service = MagicMock()
+        self.search_service = MagicMock()
+        self.scraper = MagicMock()
+        self.document_scanner = MagicMock()
+        self.geocoding_service = MagicMock()
+
+        self.tool_executor = ToolExecutor(
+            waqi_service=self.waqi_service,
+            airqo_service=self.airqo_service,
+            openmeteo_service=self.openmeteo_service,
+            carbon_intensity_service=self.carbon_intensity_service,
+            defra_service=self.defra_service,
+            uba_service=self.uba_service,
+            nsw_service=self.nsw_service,
+            weather_service=self.weather_service,
+            search_service=self.search_service,
+            scraper=self.scraper,
+            document_scanner=self.document_scanner,
+            geocoding_service=self.geocoding_service,
+        )
+
+    def test_forecast_london_uses_waqi(self):
+        """Test that London forecast uses WAQI service"""
+        # Mock WAQI forecast response
+        self.waqi_service.get_station_forecast.return_value = {
+            "success": True,
+            "forecast": {"daily": {"pm25": [10, 12, 15]}}
+        }
+
+        result = self.tool_executor.execute("get_air_quality_forecast", {"city": "London"})
+
+        # Should call WAQI, not AirQo
+        self.waqi_service.get_station_forecast.assert_called_once_with("london")
+        self.airqo_service.get_forecast.assert_not_called()
+        self.assertTrue(result["success"])
+
+    def test_forecast_nairobi_uses_airqo(self):
+        """Test that Nairobi forecast uses AirQo service"""
+        # Mock AirQo forecast response
+        self.airqo_service.get_forecast.return_value = {
+            "success": True,
+            "forecasts": [{"pm2_5": 25.0}]
+        }
+
+        result = self.tool_executor.execute("get_air_quality_forecast", {"city": "Nairobi"})
+
+        # Should call AirQo, not WAQI
+        self.airqo_service.get_forecast.assert_called_once_with(
+            city="nairobi", frequency="daily"
+        )
+        self.waqi_service.get_station_forecast.assert_not_called()
+        self.assertTrue(result["success"])
+
+    def test_forecast_airqo_fallback_to_waqi(self):
+        """Test that AirQo failure falls back to WAQI"""
+        # Mock AirQo failure
+        self.airqo_service.get_forecast.side_effect = Exception("AirQo unavailable")
+        # Mock WAQI success
+        self.waqi_service.get_station_forecast.return_value = {
+            "success": True,
+            "forecast": {"daily": {"pm25": [10, 12]}}
+        }
+
+        result = self.tool_executor.execute("get_air_quality_forecast", {"city": "Nairobi"})
+
+        # Should try AirQo first, then fallback to WAQI
+        self.airqo_service.get_forecast.assert_called_once()
+        self.waqi_service.get_station_forecast.assert_called_once_with("nairobi")
+        self.assertTrue(result["success"])
+
+    def test_forecast_both_services_fail(self):
+        """Test graceful failure when both services fail"""
+        self.airqo_service.get_forecast.side_effect = Exception("AirQo error")
+        self.waqi_service.get_station_forecast.side_effect = Exception("WAQI error")
+
+        result = self.tool_executor.execute("get_air_quality_forecast", {"city": "Unknown City"})
+
+        self.assertFalse(result["success"])
+        self.assertIn("Unable to get forecast", result["message"])
+
+    def test_forecast_service_disabled(self):
+        """Test behavior when services are disabled"""
+        # Create executor with None services
+        tool_executor = ToolExecutor(
+            waqi_service=None,
+            airqo_service=None,
+            openmeteo_service=None,
+            carbon_intensity_service=None,
+            defra_service=None,
+            uba_service=None,
+            nsw_service=None,
+            weather_service=None,
+            search_service=None,
+            scraper=None,
+            document_scanner=None,
+            geocoding_service=None,
+        )
+
+        result = tool_executor.execute("get_air_quality_forecast", {"city": "London"})
+
+        self.assertFalse(result["success"])
+        self.assertIn("not available", result["message"])
+
+
 def run_tests():
     print("=" * 70)
     print("COMPREHENSIVE SERVICE TEST SUITE")
@@ -627,6 +744,7 @@ def run_tests():
     suite.addTests(loader.loadTestsFromTestCase(TestCacheService))
     suite.addTests(loader.loadTestsFromTestCase(TestAgentService))
     suite.addTests(loader.loadTestsFromTestCase(TestSecurityValidation))
+    suite.addTests(loader.loadTestsFromTestCase(TestAirQualityForecast))
     
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)

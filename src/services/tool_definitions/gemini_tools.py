@@ -111,29 +111,21 @@ def get_airqo_tools() -> types.Tool:
                 ),
             ),
             types.FunctionDeclaration(
-                name="get_airqo_forecast",
-                description="Get air quality forecast for a location, site, or device. Can search by city name or location if site_id is unknown.",
+                name="get_air_quality_forecast",
+                description="Get air quality FORECAST for any city worldwide. Use this when user asks about future air quality, tomorrow's air quality, air quality predictions, or upcoming air quality conditions. Automatically routes to the best available service (WAQI for global cities, AirQo for African cities). Returns 3-8 day forecast with AQI predictions and pollutant levels.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
-                        "site_id": types.Schema(
-                            type=types.Type.STRING,
-                            description="The ID of the site (optional)",
-                        ),
-                        "device_id": types.Schema(
-                            type=types.Type.STRING,
-                            description="The ID of the device (optional)",
-                        ),
                         "city": types.Schema(
                             type=types.Type.STRING,
-                            description="City or location name to search for (optional)",
+                            description="City name (e.g., 'London', 'New York', 'Nairobi', 'Tokyo')",
                         ),
-                        "frequency": types.Schema(
-                            type=types.Type.STRING,
-                            description="Frequency: 'daily' or 'hourly'",
+                        "days": types.Schema(
+                            type=types.Type.INTEGER,
+                            description="Number of forecast days (1-8, default: 3)",
                         ),
                     },
-                    required=["frequency"],
+                    required=["city"],
                 ),
             ),
             types.FunctionDeclaration(

@@ -399,20 +399,46 @@ class ToolExecutor:
                     frequency=args.get("frequency", "hourly"),
                 )
 
-            elif function_name == "get_airqo_forecast":
-                if self.airqo is None:
-                    return {"success": False, "message": "AirQo service is not enabled."}
-                return self.airqo.get_forecast(
-                    site_id=args.get("site_id"),
-                    device_id=args.get("device_id"),
-                    city=args.get("city"),
-                    frequency=args.get("frequency", "daily"),
-                )
-
             elif function_name == "get_airqo_metadata":
                 if self.airqo is None:
                     return {"success": False, "message": "AirQo service is not enabled."}
                 return self.airqo.get_metadata(entity_type=args.get("entity_type", "grids"))
+
+            elif function_name == "get_air_quality_forecast":
+                # Intelligent routing: Use AirQo for African cities, WAQI for others
+                city = args.get("city", "").lower()
+                days = args.get("days", 3)
+                
+                # List of African countries/cities that should use AirQo
+                african_indicators = [
+                    "africa", "kenya", "uganda", "tanzania", "rwanda", "ghana", "nigeria", 
+                    "ethiopia", "south africa", "egypt", "morocco", "algeria", "tunisia",
+                    "nairobi", "kampala", "dar es salaam", "kigali", "accra", "lagos",
+                    "addis ababa", "cape town", "cairo", "casablanca", "algiers", "tunis"
+                ]
+                
+                is_african = any(indicator in city for indicator in african_indicators)
+                
+                if is_african and self.airqo is not None:
+                    # Use AirQo for African cities
+                    try:
+                        return self.airqo.get_forecast(
+                            city=city,
+                            frequency="daily"
+                        )
+                    except Exception as e:
+                        logger.warning(f"AirQo forecast failed for {city}, falling back to WAQI: {e}")
+                        # Fall back to WAQI if AirQo fails
+                
+                # Use WAQI for non-African cities or as fallback
+                if self.waqi is not None:
+                    try:
+                        return self.waqi.get_station_forecast(city)
+                    except Exception as e:
+                        logger.error(f"WAQI forecast failed for {city}: {e}")
+                        return {"success": False, "message": f"Unable to get forecast for {city}. No monitoring stations found or service unavailable."}
+                else:
+                    return {"success": False, "message": "Air quality forecast services are not available."}
 
             elif function_name == "get_air_quality_by_location":
                 if self.airqo is None:
