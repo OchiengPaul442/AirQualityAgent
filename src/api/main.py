@@ -19,6 +19,7 @@ from src.db.database import Base, engine, ensure_database_directory
 # Configure logging based on environment
 def setup_logging():
     """Configure logging levels based on environment."""
+    settings = get_settings()  # Get settings inside function
     log_level = logging.INFO if settings.ENVIRONMENT == "production" else logging.DEBUG
 
     # Configure root logger
@@ -49,7 +50,14 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Rate limiting configuration
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute", "1000/hour"])
+# Global limits: 100 requests per minute, 1000 per hour per IP
+# Individual endpoints can override with stricter limits
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["100/minute", "1000/hour"],
+    headers_enabled=True,  # Add rate limit info to response headers
+    storage_uri=settings.REDIS_ENABLED and f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}" or None
+)
 
 
 @asynccontextmanager
@@ -107,7 +115,7 @@ app.add_middleware(
     allowed_hosts=["*"] if settings.ENVIRONMENT == "development" else settings.cors_origins_list,
 )
 
-# Add security headers
+# Add security and performance headers
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     response = await call_next(request)
@@ -119,6 +127,9 @@ async def add_security_headers(request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Performance headers
+    response.headers["X-Response-Time"] = str(getattr(request.state, "response_time", 0))
 
     return response
 

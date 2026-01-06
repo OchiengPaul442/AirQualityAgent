@@ -3,8 +3,6 @@ import os
 import re
 import time
 import uuid
-from collections import defaultdict
-from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any
 
@@ -45,33 +43,6 @@ logger = logging.getLogger(__name__)
 
 # Global agent instance for MCP connection management
 _agent_instance = None
-
-# Rate limiting (in-memory, for production use Redis)
-_rate_limit_store: defaultdict[str, list[datetime]] = defaultdict(list)
-RATE_LIMIT_REQUESTS = 20  # requests per window
-RATE_LIMIT_WINDOW = 60  # seconds
-
-
-def check_rate_limit(client_ip: str) -> bool:
-    """
-    Simple in-memory rate limiting.
-    For production with multiple servers, use Redis.
-    """
-    now = datetime.now()
-    cutoff = now - timedelta(seconds=RATE_LIMIT_WINDOW)
-
-    # Clean old requests
-    _rate_limit_store[client_ip] = [
-        req_time for req_time in _rate_limit_store[client_ip] if req_time > cutoff
-    ]
-
-    # Check limit
-    if len(_rate_limit_store[client_ip]) >= RATE_LIMIT_REQUESTS:
-        return False
-
-    # Add current request
-    _rate_limit_store[client_ip].append(now)
-    return True
 
 
 def get_agent():
