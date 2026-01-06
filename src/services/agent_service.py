@@ -1001,18 +1001,25 @@ class AgentService:
             # Check if response contains ACTUAL sensitive information (not tool usage mentions)
             # We WANT the agent to mention data sources and services used - that's transparent and helpful
             sensitive_indicators = [
-                r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+',  # ACTUAL keys with values
-                r'(?i)(site[_-]?id|device[_-]?id)\s*[:=]\s*\S+',  # ACTUAL IDs with values
-                r'\{"type":\s*"function".*?\}',  # Full tool call JSON structure
-                r'\[REDACTED\]|\[ID REDACTED\]|\[URL REDACTED\]|\[METHOD REDACTED\]|\[TOOL CALL REDACTED\]',
-                r'https?://[^\s]+',  # URLs (especially internal ones)
+                r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*[\w\-]{8,}',  # ACTUAL keys with values (8+ chars)
+                r'(?i)(site[_-]?id|device[_-]?id)\s*[:=]\s*[\w\-]{5,}',  # ACTUAL IDs with values (5+ chars)
+                r'\{"type":\s*"function"[^}]*"name":\s*"[^"]+"[^}]*\}',  # Full tool call JSON structure
+                # REMOVED: URLs - they are helpful references
+                # REMOVED: [REDACTED] markers - we don't use these anymore
                 # REMOVED: "using tool/service" - we WANT transparency about data sources
-                # REMOVED: "calling tool/service" - we WANT transparency about data sources
             ]
 
             contains_sensitive = any(re.search(pattern, response_text) for pattern in sensitive_indicators)
 
-            if contains_sensitive:
+            # EXCEPTION: Allow document analysis responses even if they might match patterns
+            # These are legitimate responses to user uploads
+            is_document_analysis = any(keyword in response_text.lower() for keyword in [
+                'document overview', 'file:', 'sheet:', 'rows:', 'columns:', 
+                'excel', 'spreadsheet', 'csv', 'analyzing', 'data preview',
+                'table:', 'primary content', 'who_aap', 'xlsx', 'document'
+            ])
+
+            if contains_sensitive and not is_document_analysis:
                 # Replace with professional response instead of showing redaction markers
                 logger.warning(f"Sensitive information detected in response, replacing with professional message. Original: {response_text[:200]}...")
                 response_data["response"] = (

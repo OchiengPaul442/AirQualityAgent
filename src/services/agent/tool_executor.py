@@ -422,10 +422,15 @@ class ToolExecutor:
                 if is_african and self.airqo is not None:
                     # Use AirQo for African cities
                     try:
-                        return self.airqo.get_forecast(
+                        result = self.airqo.get_forecast(
                             city=city,
                             frequency="daily"
                         )
+                        # Add explicit source attribution
+                        if isinstance(result, dict) and result.get("success"):
+                            result["data_source"] = "AirQo monitoring network"
+                            result["source_type"] = "airqo"
+                        return result
                     except Exception as e:
                         logger.warning(f"AirQo forecast failed for {city}, falling back to WAQI: {e}")
                         # Fall back to WAQI if AirQo fails
@@ -433,7 +438,12 @@ class ToolExecutor:
                 # Use WAQI for non-African cities or as fallback
                 if self.waqi is not None:
                     try:
-                        return self.waqi.get_station_forecast(city)
+                        result = self.waqi.get_station_forecast(city)
+                        # Add explicit source attribution
+                        if isinstance(result, dict) and result.get("success"):
+                            result["data_source"] = "World Air Quality Index (WAQI) network"
+                            result["source_type"] = "waqi"
+                        return result
                     except Exception as e:
                         logger.error(f"WAQI forecast failed for {city}: {e}")
                         return {"success": False, "message": f"Unable to get forecast for {city}. No monitoring stations found or service unavailable."}

@@ -267,16 +267,31 @@ class OpenAIProvider(BaseAIProvider):
         
         for attempt in range(max_retries):
             try:
+                # Prepare API call parameters
+                api_params = {
+                    "model": self.settings.AI_MODEL,
+                    "messages": messages,
+                    "tools": self.get_tool_definitions(),
+                    "tool_choice": "auto",
+                    "max_tokens": effective_max_tokens,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                }
+                
+                # Enable thinking/reasoning mode for supported models
+                # Claude Sonnet, DeepSeek, and some other models support extended thinking
+                model_lower = self.settings.AI_MODEL.lower()
+                if any(keyword in model_lower for keyword in ['claude', 'sonnet', 'deepseek', 'o1', 'o3']):
+                    # Enable extended thinking for these models
+                    # Note: Different providers may use different parameter names
+                    if 'deepseek' in model_lower or 'o1' in model_lower or 'o3' in model_lower:
+                        api_params["reasoning_effort"] = "high"  # For models that support reasoning_effort
+                        logger.info(f"Enabled reasoning_effort=high for model: {self.settings.AI_MODEL}")
+                    # Claude and other models may automatically use thinking when needed
+                    # We don't need to set a special parameter for Claude Sonnet
+                
                 # Create completion
-                response = self.client.chat.completions.create(
-                    model=self.settings.AI_MODEL,
-                    messages=messages,
-                    tools=self.get_tool_definitions(),
-                    tool_choice="auto",
-                    max_tokens=effective_max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                )
+                response = self.client.chat.completions.create(**api_params)
                 break  # Success, exit retry loop
             except openai.APIConnectionError as e:
                 logger.error(f"API connection error (attempt {attempt + 1}/{max_retries}): {e}")
