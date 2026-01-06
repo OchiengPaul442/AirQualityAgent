@@ -194,7 +194,7 @@ class ResponseFilter:
     @staticmethod
     def clean_response(response: str) -> str:
         """
-        Clean AI response to remove tool mentions and implementation details.
+        Clean AI response to remove tool mentions, API keys, tokens, and implementation details.
 
         Args:
             response: Raw AI response
@@ -204,6 +204,16 @@ class ResponseFilter:
         """
         if not isinstance(response, str):
             return str(response)
+
+        # Remove API keys and tokens (more aggressive patterns)
+        # Pattern 1: "API key is abc123" or "token is def456"
+        response = re.sub(r'(?i)(api\s*key|token|secret|password|auth\s*key)\s+(is|are|:|=)\s+[a-zA-Z0-9_\-]+', 
+                         r'\1 [FILTERED]', response)
+        # Pattern 2: key="abc123" or token="def456"  
+        response = re.sub(r'(?i)(api[-_]?key|token|secret|password|auth[-_]?key)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]{8,})[\'"]?',
+                         r'\1=[FILTERED]', response)
+        # Pattern 3: Plain alphanumeric keys/tokens after mention
+        response = re.sub(r'(?i)\b(key|token)\s+[a-zA-Z0-9_\-]{20,}\b', r'\1 [FILTERED]', response)
 
         # Remove tool function names
         for pattern in ResponseFilter.TOOL_MENTION_PATTERNS:

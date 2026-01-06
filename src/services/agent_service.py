@@ -58,8 +58,10 @@ class AgentService:
         self.cache = get_cache()
         self.mcp_clients: dict[str, MCPClient] = {}
         
-        # Document accumulation cache per session
-        self.document_cache: dict[str, list[dict[str, Any]]] = {}
+        # Document accumulation cache per session with timestamp tracking for cleanup
+        # Format: {session_id: {"documents": [...], "last_access": timestamp}}
+        self.document_cache: dict[str, dict[str, Any]] = {}
+        self.document_cache_ttl = 3600  # 1 hour TTL for document cache cleanup
 
         # Parse enabled data sources
         enabled_sources = set(src.strip().lower() for src in self.settings.ENABLED_DATA_SOURCES.split(',') if src.strip())
@@ -116,9 +118,10 @@ class AgentService:
 
         # Memory management and loop prevention
         self.conversation_memory: list[dict] = []
-        self.max_conversation_length = 50  # Prevent memory bloat
-        self.loop_detection_window = 10  # Check last N messages for loops
-        self.max_response_length = 8000  # Prevent extremely long responses
+        self.max_conversation_length = 30  # Prevent memory bloat (reduced from 50)
+        self.loop_detection_window = 8  # Check last N messages for loops (reduced from 10)
+        self.max_response_length = 6000  # Prevent extremely long responses (reduced from 8000)
+        self.max_message_cache_size = 100  # Limit total cached messages in memory
 
     def _check_for_loops(self, user_message: str) -> bool:
         """
@@ -145,6 +148,19 @@ class AgentService:
         if len(self.conversation_memory) > self.max_conversation_length:
             # Keep only the most recent messages
             self.conversation_memory = self.conversation_memory[-self.max_conversation_length:]
+        
+        # Cleanup old document cache entries (older than TTL)
+        import time
+        current_time = time.time()
+        sessions_to_remove = []
+        for session_id, cache_data in self.document_cache.items():
+            last_access = cache_data.get("last_access", 0)
+            if current_time - last_access > self.document_cache_ttl:
+                sessions_to_remove.append(session_id)
+        
+        for session_id in sessions_to_remove:
+            del self.document_cache[session_id]
+            logger.info(f"Cleaned up expired document cache for session: {session_id[:8]}...")
 
     def _add_to_memory(self, user_message: str, ai_response: str):
         """Add conversation turn to memory with safeguards."""
@@ -386,52 +402,44 @@ class AgentService:
     ) -> str:
         """
         Generate a unique cache key for the request.
-
-        Args:
-            message: User message
-            history: Conversation history
-            document_data: Optional document context
-            style: Response style
-            temperature: Temperature parameter
-            top_p: Top-p parameter
-            session_id: Session identifier for document accumulation
-
-        Returns:
-            str: MD5 hash cache key
+        Optimized to handle complex objects safely and prevent serialization errors.
         """
-        # Custom JSON encoder to handle datetime and other non-serializable objects
-        def json_serializer(obj):
-            """Convert non-serializable objects to strings"""
-            from datetime import date, datetime
-            if isinstance(obj, (datetime, date)):
-                return obj.isoformat()
-            elif hasattr(obj, '__dict__'):
-                return str(obj)
-            else:
-                return str(obj)
-        
-        # Create a hashable representation
+        # Simplified and robust cache key generation
+        # Only use message, last 3 history items, and basic params
         try:
-            doc_str = json.dumps(document_data, sort_keys=True, default=json_serializer) if document_data else ""
-        except Exception as e:
-            logger.warning(f"Failed to serialize document_data for cache key, using fallback: {e}")
-            # Fallback: use string representation
-            doc_str = str(document_data) if document_data else ""
-        
-        cache_parts = [
-            self.settings.AI_PROVIDER,
-            self.settings.AI_MODEL,
-            message,
-            json.dumps(history[-5:] if len(history) > 5 else history, sort_keys=True, default=json_serializer),
-            doc_str,
-            style or "",
-            str(temperature) if temperature is not None else "",
-            str(top_p) if top_p is not None else "",
-            session_id or "",
-        ]
+            # Truncate message for cache key to avoid extremely long keys
+            msg_hash = message[:500] if len(message) <= 500 else hashlib.md5(message.encode()).hexdigest()
+            
+            # Only use last 3 history items (not 5) for better memory efficiency
+            recent_history = history[-3:] if len(history) > 3 else history
+            history_str = str([{"role": h.get("role", ""), "content": h.get("content", "")[:100]} for h in recent_history])
+            
+            # Document cache key: use filenames only, not full content
+            doc_str = ""
+            if document_data:
+                try:
+                    filenames = [d.get("filename", "unknown") for d in document_data if isinstance(d, dict)]
+                    doc_str = ",".join(filenames)
+                except Exception:
+                    doc_str = "docs_present"
+            
+            cache_parts = [
+                self.settings.AI_PROVIDER,
+                self.settings.AI_MODEL,
+                msg_hash,
+                history_str,
+                doc_str,
+                style or "general",
+                str(temperature) if temperature is not None else "default",
+                str(top_p) if top_p is not None else "default",
+            ]
 
-        cache_string = "|".join(cache_parts)
-        return hashlib.md5(cache_string.encode()).hexdigest()
+            cache_string = "|".join(cache_parts)
+            return hashlib.md5(cache_string.encode()).hexdigest()
+        except Exception as e:
+            logger.error(f"Cache key generation error: {e}, using fallback")
+            # Fallback: simple hash of message only
+            return hashlib.md5(message.encode()).hexdigest()
 
     async def process_message(
         self,
@@ -586,22 +594,27 @@ class AgentService:
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
 
-        # Accumulate documents in session cache
-        if document_data:
+        # Accumulate documents in session cache with timestamp tracking
+        if document_data and session_id:
+            import time
             if session_id not in self.document_cache:
-                self.document_cache[session_id] = []
+                self.document_cache[session_id] = {"documents": [], "last_access": time.time()}
+            
+            # Update last access time
+            self.document_cache[session_id]["last_access"] = time.time()
             
             # Add new documents, avoiding duplicates by filename
-            existing_filenames = {doc.get("filename", "") for doc in self.document_cache[session_id]}
+            existing_filenames = {doc.get("filename", "") for doc in self.document_cache[session_id]["documents"]}
             for doc in document_data:
                 filename = doc.get("filename", "")
-                if filename not in existing_filenames:
-                    self.document_cache[session_id].append(doc)
+                if filename and filename not in existing_filenames:
+                    self.document_cache[session_id]["documents"].append(doc)
                     existing_filenames.add(filename)
             
-            # Limit to last 3 documents to manage memory
-            if len(self.document_cache[session_id]) > 3:
-                self.document_cache[session_id] = self.document_cache[session_id][-3:]
+            # Hard limit: Keep only last 2 documents to prevent memory bloat
+            if len(self.document_cache[session_id]["documents"]) > 2:
+                self.document_cache[session_id]["documents"] = self.document_cache[session_id]["documents"][-2:]
+                logger.info(f"Document cache trimmed to 2 documents for session {session_id[:8]}...")
 
         # Get system instruction with document context
         location_context = ""
@@ -609,7 +622,10 @@ class AgentService:
             location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
 
         # Use accumulated documents for context
-        accumulated_docs = self.document_cache.get(session_id, []) if session_id else (document_data or [])
+        if session_id and session_id in self.document_cache:
+            accumulated_docs = self.document_cache[session_id].get("documents", [])
+        else:
+            accumulated_docs = document_data or []
         
         # Fallback safety net: If multiple documents and issues occur, prioritize the newest document
         if len(accumulated_docs) > 1 and document_data:

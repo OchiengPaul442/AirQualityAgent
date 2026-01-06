@@ -655,20 +655,68 @@ All endpoints return standard HTTP status codes and structured error messages.
 
 ## Rate Limiting
 
-**Limits:**
+**AERIS-AQ implements comprehensive rate limiting using SlowAPI to ensure fair usage and prevent abuse.**
 
-- **20 requests per minute** per IP address
-- Applies to all endpoints
+### Global Rate Limits
 
-**Rate Limit Response (429):**
+- **100 requests per minute** per IP address
+- **1,000 requests per hour** per IP address
+- Applies to all endpoints by default
+
+### Endpoint-Specific Rate Limits
+
+Different endpoints have tailored rate limits based on resource intensity:
+
+| Endpoint               | Rate Limit        | Reason                                      |
+| ---------------------- | ----------------- | ------------------------------------------- |
+| `/agent/chat`          | 30/minute per IP  | AI-intensive operations                     |
+| `/air-quality/query`   | 50/minute per IP  | Moderate data retrieval                     |
+| `/health`              | No limit          | Lightweight monitoring endpoint             |
+| All other endpoints    | 100/minute per IP | Standard operations (sessions, messages)    |
+
+### Rate Limit Headers
+
+All responses include rate limit information in headers:
+
+```http
+X-RateLimit-Limit: 30           # Total requests allowed in window
+X-RateLimit-Remaining: 25        # Remaining requests in current window
+X-RateLimit-Reset: 1609459200    # Unix timestamp when limit resets
+Retry-After: 45                  # Seconds to wait (only on 429 errors)
+```
+
+### Rate Limit Response (429)
+
+When rate limit is exceeded:
 
 ```json
 {
-  "detail": "Rate limit exceeded. Please try again in a moment."
+  "error": "Rate limit exceeded: 30 per 1 minute",
+  "detail": "You have exceeded the rate limit. Please try again in 45 seconds.",
+  "retry_after": 45
 }
 ```
 
-**Best Practice:** Implement exponential backoff in your client.
+### Production Configuration
+
+For production deployments with multiple servers, enable Redis for distributed rate limiting:
+
+```env
+REDIS_ENABLED=true
+REDIS_HOST=your-redis-host
+REDIS_PORT=6379
+REDIS_DB=0
+```
+
+Without Redis, rate limiting uses in-memory storage (single-server only).
+
+### Best Practices
+
+1. **Implement exponential backoff** when you receive 429 responses
+2. **Monitor rate limit headers** to proactively adjust request patterns
+3. **Cache responses** where appropriate to reduce API calls
+4. **Use batch endpoints** (e.g., `get_multiple_african_cities_air_quality`) to reduce individual requests
+5. **Spread requests** evenly throughout the minute rather than bursting
 
 ---
 
