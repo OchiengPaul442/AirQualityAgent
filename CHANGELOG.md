@@ -4,6 +4,59 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.9.7] - 2026-01-06
+
+### 📚 Documentation Professionalization & Provider Verification
+
+**Enhanced enterprise standards and confirmed provider capabilities**
+
+#### Documentation Updates
+
+- **Emoji Removal**: Removed all emojis from headers and content for professional enterprise standards
+- **Latest Updates**: Updated version to 2.9.4 with recent security and functionality improvements
+- **Formatting Cleanup**: Standardized bullet points and removed decorative elements
+
+#### Provider Access Verification
+
+- **Ollama Provider Confirmed**: Verified full access to all tools and services via unified tool definitions
+- **Tool Parity**: Confirmed all AI providers (OpenAI, Gemini, Ollama) have equal access to WAQI, AirQo, weather, search, scraping, and geocoding services
+- **Implementation Details**: Ollama provider uses `get_tool_definitions()` which returns complete tool set from `openai_tools.get_all_tools()`
+
+#### Professional Standards
+
+- **Enterprise Formatting**: Removed casual elements for corporate and academic environments
+- **Consistency**: Standardized documentation across all guides and README sections
+
+---
+
+## [2.9.6] - 2026-01-06
+
+### 🛡️ Security & Performance Enhancements
+
+**CRITICAL: Implemented production-grade rate limiting and logging controls**
+
+#### Rate Limiting Implementation
+
+- **Endpoint-Specific Limits**: Added `30/minute` limit to `/agent/chat` endpoint for AI interactions
+- **Data Query Limits**: Added `50/minute` limit to `/air-quality/query` endpoint for data requests
+- **Global Fallback**: Maintained `100/minute, 1000/hour` global limits as safety net
+- **IP-Based Tracking**: Rate limits enforced per client IP address
+
+#### Production Logging Controls
+
+- **Environment-Based Logging**: Configured different log levels for development vs production
+- **Response Privacy**: Removed debug print statements that exposed AI responses in terminals
+- **Clean Production Logs**: Production mode only logs errors/warnings, not full AI responses
+- **Development Debugging**: Development mode retains detailed logging for troubleshooting
+
+#### Security Hardening
+
+- **Information Leakage Prevention**: Ensured no sensitive AI responses appear in logs
+- **Provider-Level Controls**: Set appropriate log levels for different service providers
+- **Clean Terminal Output**: Production deployments now have clean, professional log output
+
+---
+
 ## [2.9.5] - 2026-01-06
 
 ### 🔧 Forecast Functionality Fix

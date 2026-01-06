@@ -1,8 +1,8 @@
-# 🌬️ AERIS-AQ - Artificial Environmental Real-time Intelligence System (Air Quality)
+# AERIS-AQ - Artificial Environmental Real-time Intelligence System (Air Quality)
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-🌍 **Production-ready air quality monitoring and AI agent with industry-standard patterns**
+Production-ready air quality monitoring and AI agent with industry-standard patterns
 
 ## Overview
 
@@ -19,27 +19,18 @@
 
 **Meet AERIS-AQ**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address AERIS-AQ by name in your conversations!
 
-**Latest Updates (v2.9.3):**
+**Latest Updates (v2.9.4):**
 
-- 🔧 **System Instructions Optimization** - Resolved conflicting instructions, compressed redundant sections
-- 🛡️ **Error Handling Enhancement** - Personalized error messages, improved API resilience
-- 🧠 **Context Loss Prevention** - Stronger rules against generic errors when context exists
-- 🚀 **Performance Optimization** - 3-5x faster responses with max_tokens limits (600-1200 per style)
-- 🎯 **Professional Standards** - WHO/EPA/World Bank report formatting, reduced emoji usage
-- 📚 **Enhanced Research** - Mandatory web search for policy/health questions, credible source citations
-- 🧠 **Advanced Analytics** - Forecasting, comparative analysis, policy evaluation capabilities
-- ✅ **Optimized System Prompt**: Reduced verbosity for speed while maintaining quality
-- ✅ **Configurable Response Styles**: Professional tones for executives, policymakers, researchers, public
-- ✅ **Multi-Source Data**: WAQI, AirQo, Open-Meteo with intelligent fallbacks
-- ✅ **Document Upload & Analysis**: PDF, CSV, Excel file support
-- ✅ **GPS Location Support**: Precise location-based queries with latitude/longitude coordinates
-- ✅ **Location Memory**: Remembers locations from conversation history
-- ✅ **Forecast Detection**: Automatically identifies when users want predictions
-- ✅ Production-ready error handling and logging
+- Security Enhancement: Environment-based logging controls to prevent AI response leakage in production
+- Rate Limiting: Endpoint-specific limits (30/minute for chat, 50/minute for queries) to prevent server abuse
+- Forecast Bug Fix: Resolved conflicting forecast tools causing "What" query failures
+- Documentation: Professional formatting with emoji removal for enterprise standards
+- Provider Verification: Confirmed Ollama provider has full access to all tools and services
+- Testing: Comprehensive test suite with 100% pass rate on forecast functionality
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 | Guide                                                      | Description                  |
 | ---------------------------------------------------------- | ---------------------------- |
@@ -53,7 +44,7 @@
 
 ---
 
-## ✨ Features
+## Features
 
 ### AI Capabilities
 
@@ -78,7 +69,7 @@
   - European and US AQI indices
   - Comprehensive pollutant data: PM2.5, PM10, NO2, O3, SO2, CO, dust, UV index
 - **Weather Service**: Current weather and up to 16-day forecasts
-- **Search Service**: 🆕 **Intelligent fallback** - Web search with air quality focus
+- **Search Service**: Intelligent fallback - Web search with air quality focus
   - Automatically triggered when all APIs fail
   - Prioritizes trusted sources (WHO, EPA, government agencies)
   - Specialized air quality info search
@@ -94,14 +85,14 @@
 
 ### Cost Optimization & Production Features
 
-✅ **Limited Context Window**: Only 20 recent messages used (reduces token costs by 70%)  
-✅ **Response Caching**: 5-minute cache for identical queries  
-✅ **Automatic Session Cleanup**: DELETE endpoint for proper resource management  
-✅ **Rate Limiting**: 20 requests/minute per IP  
-✅ **Token Tracking**: Real-time cost monitoring  
-✅ **Intelligent Error Handling**: Clean separation of success/failure  
-✅ **Async Operations**: Improved throughput  
-✅ **Horizontal Scaling**: Stateless API design
+- Limited Context Window: Only 20 recent messages used (reduces token costs by 70%)
+- Response Caching: 5-minute cache for identical queries
+- Automatic Session Cleanup: DELETE endpoint for proper resource management
+- Rate Limiting: 20 requests/minute per IP
+- Token Tracking: Real-time cost monitoring
+- Intelligent Error Handling: Clean separation of success/failure
+- Async Operations: Improved throughput
+- Horizontal Scaling: Stateless API design
 
 ---
 
@@ -372,13 +363,13 @@ This project is licensed under the GNU AGPL v3 License - see the [LICENSE](LICEN
 
 The GNU AGPL v3 License allows for:
 
-- ✅ Commercial use
-- ✅ Private use
-- ✅ Modification
-- ✅ Distribution
+- Commercial use
+- Private use
+- Modification
+- Distribution
 
 While requiring:
 
-- 📄 License and copyright notice preservation
-- 🔗 Source code availability for network services
-- 📋 Copyleft protection for derivative works
+- License and copyright notice preservation
+- Source code availability for network services
+- Copyleft protection for derivative works

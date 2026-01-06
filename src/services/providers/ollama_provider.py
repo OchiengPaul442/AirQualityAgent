@@ -107,9 +107,11 @@ class OllamaProvider(BaseAIProvider):
                     options=options,
                 )
 
-                print(f"Ollama response: {response}")
-
-                if response is None:
+                # Only log response details in development, not the full response
+                if self.settings.ENVIRONMENT == "development":
+                    logger.debug(f"Ollama response received: {type(response)}")
+                else:
+                    logger.info("Ollama response received successfully")
                     logger.error("Ollama chat returned None")
                     return {
                         "response": "I apologize, but the AI service returned no response. Please try again.",

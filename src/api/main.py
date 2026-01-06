@@ -15,6 +15,35 @@ from src.api.routes import router
 from src.config import get_settings
 from src.db.database import Base, engine, ensure_database_directory
 
+
+# Configure logging based on environment
+def setup_logging():
+    """Configure logging levels based on environment."""
+    log_level = logging.INFO if settings.ENVIRONMENT == "production" else logging.DEBUG
+
+    # Configure root logger
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # Console output
+        ]
+    )
+
+    # Set specific log levels for different components
+    if settings.ENVIRONMENT == "production":
+        # In production, reduce noise from libraries
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+        # Only log errors and warnings from providers, not debug info
+        logging.getLogger("src.services.providers").setLevel(logging.WARNING)
+    else:
+        # In development, allow more detailed logging
+        logging.getLogger("src.services.providers").setLevel(logging.INFO)
+
+setup_logging()
+
 logger = logging.getLogger(__name__)
 
 settings = get_settings()

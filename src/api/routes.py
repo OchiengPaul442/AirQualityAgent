@@ -300,6 +300,7 @@ async def get_session_messages(
 
 
 @router.post("/agent/chat", response_model=ChatResponse)
+@limiter.limit("30/minute", key_func=get_remote_address)  # Stricter limit for AI chat
 async def chat(
     http_request: Request,
     message: str = Form(..., description="User message text"),
@@ -629,6 +630,7 @@ async def chat(
 
 
 @router.post("/air-quality/query")
+@limiter.limit("50/minute", key_func=get_remote_address)  # Moderate limit for data queries
 async def query_air_quality(request: AirQualityQueryRequest, document: UploadFile = File(None)):
     """
     Unified air quality data query endpoint with intelligent multi-source fallback and document analysis.
