@@ -88,7 +88,7 @@ class OllamaProvider(BaseAIProvider):
                 # Call Ollama with tools
                 options = {
                     "temperature": temperature,
-                    "timeout": 30,  # 30 seconds timeout
+                    "timeout": 300,  # Increased timeout to 5 minutes for slower computers
                 }
 
                 # Add optional parameters if provided
@@ -113,15 +113,11 @@ class OllamaProvider(BaseAIProvider):
                 else:
                     logger.info("Ollama response received successfully")
 
-                # Check if response is None (this should be outside the environment check)
-                if response is None:
-                    logger.error("Ollama chat returned None")
-                    return {
-                        "response": "I apologize, but the AI service returned no response. Please try again.",
-                        "tools_used": [],
-                        "tokens_used": 0,
-                        "cost_estimate": 0.0,
-                    }
+                # DEBUG: Log the full response to see what DeepSeek R1 returns
+                logger.info(f"DEBUG: Full Ollama response: {response}")
+                if 'message' in response and 'content' in response['message']:
+                    logger.info(f"DEBUG: Response content preview: {response['message']['content'][:200]}...")
+                    print(f"DEBUG PRINT: Response content: {response['message']['content'][:500]}")  # Direct print for debugging
 
                 logger.info(f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}")
                 break  # Success, exit retry loop
@@ -347,6 +343,10 @@ class OllamaProvider(BaseAIProvider):
         # Clean response
         response_text = self._clean_response(response_text)
         
+        # Debug: Log raw response for reasoning extraction debugging
+        if self.settings.ENVIRONMENT == "development":
+            logger.debug(f"Raw response text before reasoning extraction: {response_text[:500]}...")
+        
         # Extract thinking/reasoning steps if present
         thinking_steps, cleaned_response = self._extract_thinking_steps(response_text)
 
@@ -383,6 +383,7 @@ class OllamaProvider(BaseAIProvider):
         think_pattern = r'<think>(.*?)</think>'
         matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
         if matches:
+            logger.info(f"Found {len(matches)} <think> tag matches in response")
             for match in matches:
                 # Split by newlines and filter empty lines
                 steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
@@ -420,6 +421,12 @@ class OllamaProvider(BaseAIProvider):
         # Remove any residual thinking markers
         cleaned_content = re.sub(r'^\s*\.\.\.done thinking\.?\s*\n?', '', cleaned_content, flags=re.MULTILINE | re.IGNORECASE)
         cleaned_content = re.sub(r'^\s*⠹\s*', '', cleaned_content, flags=re.MULTILINE)
+        
+        # Log extraction results
+        if thinking_steps:
+            logger.info(f"Extracted {len(thinking_steps)} thinking steps: {thinking_steps[:3]}...")
+        else:
+            logger.debug("No thinking steps extracted from response")
         
         return thinking_steps, cleaned_content
 
