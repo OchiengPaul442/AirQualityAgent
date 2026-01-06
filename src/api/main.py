@@ -20,7 +20,7 @@ from src.db.database import Base, engine, ensure_database_directory
 def setup_logging():
     """Configure logging levels based on environment."""
     settings = get_settings()  # Get settings inside function
-    log_level = logging.INFO if settings.ENVIRONMENT == "production" else logging.DEBUG
+    log_level = logging.WARNING if settings.ENVIRONMENT == "production" else logging.WARNING
 
     # Configure root logger
     logging.basicConfig(
@@ -40,8 +40,14 @@ def setup_logging():
         # Only log errors and warnings from providers, not debug info
         logging.getLogger("src.services.providers").setLevel(logging.WARNING)
     else:
-        # In development, allow more detailed logging
-        logging.getLogger("src.services.providers").setLevel(logging.INFO)
+        # In development, also reduce noise from libraries
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+        logging.getLogger("openai").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        # Only log errors and warnings from providers, not debug info
+        logging.getLogger("src.services.providers").setLevel(logging.WARNING)
 
 setup_logging()
 

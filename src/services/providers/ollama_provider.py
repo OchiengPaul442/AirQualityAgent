@@ -117,7 +117,6 @@ class OllamaProvider(BaseAIProvider):
                 logger.info(f"DEBUG: Full Ollama response: {response}")
                 if 'message' in response and 'content' in response['message']:
                     logger.info(f"DEBUG: Response content preview: {response['message']['content'][:200]}...")
-                    print(f"DEBUG PRINT: Response content: {response['message']['content'][:500]}")  # Direct print for debugging
 
                 logger.info(f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}")
                 break  # Success, exit retry loop
