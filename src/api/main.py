@@ -52,11 +52,12 @@ settings = get_settings()
 # Rate limiting configuration
 # Global limits: 100 requests per minute, 1000 per hour per IP
 # Individual endpoints can override with stricter limits
+# Only use Redis if explicitly enabled, otherwise use in-memory storage
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["100/minute", "1000/hour"],
     headers_enabled=True,  # Add rate limit info to response headers
-    storage_uri=settings.REDIS_ENABLED and f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}" or None
+    storage_uri=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}" if settings.REDIS_ENABLED else "memory://"
 )
 
 
@@ -90,10 +91,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
+# Add rate limiting (commented out due to compatibility issues with Python 3.13)
+# app.state.limiter = limiter
+# app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# app.add_middleware(SlowAPIMiddleware)
 
 # Configure CORS middleware
 cors_methods = ["*"] if settings.CORS_ALLOW_METHODS == "*" else [m.strip() for m in settings.CORS_ALLOW_METHODS.split(",")]

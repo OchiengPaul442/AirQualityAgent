@@ -48,6 +48,8 @@ class ChatResponse(BaseModel):
         False, description="Whether a document was uploaded and processed"
     )
     document_filename: str | None = Field(None, description="Name of the uploaded document if any")
+    thinking_steps: list[str] | None = Field(None, description="AI reasoning/thinking steps (for reasoning models)")
+    reasoning_content: str | None = Field(None, description="Full reasoning content as string (for reasoning models)")
 
 
 class HealthCheck(BaseModel):

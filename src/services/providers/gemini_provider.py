@@ -288,11 +288,52 @@ class GeminiProvider(BaseAIProvider):
 
         # Clean the response
         final_response = self._clean_response(final_response)
+        
+        # Extract thinking steps if available (Gemini 2.5 Flash thinking mode)
+        thinking_steps = self._extract_thinking_steps(response)
 
         return {
             "response": final_response,
             "tools_used": tools_used,
+            "thinking_steps": thinking_steps,
+            "reasoning_content": "\n".join(thinking_steps) if thinking_steps else None,
         }
+
+    def _extract_thinking_steps(self, response) -> list[str]:
+        """
+        Extract thinking/reasoning steps from Gemini response.
+        
+        Gemini 2.5 Flash with thinking mode exposes thoughts in parts[].thought
+        
+        Args:
+            response: Gemini response object
+            
+        Returns:
+            List of thinking steps
+        """
+        thinking_steps = []
+        
+        try:
+            if not response or not response.candidates:
+                return thinking_steps
+            
+            # Get the first candidate
+            candidate = response.candidates[0]
+            
+            if not candidate.content or not candidate.content.parts:
+                return thinking_steps
+            
+            # Extract thoughts from parts
+            for part in candidate.content.parts:
+                # Check for thought attribute (Gemini 2.5 Flash thinking mode)
+                if hasattr(part, 'thought') and part.thought:
+                    thinking_steps.append(str(part.text if part.text else part.thought))
+                    logger.info("Extracted thinking step from Gemini thought part")
+            
+        except Exception as e:
+            logger.debug(f"Failed to extract thinking steps from Gemini: {e}")
+        
+        return thinking_steps
 
     def _deduplicate_calls(self, function_calls: list) -> list:
         """Remove duplicate function calls."""

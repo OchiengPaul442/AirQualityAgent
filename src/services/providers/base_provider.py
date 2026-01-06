@@ -55,6 +55,8 @@ class BaseAIProvider(ABC):
             Dictionary with keys:
                 - response: The text response
                 - tools_used: List of tools that were called
+                - thinking_steps: List of reasoning/thinking steps (optional)
+                - reasoning_content: Full reasoning content as string (optional)
         """
         pass
 

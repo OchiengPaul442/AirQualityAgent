@@ -379,6 +379,8 @@ class OpenAIProvider(BaseAIProvider):
             }
 
         # Handle tool calls
+        response_obj = response  # Store for reasoning extraction
+        
         if response.choices[0].message.tool_calls:
             tool_calls = response.choices[0].message.tool_calls
 
@@ -438,6 +440,7 @@ class OpenAIProvider(BaseAIProvider):
                         temperature=temperature,
                         top_p=top_p,
                     )
+                    response_obj = final_response  # Update for reasoning extraction
                     response_text = final_response.choices[0].message.content
                     finish_reason = final_response.choices[0].finish_reason
                     logger.info(
@@ -512,7 +515,132 @@ class OpenAIProvider(BaseAIProvider):
         return {
             "response": response_text or "I apologize, but I couldn't generate a response. Please try again.",
             "tools_used": tools_used,
+            "thinking_steps": self._extract_thinking_from_response(response_obj) if response_obj else [],
+            "reasoning_content": self._extract_reasoning_content(response_obj) if response_obj else None,
         }
+
+    def _extract_thinking_from_response(self, response_obj) -> list[str]:
+        """
+        Extract thinking/reasoning steps from OpenAI-compatible response.
+        
+        Supports:
+        - DeepSeek R1: reasoning_content field
+        - Nemotron via OpenRouter: reasoning_details array
+        - OpenAI o-series: (hidden, only token counts available)
+        
+        Args:
+            response_obj: Response object from OpenAI API
+            
+        Returns:
+            List of thinking steps as strings
+        """
+        thinking_steps = []
+        
+        try:
+            # Get first choice
+            if not response_obj or not response_obj.choices:
+                return thinking_steps
+            
+            choice = response_obj.choices[0]
+            message = choice.message
+            
+            # Pattern 1: DeepSeek R1 style - reasoning_content field
+            if hasattr(message, 'reasoning_content') and message.reasoning_content:
+                # Split reasoning content into steps by newlines
+                steps = [s.strip() for s in str(message.reasoning_content).split('\n') if s.strip()]
+                thinking_steps.extend(steps)
+                logger.info(f"Extracted {len(steps)} thinking steps from reasoning_content")
+            
+            # Pattern 2: OpenRouter normalized format - reasoning_details array
+            if hasattr(message, 'reasoning_details') and message.reasoning_details:
+                for detail in message.reasoning_details:
+                    if isinstance(detail, dict) and detail.get("type") == "reasoning":
+                        content = detail.get("content", "")
+                        if content:
+                            thinking_steps.append(str(content))
+                logger.info(f"Extracted {len(message.reasoning_details)} steps from reasoning_details")
+            
+            # Pattern 3: Kimi K2 style - similar to DeepSeek
+            if hasattr(message, 'thinking') and message.thinking:
+                steps = [s.strip() for s in str(message.thinking).split('\n') if s.strip()]
+                thinking_steps.extend(steps)
+                logger.info(f"Extracted {len(steps)} thinking steps from thinking field")
+            
+            # Pattern 4: Check if reasoning is embedded in content with markers
+            if message.content and not thinking_steps:
+                thinking_steps = self._extract_thinking_from_content(message.content)
+                if thinking_steps:
+                    logger.info(f"Extracted {len(thinking_steps)} steps from content markers")
+        
+        except Exception as e:
+            logger.debug(f"Failed to extract thinking steps: {e}")
+        
+        return thinking_steps
+
+    def _extract_reasoning_content(self, response_obj) -> str | None:
+        """
+        Extract full reasoning content as a single string.
+        
+        Args:
+            response_obj: Response object from OpenAI API
+            
+        Returns:
+            Full reasoning content or None
+        """
+        try:
+            if not response_obj or not response_obj.choices:
+                return None
+            
+            choice = response_obj.choices[0]
+            message = choice.message
+            
+            # DeepSeek R1 or similar
+            if hasattr(message, 'reasoning_content') and message.reasoning_content:
+                return str(message.reasoning_content)
+            
+            # OpenRouter format - combine all reasoning details
+            if hasattr(message, 'reasoning_details') and message.reasoning_details:
+                reasoning_parts = []
+                for detail in message.reasoning_details:
+                    if isinstance(detail, dict) and detail.get("type") == "reasoning":
+                        content = detail.get("content", "")
+                        if content:
+                            reasoning_parts.append(str(content))
+                if reasoning_parts:
+                    return "\n".join(reasoning_parts)
+            
+            # Kimi K2
+            if hasattr(message, 'thinking') and message.thinking:
+                return str(message.thinking)
+        
+        except Exception as e:
+            logger.debug(f"Failed to extract reasoning content: {e}")
+        
+        return None
+
+    def _extract_thinking_from_content(self, content: str) -> list[str]:
+        """
+        Extract thinking steps from content that might have embedded reasoning markers.
+        
+        Args:
+            content: Response content
+            
+        Returns:
+            List of thinking steps
+        """
+        import re
+        
+        thinking_steps = []
+        
+        # Look for <think> tags
+        think_pattern = r'<think>(.*?)</think>'
+        matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
+        if matches:
+            for match in matches:
+                steps = [s.strip() for s in match.strip().split('\n') if s.strip()]
+                thinking_steps.extend(steps)
+        
+        return thinking_steps
 
     def _should_force_search_tool(self, message: str) -> bool:
         """Check if the message requires forcing search_web tool usage."""

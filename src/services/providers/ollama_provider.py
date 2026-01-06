@@ -343,13 +343,82 @@ class OllamaProvider(BaseAIProvider):
 
         # Clean response
         response_text = self._clean_response(response_text)
+        
+        # Extract thinking/reasoning steps if present
+        thinking_steps, cleaned_response = self._extract_thinking_steps(response_text)
 
         return {
-            "response": response_text or "I apologize, but I couldn't generate a response.",
+            "response": cleaned_response or "I apologize, but I couldn't generate a response.",
             "tools_used": tools_used,
+            "thinking_steps": thinking_steps,
+            "reasoning_content": "\n".join(thinking_steps) if thinking_steps else None,
             "tokens_used": 0,  # Ollama doesn't provide token counts
             "cost_estimate": 0.0,  # Local model, no cost
         }
+
+    def _extract_thinking_steps(self, content: str) -> tuple[list[str], str]:
+        """
+        Extract thinking/reasoning steps from response content.
+        
+        Ollama reasoning models (like Nemotron-3-nano) often wrap their thinking
+        in special markers like <think>...</think> or similar patterns.
+        
+        Args:
+            content: The full response content
+            
+        Returns:
+            Tuple of (thinking_steps, cleaned_content)
+            - thinking_steps: List of extracted thinking steps
+            - cleaned_content: Content with thinking markers removed
+        """
+        import re
+        
+        thinking_steps = []
+        cleaned_content = content
+        
+        # Pattern 1: <think>...</think> tags (Nemotron format shown in example)
+        think_pattern = r'<think>(.*?)</think>'
+        matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
+        if matches:
+            for match in matches:
+                # Split by newlines and filter empty lines
+                steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
+                thinking_steps.extend(steps)
+            # Remove <think> tags from cleaned content
+            cleaned_content = re.sub(think_pattern, '', content, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Pattern 2: "Thinking..." prefix (some models use this)
+        thinking_prefix_pattern = r'^⠹?\s*Thinking\.\.\.?\s*\n(.*?)\n\.\.\.done thinking\.?\s*\n'
+        matches = re.findall(thinking_prefix_pattern, content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        if matches:
+            for match in matches:
+                steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
+                thinking_steps.extend(steps)
+            cleaned_content = re.sub(thinking_prefix_pattern, '', content, flags=re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        
+        # Pattern 3: Explicit "Step N:" patterns in reasoning models
+        step_pattern = r'(?:^|\n)(Step \d+:.*?)(?=\n(?:Step \d+:|$))'
+        step_matches = re.findall(step_pattern, content, re.DOTALL | re.MULTILINE)
+        if step_matches and not thinking_steps:  # Only if we haven't found thinking yet
+            thinking_steps.extend([step.strip() for step in step_matches])
+            # Don't remove step patterns from content as they might be part of the answer
+        
+        # Pattern 4: Reasoning blocks marked with specific headers
+        reasoning_block_pattern = r'(?:^|\n)(?:Reasoning|Analysis|Thought Process):\s*\n(.*?)(?=\n\n|\n(?:[A-Z][a-z]+:)|$)'
+        reasoning_matches = re.findall(reasoning_block_pattern, content, re.DOTALL | re.MULTILINE)
+        if reasoning_matches and not thinking_steps:
+            for match in reasoning_matches:
+                steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
+                thinking_steps.extend(steps)
+        
+        # Clean up the content
+        cleaned_content = cleaned_content.strip()
+        
+        # Remove any residual thinking markers
+        cleaned_content = re.sub(r'^\s*\.\.\.done thinking\.?\s*\n?', '', cleaned_content, flags=re.MULTILINE | re.IGNORECASE)
+        cleaned_content = re.sub(r'^\s*⠹\s*', '', cleaned_content, flags=re.MULTILINE)
+        
+        return thinking_steps, cleaned_content
 
     def _clean_response(self, content: str) -> str:
         """

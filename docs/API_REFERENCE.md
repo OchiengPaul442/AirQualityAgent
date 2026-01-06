@@ -168,6 +168,89 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
 | `message_count`      | integer | Total messages in this session                             |
 | `document_processed` | boolean | Whether a document was uploaded and processed              |
 | `document_filename`  | string  | Name of uploaded file (if any)                             |
+| `thinking_steps`     | array   | AI reasoning/thinking steps (for reasoning models)         |
+| `reasoning_content`  | string  | Full reasoning content as string (for reasoning models)    |
+
+### Reasoning Models Support 🧠
+
+AERIS-AQ now supports **reasoning models** that expose their thinking process, providing transparency in health-critical recommendations.
+
+**Supported Reasoning Models:**
+
+- **Nemotron-3-nano** (Ollama) - FREE local reasoning
+- **DeepSeek R1** - $2.19/1M tokens with full reasoning exposure
+- **Gemini 2.5 Flash** - $0.40/1M tokens with thinking mode
+- **Kimi K2** (OpenRouter) - Complex agentic workflows
+
+**Example Response with Reasoning:**
+
+```json
+{
+  "response": "The air quality in Kampala currently shows elevated PM2.5 levels...",
+  "session_id": "abc123",
+  "tools_used": ["get_african_city_air_quality"],
+  "tokens_used": 450,
+  "cached": false,
+  "thinking_steps": [
+    "Step 1: Retrieve current PM2.5 levels from AirQo sensors",
+    "Step 2: Compare against WHO air quality guidelines (15 µg/m³)",
+    "Step 3: Assess health risks for vulnerable populations",
+    "Step 4: Generate time-based recommendations for outdoor activities"
+  ],
+  "reasoning_content": "Step 1: Retrieve current PM2.5 levels...\nStep 2: Compare against..."
+}
+```
+
+For detailed information on reasoning models, see [REASONING_MODELS.md](./REASONING_MODELS.md).
+
+---
+
+## Streaming Chat with Thinking Steps
+
+Stream AI responses in real-time with visible thinking process.
+
+**Endpoint:** `POST /api/v1/agent/chat/stream`
+
+**Content-Type:** `multipart/form-data`
+
+**Event Types:**
+
+- `start` - Stream started
+- `thinking` - AI reasoning step (for reasoning models)
+- `content` - Response content chunk
+- `tools` - Tool execution notification
+- `done` - Stream completed
+- `error` - Error occurred
+
+**Example (JavaScript):**
+
+```javascript
+import { fetchEventSource } from "@microsoft/fetch-event-source";
+
+const formData = new FormData();
+formData.append("message", "What is the air quality in Kampala?");
+
+await fetchEventSource("/api/v1/agent/chat/stream", {
+  method: "POST",
+  body: formData,
+
+  onmessage(ev) {
+    const data = JSON.parse(ev.data);
+
+    if (ev.event === "thinking") {
+      console.log("Thinking:", data.content);
+      // Display thinking step in UI
+    } else if (ev.event === "content") {
+      console.log("Content:", data.content);
+      // Append to response display
+    } else if (ev.event === "done") {
+      console.log("Complete!", data);
+    }
+  },
+});
+```
+
+**Response Fields:**
 
 ### Key Features
 
@@ -667,12 +750,12 @@ All endpoints return standard HTTP status codes and structured error messages.
 
 Different endpoints have tailored rate limits based on resource intensity:
 
-| Endpoint               | Rate Limit        | Reason                                      |
-| ---------------------- | ----------------- | ------------------------------------------- |
-| `/agent/chat`          | 30/minute per IP  | AI-intensive operations                     |
-| `/air-quality/query`   | 50/minute per IP  | Moderate data retrieval                     |
-| `/health`              | No limit          | Lightweight monitoring endpoint             |
-| All other endpoints    | 100/minute per IP | Standard operations (sessions, messages)    |
+| Endpoint             | Rate Limit        | Reason                                   |
+| -------------------- | ----------------- | ---------------------------------------- |
+| `/agent/chat`        | 30/minute per IP  | AI-intensive operations                  |
+| `/air-quality/query` | 50/minute per IP  | Moderate data retrieval                  |
+| `/health`            | No limit          | Lightweight monitoring endpoint          |
+| All other endpoints  | 100/minute per IP | Standard operations (sessions, messages) |
 
 ### Rate Limit Headers
 
