@@ -508,7 +508,7 @@ def get_document_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="scan_document",
-                description="Scan and extract data from documents stored on disk. IMPORTANT: Do NOT use this tool if the user uploaded a document in the current conversation - uploaded documents are automatically scanned and their content is already provided to you in the UPLOADED DOCUMENTS section. Only use this tool if the user asks you to read a specific file from a file path on the server's disk.",
+                description="Scan and extract data from documents stored on disk. IMPORTANT: This tool is ONLY for files that exist on the server's disk with full file paths. Do NOT use this tool if the user uploaded a document in the current conversation - uploaded documents are automatically scanned and their content is already provided to you in the UPLOADED DOCUMENTS section. Do NOT use this tool for documents mentioned by filename only - those must be uploaded through the file upload interface. Only use this tool if the user provides a complete file path (e.g., /path/to/file.csv) AND you can confirm the file exists on disk.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
