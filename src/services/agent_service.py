@@ -32,6 +32,7 @@ from src.services.providers.gemini_provider import GeminiProvider
 from src.services.providers.ollama_provider import OllamaProvider
 from src.services.providers.openai_provider import OpenAIProvider
 from src.services.search_service import SearchService
+from src.services.session_context_manager import SessionContextManager
 from src.services.uba_service import UbaService
 from src.services.waqi_service import WAQIService
 from src.services.weather_service import WeatherService
@@ -59,7 +60,11 @@ class AgentService:
         self.cache = get_cache()
         self.mcp_clients: dict[str, MCPClient] = {}
         
+        # Initialize SessionContextManager for better long-conversation handling
+        self.session_manager = SessionContextManager(max_contexts=50, context_ttl=3600)
+        
         # Document accumulation cache per session with timestamp tracking for cleanup
+        # DEPRECATED: Moved to SessionContextManager, kept for backward compatibility
         # Format: {session_id: {"documents": [...], "last_access": timestamp}}
         self.document_cache: dict[str, dict[str, Any]] = {}
         self.document_cache_ttl = 3600  # 1 hour TTL for document cache cleanup
@@ -123,6 +128,10 @@ class AgentService:
         self.loop_detection_window = 8  # Check last N messages for loops (reduced from 10)
         self.max_response_length = 6000  # Prevent extremely long responses (reduced from 8000)
         self.max_message_cache_size = 100  # Limit total cached messages in memory
+        
+        # Session context management for better long-conversation handling
+        self.session_context_cache: dict[str, dict[str, Any]] = {}  # {session_id: {summary, last_update}}
+        self.max_session_contexts = 50  # Limit concurrent session contexts in memory
 
     def _check_for_loops(self, user_message: str) -> bool:
         """
@@ -150,18 +159,11 @@ class AgentService:
             # Keep only the most recent messages
             self.conversation_memory = self.conversation_memory[-self.max_conversation_length:]
         
-        # Cleanup old document cache entries (older than TTL)
-        import time
-        current_time = time.time()
-        sessions_to_remove = []
-        for session_id, cache_data in self.document_cache.items():
-            last_access = cache_data.get("last_access", 0)
-            if current_time - last_access > self.document_cache_ttl:
-                sessions_to_remove.append(session_id)
-        
-        for session_id in sessions_to_remove:
-            del self.document_cache[session_id]
-            logger.info(f"Cleaned up expired document cache for session: {session_id[:8]}...")
+        # Session context manager handles its own cleanup automatically
+        # Log session context stats periodically
+        if len(self.conversation_memory) % 10 == 0:  # Every 10 messages
+            stats = self.session_manager.get_stats()
+            logger.debug(f"Session context stats: {stats}")
 
     def _add_to_memory(self, user_message: str, ai_response: str):
         """Add conversation turn to memory with safeguards."""
@@ -690,38 +692,34 @@ class AgentService:
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
 
-        # Accumulate documents in session cache with timestamp tracking
+        # Use SessionContextManager for document accumulation (replaces old document_cache)
         if document_data and session_id:
-            import time
-            if session_id not in self.document_cache:
-                self.document_cache[session_id] = {"documents": [], "last_access": time.time()}
-            
-            # Update last access time
-            self.document_cache[session_id]["last_access"] = time.time()
-            
-            # Add new documents, avoiding duplicates by filename
-            existing_filenames = {doc.get("filename", "") for doc in self.document_cache[session_id]["documents"]}
             for doc in document_data:
-                filename = doc.get("filename", "")
-                if filename and filename not in existing_filenames:
-                    self.document_cache[session_id]["documents"].append(doc)
-                    existing_filenames.add(filename)
-            
-            # Hard limit: Keep only last 2 documents to prevent memory bloat
-            if len(self.document_cache[session_id]["documents"]) > 2:
-                self.document_cache[session_id]["documents"] = self.document_cache[session_id]["documents"][-2:]
-                logger.info(f"Document cache trimmed to 2 documents for session {session_id[:8]}...")
+                self.session_manager.add_document_to_session(session_id, doc)
+            logger.info(f"Documents added to session context: {len(document_data)} document(s)")
 
-        # Get system instruction with document context
+        # Get accumulated documents from session manager
+        if session_id:
+            accumulated_docs = self.session_manager.get_session_documents(session_id)
+            # Update conversation summary for efficient token usage
+            self.session_manager.update_summary(session_id, history)
+        else:
+            accumulated_docs = document_data or []
+        
+        # Get system instruction with document context and location context
         location_context = ""
         if location_data and location_data.get("source") == "gps":
             location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
-
-        # Use accumulated documents for context
-        if session_id and session_id in self.document_cache:
-            accumulated_docs = self.document_cache[session_id].get("documents", [])
-        else:
-            accumulated_docs = document_data or []
+        
+        # Add session summary for better long-conversation context
+        session_summary = ""
+        if session_id:
+            session_summary = self.session_manager.get_context_summary(session_id)
+        
+        # Add session summary for better long-conversation context
+        session_summary = ""
+        if session_id:
+            session_summary = self.session_manager.get_context_summary(session_id)
         
         # Fallback safety net: If multiple documents and issues occur, prioritize the newest document
         if len(accumulated_docs) > 1 and document_data:
@@ -734,7 +732,7 @@ class AgentService:
         
         system_instruction = get_system_instruction(
             style=style or "general",
-            custom_suffix=self._build_document_context(accumulated_docs, history) + location_context,
+            custom_suffix=self._build_document_context(accumulated_docs, history) + location_context + session_summary,
         )
         
         # Log if document context was added

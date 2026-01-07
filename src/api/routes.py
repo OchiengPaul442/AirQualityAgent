@@ -203,6 +203,7 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     """
     Delete a chat session and all its messages.
     Call this when the user closes a session in the frontend.
+    Also cleans up agent memory for this session.
 
     Args:
         session_id: Session identifier to delete
@@ -210,16 +211,32 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     Returns:
         Confirmation message
     """
-    deleted = delete_session(db, session_id)
+    try:
+        # Delete from database
+        deleted = delete_session(db, session_id)
 
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Session not found")
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    return {
-        "status": "success",
-        "message": f"Session {session_id} and all its messages have been deleted",
-        "session_id": session_id,
-    }
+        # Clean up agent session context
+        agent = get_agent()
+        if hasattr(agent, 'session_manager'):
+            agent.session_manager.clear_session(session_id)
+            logger.info(f"Cleaned up agent session context for {session_id[:8]}...")
+
+        return {
+            "status": "success",
+            "message": f"Session {session_id} and all its messages have been deleted",
+            "session_id": session_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting session {session_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete session: {str(e)}"
+        ) from e
 
 
 @router.get("/sessions/{session_id}/messages")
@@ -445,8 +462,11 @@ async def chat(
                 ) from e
 
         # Get conversation history BEFORE adding new message
+        # Fetch more messages to ensure long conversations maintain context
         try:
-            history_objs = get_recent_session_history(db, session_id, max_messages=50)
+            history_objs = get_recent_session_history(db, session_id, max_messages=100)
+            if len(history_objs) > 0:
+                logger.info(f"Retrieved {len(history_objs)} messages from session history for context")
         except Exception as db_error:
             logger.warning(
                 f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
@@ -593,13 +613,34 @@ async def chat(
             context={
                 "endpoint": "/agent/chat",
                 "session_id": session_id,
-                "message_length": len(message),
+                "message_length": len(message) if message else 0,
                 "has_document": document_filename is not None,
                 "error_category": "chat_processing",
             },
             user_message="Unable to process your message. Please try again.",
         )
+        
+        # Clean up any lingering resources
+        if 'agent' in locals():
+            try:
+                agent._manage_memory()  # Force memory cleanup after error
+            except Exception as cleanup_error:
+                logger.warning(f"Memory cleanup failed after error: {cleanup_error}")
+        
         raise HTTPException(status_code=500, detail=error_data["message"]) from e
+    finally:
+        # Always attempt cleanup of document data from memory
+        if 'document_data' in locals() and document_data:
+            try:
+                del document_data
+            except:
+                pass
+        if 'file_content' in locals():
+            try:
+                file_content.close()
+                del file_content
+            except:
+                pass
 
 
 @router.post("/agent/chat/stream")
