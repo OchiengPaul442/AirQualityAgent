@@ -46,3 +46,7 @@ errors.json
 
 # Reports
 reports/
+
+# Cache directories
+.pytest_cache/
+.ruff_cache/
