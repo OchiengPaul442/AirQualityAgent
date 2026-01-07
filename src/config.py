@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # API Configuration
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "AERIS-AQ - Air Quality AI Assistant API"
+    PROJECT_NAME: str = "Aeris-AQ - Air Quality AI Assistant API"
     ENVIRONMENT: str = "development"  # development, production, testing
 
     # Air Quality Data Sources

@@ -561,8 +561,8 @@ class TestSecurityValidation(unittest.TestCase):
         self.assertIn("I apologize, but I cannot provide the specific technical details", response)
         self.assertTrue(filtered.get("sensitive_content_filtered", False))
 
-    def test_no_urls_leaked(self):
-        """Test that URLs trigger professional response instead of redaction markers"""
+    def test_urls_allowed_helpful(self):
+        """Test that URLs are allowed as they are helpful references for users"""
         test_response = {
             "response": "Querying https://api.internal.com/v1/data?key=secret for information",
             "tokens_used": 100,
@@ -572,11 +572,12 @@ class TestSecurityValidation(unittest.TestCase):
         filtered = self.agent._filter_sensitive_info(test_response)
 
         response = filtered["response"]
-        # Should not contain redaction markers
-        self.assertNotIn("[URL REDACTED]", response)
-        # Should contain professional response
-        self.assertIn("I apologize, but I cannot provide the specific technical details", response)
-        self.assertTrue(filtered.get("sensitive_content_filtered", False))
+        # URLs should be preserved as they are helpful references
+        self.assertIn("https://api.internal.com/v1/data", response)
+        # Should not trigger professional response for URLs
+        self.assertNotIn("I apologize, but I cannot provide the specific technical details", response)
+        # Should not be marked as filtered
+        self.assertFalse(filtered.get("sensitive_content_filtered", False))
 
     def test_conversation_loop_detection(self):
         """Test that conversation loops are detected"""

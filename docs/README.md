@@ -68,11 +68,35 @@ The Air Quality AI Agent is a sophisticated AI system that provides:
 
 ### Data Sources
 
+**Currently Integrated:**
+
 - WAQI (World Air Quality Index) - Global coverage
-- AirQo - African air quality network
+- AirQo - African air quality network with analytics dashboard
 - Weather Service - Global weather data
 - Web Search - Latest research and news
 - Document Scanner - PDF and text analysis
+
+**Additional Research & Integration Sources:**
+
+#### Africa-Focused Sources
+
+- **OpenAQ** - Global open air quality data platform with African coverage ([openaq.org](https://openaq.org/)) - _API available, free_
+- **WHO Ambient Air Quality Database** - Official ground measurements for African cities ([who.int](https://www.who.int/data/gho/data/themes/air-pollution/who-air-quality-database)) - _Downloadable data, free_
+- **openAFRICA** - Open data portal with African air quality datasets ([open.africa](https://open.africa/dataset)) - _Downloadable CSV datasets, free_
+
+#### Global & Satellite Sources
+
+- **Copernicus Atmosphere Monitoring Service (CAMS)** - High-resolution global air quality modeling ([atmosphere.copernicus.eu](https://atmosphere.copernicus.eu/air-quality)) - _API and data downloads, free basic access_
+- **State of Global Air** - Comprehensive air quality reports and data ([stateofglobalair.org](https://www.stateofglobalair.org/resources/africa)) - _Reports and data downloads, free_
+
+#### Research & Policy Sources
+
+- **World Resources Institute (WRI)** - Air quality policy guides and analysis ([wri.org](https://africa.wri.org/cities/air-quality)) - _Reports and data, free_
+- **IQAir** - Real-time air pollution data ([iqair.com](https://www.iqair.com/uganda)) - _API available, some free access_
+
+#### AirQo Analytics Dashboard
+
+- **AirQo Analytics**: Interactive dashboard for data visualization and downloads ([analytics.airqo.net](https://analytics.airqo.net)) - _Free access, user-friendly interface_
 
 ### Cost Optimization
 

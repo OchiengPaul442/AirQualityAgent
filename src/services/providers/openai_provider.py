@@ -349,7 +349,7 @@ class OpenAIProvider(BaseAIProvider):
                     if reset_requests or reset_tokens:
                         reset_time = reset_requests or reset_tokens
 
-                response_msg = "AERIS-AQ is currently experiencing high demand. Please wait a moment and try again."
+                response_msg = "Aeris-AQ is currently experiencing high demand. Please wait a moment and try again."
                 if reset_time:
                     response_msg += f" Expected reset in approximately {reset_time}."
 

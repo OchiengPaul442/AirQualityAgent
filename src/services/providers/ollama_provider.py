@@ -178,7 +178,7 @@ class OllamaProvider(BaseAIProvider):
                     logger.warning("🚨 OLLAMA RATE LIMIT EXCEEDED", extra=error_details)
 
                     return {
-                        "response": "AERIS-AQ is currently experiencing high demand. Please wait a moment and try again.",
+                        "response": "Aeris-AQ is currently experiencing high demand. Please wait a moment and try again.",
                         "tools_used": [],
                         "rate_limit_info": error_details,
                         "tokens_used": 0,

@@ -96,6 +96,7 @@ This guide will help you set up and run **AERIS-AQ (Artificial Environmental Rea
 
    - WAQI: Register at [aqicn.org](https://aqicn.org/data-platform/token/)
    - AirQo: Contact [AirQo](https://airqo.net) for access
+   - **AirQo Analytics Dashboard**: [https://analytics.airqo.net](https://analytics.airqo.net) - Interactive dashboard for data visualization and downloads
 
 4. Configure Redis (optional, for production caching):
    ```env

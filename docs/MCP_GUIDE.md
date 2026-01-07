@@ -53,12 +53,18 @@ Aeris supports MCP in two ways:
 
 When running as an MCP server, the agent exposes these tools:
 
-- `get_city_air_quality`: Get air quality data for any city worldwide
+- `get_city_air_quality`: Get air quality data for any city worldwide (WAQI + AirQo + OpenAQ)
 - `search_waqi_stations`: Search for monitoring stations
 - `get_african_city_air_quality`: Get AirQo network data for African cities
 - `get_city_weather`: Get weather data for any city
 - `search_web`: Search the web for information
 - `scrape_website`: Extract content from websites
+
+**Data Source Integration:**
+
+- **Current**: WAQI, AirQo, OpenAQ APIs
+- **Planned**: WHO Ambient Air Quality Database, openAFRICA datasets, Copernicus CAMS satellite data
+- **Research Sources**: State of Global Air reports, WRI resources, IQAir data
 
 ## Connecting to External MCP Servers
 

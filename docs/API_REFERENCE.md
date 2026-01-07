@@ -348,6 +348,10 @@ The endpoint intelligently routes to multiple data sources:
 1. **WAQI** (World Air Quality Index) - City-based queries
 2. **AirQo** - African cities with PM2.5 focus
 3. **Open-Meteo** - Global coordinate-based queries (no API key)
+4. **OpenAQ** - Global air quality data (free API, 10,000+ locations)
+5. **WHO Ambient Air Quality Database** - Official ground measurements (downloadable)
+6. **openAFRICA** - African air quality datasets (free access)
+7. **Copernicus CAMS** - Satellite-based air quality monitoring (free basic access)
 
 **Routing Logic:**
 
@@ -356,6 +360,12 @@ The endpoint intelligently routes to multiple data sources:
 - All successful responses are returned
 - Failures are handled gracefully
 - If `include_forecast=true` → adds forecast data from Open-Meteo (requires coordinates)
+
+**Integration Potential:**
+
+- **High Priority**: OpenAQ API (immediate global coverage expansion)
+- **Medium Priority**: WHO database, openAFRICA datasets (African research enhancement)
+- **Future**: Copernicus CAMS satellite data (supplemental validation)
 
 ### Data Limitations
 

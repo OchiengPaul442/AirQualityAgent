@@ -632,7 +632,7 @@ class AgentService:
         if security_violation:
             logger.warning(f"Security violation detected: {message[:100]}...")
             return {
-                "response": "I'm AERIS-AQ, here to help with air quality questions. What would you like to know?",
+                "response": "I'm Aeris-AQ, here to help with air quality questions. What would you like to know?",
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
                 "cached": False,
