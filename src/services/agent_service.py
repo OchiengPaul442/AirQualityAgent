@@ -17,6 +17,7 @@ from typing import Any, Awaitable
 from src.config import get_settings
 from src.mcp.client import MCPClient
 from src.services.agent.cost_tracker import CostTracker
+from src.services.agent.query_analyzer import QueryAnalyzer
 from src.services.agent.tool_executor import ToolExecutor
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
@@ -285,59 +286,6 @@ class AgentService:
                 return True
 
         return False
-
-    def _should_force_web_search(self, message_lower: str) -> bool:
-        """
-        Determine if a query should force web search usage.
-        
-        This addresses the issue where AI providers sometimes skip tools
-        for research/policy queries, even when instructed to use them.
-        
-        Args:
-            message_lower: Lowercase message to check
-            
-        Returns:
-            bool: True if web search should be forced
-        """
-        # Keywords that indicate research/policy queries requiring current information
-        research_keywords = [
-            "policy", "policies", "regulation", "regulations", "legislation", 
-            "law", "laws", "enforcement", "enforce", "compliance",
-            "research", "study", "studies", "findings", "latest", "recent", 
-            "new", "update", "updates", "2024", "2025", "2026",
-            "who", "epa", "guidelines", "standards", "recommendations",
-            "government", "ministry", "agency", "official", "gazette",
-            "implementation", "adoption", "effectiveness", "impact",
-            "cost-effective", "solutions", "mitigation", "reduction",
-            "news", "breaking news", "developments", "staying informed",
-            "monitoring changes", "regulatory updates", "up-to-date",
-            "real-time", "live feeds", "current events", "breaking",
-            "announcements", "policy changes", "environmental policy"
-        ]
-        
-        # Check for research/policy keywords
-        has_research_keywords = any(keyword in message_lower for keyword in research_keywords)
-        
-        # Additional context checks for air quality domain
-        air_quality_context = [
-            "air quality", "air-quality", "air pollution", "pollution", "aqi", "pm2.5", "pm10",
-            "emissions", "clean air", "environmental", "sustainability"
-        ]
-        
-        has_air_quality_context = any(context in message_lower for context in air_quality_context)
-        
-        # Force web search if query has research/policy keywords
-        # OR if it has air quality context with any research/policy terms
-        # OR if it explicitly mentions policies/regulations/studies/news/updates
-        should_force = (
-            has_research_keywords or
-            (has_air_quality_context and any(keyword in message_lower for keyword in ["policy", "policies", "regulation", "regulations", "research", "study", "studies", "latest", "recent", "current", "news", "update", "updates", "up-to-date", "2024", "2025", "2026"]))
-        )
-        
-        if should_force:
-            logger.info(f"Detected research/policy query requiring forced web search: {message_lower[:100]}...")
-        
-        return should_force
 
     def _check_security_violation(self, message_lower: str) -> bool:
         """
@@ -691,31 +639,26 @@ class AgentService:
                 "security_filtered": True,
             }
 
-        # FORCE TOOL USAGE FOR RESEARCH/POLICY QUERIES
-        # Detect queries that should use web search but AI might skip
-        force_web_search = self._should_force_web_search(message.lower())
-        if force_web_search:
-            logger.info(f"FORCED WEB SEARCH TRIGGERED for: {message[:100]}...")
-            # Automatically perform web search and add results to context
-            try:
-                search_query = f"current air quality regulations and news 2025"
-                search_results = self.tool_executor.search.search(search_query, max_results=5)
-                search_context = "\n\n=== WEB SEARCH RESULTS FOR CURRENT AIR QUALITY REGULATIONS AND NEWS ===\n"
-                search_context += "Use these current search results to provide up-to-date information. Do not rely on your training data.\n\n"
-                for i, result in enumerate(search_results, 1):
-                    search_context += f"{i}. **{result.get('title', 'No title')}**\n"
-                    search_context += f"   {result.get('body', 'No description')}\n"
-                    if result.get('href'):
-                        search_context += f"   Source: {result.get('href')}\n"
-                    search_context += "\n"
-                search_context += "=== END SEARCH RESULTS ===\n\n"
-                search_context += "**INSTRUCTION**: Base your response on these current search results. Provide specific, up-to-date information about air quality regulations and news from 2025.\n\n"
-                # Add search results to the message
-                message += search_context
-                logger.info(f"Added {len(search_results)} search results to query context")
-            except Exception as e:
-                logger.error(f"Failed to perform forced web search: {e}")
-                # Continue without search results
+        # PROACTIVE TOOL CALLING SYSTEM
+        # Analyze query and call tools BEFORE sending to AI to ensure tools are always used
+        # This bypasses the model's weak tool-calling capability by proactively detecting intent
+        logger.info(f"🔍 QueryAnalyzer: Analyzing query for proactive tool calling...")
+        proactive_results = await QueryAnalyzer.proactively_call_tools(
+            message,
+            self.tool_executor
+        )
+        
+        tools_called_proactively = proactive_results.get("tools_called", [])
+        context_injection = proactive_results.get("context_injection", "")
+        
+        if tools_called_proactively:
+            logger.info(f"✅ QueryAnalyzer called {len(tools_called_proactively)} tool(s) proactively: {tools_called_proactively}")
+            # Inject tool results into system instruction so AI can format them
+            if context_injection:
+                system_instruction += context_injection
+                logger.info(f"📝 Injected {len(context_injection)} characters of tool results into system instruction")
+        else:
+            logger.info("ℹ️ QueryAnalyzer: No tools needed for this query")
 
         # Process with provider
         try:
@@ -741,6 +684,14 @@ class AgentService:
                     "cost_estimate": 0.0,
                     "error": "provider_no_response",
                 }
+
+            # Merge proactively called tools with any tools the provider might have called
+            provider_tools = response_data.get("tools_used", [])
+            all_tools_used = list(set(tools_called_proactively + (provider_tools if provider_tools else [])))
+            response_data["tools_used"] = all_tools_used
+            
+            if all_tools_used:
+                logger.info(f"🔧 Combined tool usage - Proactive: {tools_called_proactively}, Provider: {provider_tools}, Total: {all_tools_used}")
 
             # Track costs
             tokens_used = response_data.get("tokens_used", 0)

@@ -101,9 +101,14 @@ class OllamaProvider(BaseAIProvider):
 
                 logger.info(f"Calling Ollama chat with model {self.settings.AI_MODEL}, messages count: {len(messages)}")
 
+                # Get tools for Ollama (uses OpenAI-compatible format)
+                tools = self.get_tool_definitions()
+                logger.info(f"Ollama calling with {len(tools)} tools available")
+
                 response = ollama.chat(
                     model=self.settings.AI_MODEL,
                     messages=messages,
+                    tools=tools,  # CRITICAL: Pass tools to Ollama
                     options=options,
                 )
 

@@ -13,13 +13,13 @@ def get_waqi_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="get_city_air_quality",
-                description="Get real-time air quality data for a specific city using WAQI.",
+                description="🌍 Get REAL-TIME current air quality data for ONE specific city (NON-AFRICAN cities). YOU MUST USE THIS TOOL for user queries about air quality in UK, Europe, Americas, Asia cities (e.g., London, Paris, New York, Tokyo). Returns: AQI, PM2.5, PM10, NO2, O3, SO2, CO, station details, timestamp. For African cities, use get_african_city_air_quality instead. For comparisons, call this tool multiple times (once per city). THIS PROVIDES LIVE DATA - NOT YOUR TRAINING DATA.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "city": types.Schema(
                             type=types.Type.STRING,
-                            description="The name of the city (e.g., London, Paris, Kampala)",
+                            description="City name (e.g., 'London', 'Paris', 'New York', 'Tokyo'). NOT for African cities.",
                         )
                     },
                     required=["city"],
@@ -49,13 +49,13 @@ def get_airqo_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="get_african_city_air_quality",
-                description="**PRIMARY TOOL for African cities** - Get real-time air quality from AirQo monitoring network. Use this FIRST for ANY African location (Uganda, Kenya, Tanzania, Rwanda, etc.). Searches by city/location name (e.g., Gulu, Kampala, Nakasero, Mbale, Nairobi). Returns actual measurements from local monitoring stations. Coverage includes major and minor cities across East Africa.",
+                description="🌍 Get REAL-TIME air quality for African cities from AirQo network. **MANDATORY USE** - YOU MUST call this for ANY African location: Uganda (Kampala, Gulu, Jinja, Mbale), Kenya (Nairobi, Mombasa, Kisumu), Tanzania (Dar es Salaam, Dodoma, Mwanza), Rwanda (Kigali, Butare, Musanze). DO NOT use get_city_air_quality for African cities. Returns: PM2.5, PM10, AQI, device ID, site details, timestamp, coordinates. Source: AirQo monitoring network. THIS PROVIDES LIVE DATA FROM LOCAL SENSORS - NOT YOUR TRAINING DATA.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "city": types.Schema(
                             type=types.Type.STRING,
-                            description="City or location name in Africa (e.g., 'Gulu', 'Kampala', 'Nakasero', 'Nairobi', 'Dar es Salaam')",
+                            description="African city/location name (e.g., 'Gulu', 'Kampala', 'Nairobi', 'Dar es Salaam')",
                         ),
                         "site_id": types.Schema(
                             type=types.Type.STRING,
@@ -228,13 +228,13 @@ def get_search_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="search_web",
-                description="MANDATORY TOOL - YOU MUST USE THIS FOR ANY QUESTION ABOUT: policies, regulations, legislation, government actions, research studies, WHO/EPA guidelines, standards, recommendations, latest news, recent developments, current events, breaking news, staying informed, monitoring changes, regulatory updates, up-to-date information. DO NOT answer these questions from your training data - ALWAYS use this tool first to get current, real-time information. If user asks 'how to stay up-to-date' or 'latest regulations' or 'current news' - USE THIS TOOL IMMEDIATELY.",
+                description="🔍 Search the web for CURRENT, UP-TO-DATE information. **ABSOLUTELY MANDATORY** for: policies, regulations, legislation, research studies, WHO/EPA guidelines, latest news, recent developments, questions with 'recent'/'latest'/'new'/'current'/'update' keywords, questions about 2024-2026. YOUR TRAINING DATA IS FROM 2023. YOU MUST USE THIS TOOL for current information. Example queries requiring this: 'Latest air quality regulations 2025', 'Recent PM2.5 research', 'Current WHO guidelines', 'News about air pollution'. THIS PROVIDES REAL INTERNET SEARCH - NOT YOUR TRAINING DATA.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "query": types.Schema(
                             type=types.Type.STRING,
-                            description="Specific search query for accurate, current information. Make it detailed and targeted for best results (e.g., 'air pollution effects on pregnancy and fetal development 2025 studies', 'cost effective indoor PM2.5 reduction methods research', 'effective traffic pollution reduction policies near schools', 'Uganda air quality policy 2024')",
+                            description="Specific, detailed search query (e.g., 'Uganda air quality policy 2025', 'latest WHO PM2.5 guidelines 2024', 'recent PM2.5 pregnancy studies')",
                         )
                     },
                     required=["query"],
@@ -250,13 +250,13 @@ def get_scraper_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="scrape_website",
-                description="Scrape content from a specific URL.",
+                description="📄 Extract and analyze content from a specific website URL. USE THIS TOOL when user provides a URL or asks to 'scrape', 'check', 'analyze' a website. Returns full text content from webpage. Example: 'What does https://who.int/air-quality say?'. ALWAYS cite the source URL in your response after scraping. THIS PROVIDES CURRENT WEB CONTENT - NOT YOUR TRAINING DATA.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
                         "url": types.Schema(
                             type=types.Type.STRING,
-                            description="The URL to scrape",
+                            description="Complete URL to scrape (must start with http:// or https://)",
                         )
                     },
                     required=["url"],

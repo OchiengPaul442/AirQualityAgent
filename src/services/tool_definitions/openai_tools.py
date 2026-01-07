@@ -12,26 +12,34 @@ def get_waqi_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_city_air_quality",
-                "description": """Get CURRENT real-time air quality data for ONE SINGLE city at a time.
+                "description": """🌍 Get REAL-TIME current air quality data for ONE specific city (NON-AFRICAN cities only).
 
-WHEN TO USE:
-- User asks "what is the air quality in [city]"
-- User wants current/now/today air quality for a specific location
-- City is in UK, Europe, Americas, Asia (NOT Africa - use get_african_city_air_quality for African cities)
+⚠️ WHEN TO USE THIS TOOL - YOU MUST call this for:
+- User asks "what is the air quality in [city]" for non-African cities
+- User wants current/now/today air quality for UK, Europe, Americas, Asia
+- Examples: London, Paris, New York, Tokyo, Beijing, Delhi, Sydney
 
-IMPORTANT FOR COMPARISONS:
-- This tool returns data for ONE city only
-- To compare multiple cities: Call this function MULTIPLE TIMES (once per city)
-- Example: "Compare London and Tokyo" → Call twice with city="London", then city="Tokyo"
-- You CAN make parallel tool calls - use this capability for comparisons
+❌ DO NOT USE FOR:
+- African cities (Uganda, Kenya, Tanzania, Rwanda) → Use get_african_city_air_quality instead
 
-Returns: AQI, pollutants (PM2.5, PM10, NO2, O3, SO2, CO), station name, timestamp""",
+📊 RETURNS: Real-time measurements including:
+- Overall AQI (Air Quality Index)
+- PM2.5, PM10, NO2, O3, SO2, CO concentrations
+- Monitoring station name and location
+- Timestamp of measurement
+- Data source for citation
+
+💡 FOR COMPARISONS: Call this tool MULTIPLE TIMES (once per city) to compare air quality between cities.
+Example: "Compare London and Tokyo" → Call twice: city="London", then city="Tokyo"
+You CAN make parallel tool calls - use this for efficiency!
+
+🔄 THIS TOOL PROVIDES LIVE DATA - NOT YOUR TRAINING DATA. ALWAYS USE FOR SPECIFIC CITIES.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "city": {
                             "type": "string",
-                            "description": "City name like 'London', 'Paris', 'New York', 'Beijing' (NOT African cities)",
+                            "description": "City name (e.g., 'London', 'Paris', 'New York', 'Beijing'). NOT for African cities.",
                         }
                     },
                     "required": ["city"],
@@ -65,21 +73,39 @@ def get_airqo_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_african_city_air_quality",
-                "description": """Get CURRENT real-time air quality for African cities. MUST USE for ANY African location. Use this when:
-- User asks about air quality in ANY African city (Uganda, Kenya, Tanzania, Rwanda, etc.)
-- Cities like: Kampala, Gulu, Nairobi, Dar es Salaam, Kigali, Nakasero, Mbale
-- User mentions African locations or universities (e.g., "Gulu University")
-Returns: PM2.5, PM10, AQI, station details, device ID, precise measurements from local sensors""",
+                "description": """🌍 Get REAL-TIME current air quality for African cities from AirQo monitoring network.
+
+⚠️ MANDATORY USE - YOU MUST call this for ANY African location:
+- Uganda: Kampala, Gulu, Jinja, Mbale, Nakasero, Mbarara
+- Kenya: Nairobi, Mombasa, Kisumu, Nakuru, Eldoret
+- Tanzania: Dar es Salaam, Dodoma, Mwanza, Arusha, Mbeya
+- Rwanda: Kigali, Butare, Musanze, Ruhengeri, Gisenyi
+- Any mention of African universities, districts, or neighborhoods
+
+❌ DO NOT use get_city_air_quality for African cities - it will fail!
+✅ ALWAYS use THIS TOOL for any location in Africa
+
+📊 RETURNS: High-precision local measurements:
+- PM2.5 and PM10 concentrations (µg/m³)
+- Calculated AQI values
+- Device ID and site details
+- Exact location coordinates
+- Timestamp
+- Data source: AirQo monitoring network
+
+💡 This provides MORE ACCURATE data for African cities than global networks.
+
+🔄 THIS TOOL PROVIDES LIVE DATA FROM LOCAL SENSORS - NOT YOUR TRAINING DATA.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "city": {
                             "type": "string",
-                            "description": "African city/location name like 'Gulu', 'Kampala', 'Nairobi' (REQUIRED)",
+                            "description": "African city/location name (e.g., 'Gulu', 'Kampala', 'Nairobi', 'Dar es Salaam'). REQUIRED.",
                         },
                         "site_id": {
                             "type": "string",
-                            "description": "Optional site ID if known from previous search",
+                            "description": "Optional specific site ID if known from previous search results",
                         },
                     },
                     "required": ["city"],
@@ -274,13 +300,36 @@ def get_search_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "search_web",
-                "description": "MANDATORY TOOL - YOU MUST USE THIS FOR ANY QUESTION ABOUT: policies, regulations, legislation, government actions, research studies, WHO/EPA guidelines, standards, recommendations, latest news, recent developments, current events, breaking news, staying informed, monitoring changes, regulatory updates, up-to-date information. DO NOT answer these questions from your training data - ALWAYS use this tool first to get current, real-time information. If user asks 'how to stay up-to-date' or 'latest regulations' or 'current news' - USE THIS TOOL IMMEDIATELY.",
+                "description": """🔍 Search the web for CURRENT, UP-TO-DATE information.
+
+⚠️ ABSOLUTELY MANDATORY for these topics:
+- Policies, regulations, legislation, government actions
+- Research studies, WHO/EPA guidelines, standards, recommendations  
+- Latest news, recent developments, current events, breaking news
+- Questions with 'recent', 'latest', 'new', 'current', 'update', 'up-to-date' keywords
+- Questions about specific years (2024, 2025, 2026, etc.)
+- Health impacts research, solutions, recommendations
+- Staying informed, monitoring changes, regulatory updates
+
+🚫 YOUR TRAINING DATA IS FROM 2023 AND EARLIER
+✅ YOU MUST USE THIS TOOL TO GET 2024-2026 INFORMATION
+
+📊 Example queries that REQUIRE this tool:
+- "Latest air quality regulations in Uganda 2025"
+- "Recent research on PM2.5 health effects"
+- "Current WHO air quality guidelines"
+- "News about air pollution in East Africa"
+- "What are the newest EPA standards?"
+
+💡 Make search queries specific and targeted for best results.
+
+🔄 THIS PROVIDES REAL INTERNET SEARCH RESULTS - NOT YOUR TRAINING DATA.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "Specific search query for accurate, current information. Make it detailed and targeted for best results (e.g., 'air pollution effects on pregnancy and fetal development 2025 studies', 'cost effective indoor PM2.5 reduction methods research', 'effective traffic pollution reduction policies near schools', 'Uganda air quality policy 2024')",
+                            "description": "Specific, detailed search query for accurate current information (e.g., 'Uganda air quality policy 2025 updates', 'latest WHO PM2.5 guidelines 2024', 'recent studies PM2.5 pregnancy effects')",
                         }
                     },
                     "required": ["query"],
@@ -297,13 +346,31 @@ def get_scraper_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "scrape_website",
-                "description": "Scrape content from a specific URL.",
+                "description": """📄 Extract and analyze content from a specific website URL.
+
+⚠️ USE THIS TOOL WHEN:
+- User provides a specific URL to analyze
+- User asks to "scrape", "check", "analyze", "extract from" a website
+- User wants information from a specific web page (WHO, EPA, government sites, etc.)
+
+📊 RETURNS: 
+- Full text content from the webpage
+- Structured data extraction
+- Clean, readable format for analysis
+
+💡 Example requests:
+- "What does https://who.int/air-quality say about PM2.5?"
+- "Scrape the EPA guidelines from this URL"
+- "Check this website for air quality standards"
+
+🔄 PROVIDES CURRENT WEB CONTENT - NOT YOUR TRAINING DATA.
+✅ ALWAYS cite the source URL in your response after scraping.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "The URL to scrape",
+                            "description": "The complete URL to scrape (must start with http:// or https://)",
                         }
                     },
                     "required": ["url"],

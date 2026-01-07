@@ -40,13 +40,23 @@ Deploying to production:
 
 The Air Quality AI Agent is a sophisticated AI system that provides:
 
-- Real-time air quality monitoring for cities worldwide
-- Health impact assessments and recommendations
-- Air quality forecasts and historical data analysis
-- Research capabilities with citation support
-- Policy development assistance for governments and NGOs
-- Integration with multiple data sources (WAQI, AirQo, Weather APIs)
-- Support for multiple AI providers (Gemini, OpenAI, Ollama)
+- **Real-time air quality monitoring** for cities worldwide using intelligent query analysis
+- **Guaranteed tool calling** across all AI providers (Ollama, Gemini, OpenAI)
+- **Health impact assessments** and recommendations
+- **Air quality forecasts** and historical data analysis
+- **Research capabilities** with automatic web search and citation support
+- **Policy development assistance** for governments and NGOs
+- **Web scraping** for detailed content analysis
+- **Integration with multiple data sources** (WAQI, AirQo, Weather APIs)
+- **Support for multiple AI providers** (Gemini, OpenAI, Ollama)
+
+### Key Features
+
+- **QueryAnalyzer**: Intelligent pre-processing that detects query intent and proactively calls appropriate tools
+- **Multi-Provider Support**: Works seamlessly with local (Ollama) and cloud AI providers
+- **Real-Time Data**: Always uses live data instead of training data through proactive tool calling
+- **Comprehensive Testing**: 22-test suite ensuring 100% functionality across all features
+- **Security First**: Built-in protections against information leakage and abuse
 
 ## Key Features
 
