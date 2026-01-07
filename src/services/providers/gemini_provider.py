@@ -226,18 +226,12 @@ class GeminiProvider(BaseAIProvider):
                 # Execute functions in parallel
                 function_results = await self._execute_functions(function_calls, tools_used)
 
-                # Send results back to model - simplified format
-                function_responses = [
-                    types.Part(
-                        function_response=types.FunctionResponse(
-                            name=result["function_call"].name,
-                            response={"result": result["result"]},
-                        )
-                    )
+                # Send function results back as text message
+                function_results_text = "\n".join([
+                    f"Function {result['function_call'].name} result: {result['result']}"
                     for result in function_results
-                ]
-
-                response = chat.send_message(types.Content(parts=function_responses))
+                ])
+                response = chat.send_message(function_results_text)
 
         # Get final response text
         final_response = response.text if response.text else ""
