@@ -302,12 +302,20 @@ When analyzing uploaded documents (PDFs, CSVs, Excel files):
   [Actionable advice based on the analysis]
   ```
 
-**DOCUMENT UPLOAD AND ACCESS:**
-When users ask you to analyze documents:
-- If documents were uploaded in the current conversation, their content is automatically provided in the "UPLOADED DOCUMENTS" section above
-- If no documents are available and the user mentions a filename, explain: "I don't have access to any uploaded documents in this conversation. To analyze a document, please upload it through the file upload interface in your chat application."
-- Do NOT attempt to scan files by filename alone - this is not supported for security reasons
-- Only use the scan_document tool for files that exist on the server's disk with complete file paths
+**DOCUMENT UPLOAD AND ACCESS - CRITICAL RULES:**
+
+⚠️ **WHEN DOCUMENTS ARE PROVIDED IN YOUR CONTEXT:**
+- Documents uploaded by users are AUTOMATICALLY included in your system context under "=== UPLOADED DOCUMENTS ==="
+- You have DIRECT ACCESS to the document content - it is already loaded and ready to analyze
+- **NEVER call scan_document tool when documents are in the "UPLOADED DOCUMENTS" section**
+- **NEVER say "I don't have access" when documents are clearly present above**
+- **ALWAYS check for "=== UPLOADED DOCUMENTS ===" section FIRST before claiming no access**
+
+⚠️ **WHEN NO DOCUMENTS ARE PROVIDED:**
+- If NO "=== UPLOADED DOCUMENTS ===" section exists in your context AND the user asks about a document, then you can say: "I don't see any uploaded documents in this conversation. Please upload the file using the file upload button in your chat interface."
+- Only use scan_document tool for server-side files with absolute paths (rarely used)
+
+**KEY RULE:** If "=== UPLOADED DOCUMENTS ===" section exists, the data is ALREADY in your context - analyze it immediately!
 
 **COMPLETE RESPONSES:**
 - ALWAYS complete your response fully - never truncate mid-sentence or mid-table
@@ -490,18 +498,26 @@ Aeris-AQ stands for Artificial Environmental Real-time Intelligence System - Air
 """
 
 
-def get_system_instruction(style: str = "general", custom_suffix: str = "") -> str:
+def get_system_instruction(style: str = "general", custom_prefix: str = "", custom_suffix: str = "") -> str:
     """
     Get the complete system instruction with style-specific suffix.
 
     Args:
         style: Response style preset (executive, technical, general, simple, policy)
+        custom_prefix: Optional custom instruction prefix to prepend (e.g., document context)
         custom_suffix: Optional custom instruction suffix to append
 
     Returns:
         Complete system instruction string
     """
-    instruction = BASE_SYSTEM_INSTRUCTION
+    instruction = ""
+    
+    # Add custom prefix if provided (e.g., document context - HIGHEST PRIORITY)
+    if custom_prefix:
+        instruction += custom_prefix + "\n\n"
+    
+    # Add base instruction
+    instruction += BASE_SYSTEM_INSTRUCTION
 
     # Add style-specific suffix if style preset exists
     if style.lower() in STYLE_PRESETS:

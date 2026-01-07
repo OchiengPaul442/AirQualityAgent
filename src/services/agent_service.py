@@ -696,7 +696,10 @@ class AgentService:
         if document_data and session_id:
             for doc in document_data:
                 self.session_manager.add_document_to_session(session_id, doc)
-            logger.info(f"Documents added to session context: {len(document_data)} document(s)")
+                # CRITICAL: Also store in tool_executor for fallback scan_document access
+                filename = doc.get("filename", "unknown")
+                self.tool_executor.uploaded_documents[filename] = doc
+            logger.info(f"Documents added to session context AND tool executor cache: {len(document_data)} document(s)\"")
 
         # Get accumulated documents from session manager
         if session_id:
@@ -706,15 +709,44 @@ class AgentService:
         else:
             accumulated_docs = document_data or []
         
-        # Get system instruction with document context and location context
+        # CRITICAL FIX: Inject document content DIRECTLY into user message for AI visibility
+        # System instructions alone are not enough - AI models often ignore long context
+        document_injection = ""
+        if accumulated_docs:
+            self.tool_executor.documents_provided = True
+            logger.info(f"Documents provided - injecting content into user message for visibility")
+            
+            # Build compact document summary for injection
+            doc_summaries = []
+            for doc in accumulated_docs[:3]:  # Limit to 3 most recent
+                filename = doc.get("filename", "unknown")
+                file_type = doc.get("file_type", "unknown")
+                content = doc.get("content", "")[:2000]  # First 2000 chars only
+                truncated = doc.get("truncated", False) or len(doc.get("content", "")) > 2000
+                
+                doc_summary = f"\\n\\n--- DOCUMENT: {filename} ({file_type.upper()}) ---\\n{content}"
+                if truncated:
+                    doc_summary += f"\\n[... content truncated, use scan_document('{filename}') for full content ...]\\n"
+                doc_summaries.append(doc_summary)
+            
+            document_injection = "\\n\\n".join(doc_summaries) + "\\n\\n--- END DOCUMENTS ---\\n\\n"
+            logger.info(f"Document injection created: {len(document_injection)} chars for {len(accumulated_docs)} document(s)")
+        else:
+            self.tool_executor.documents_provided = False
+        
+        # Prepend document content to user message for MAXIMUM visibility
+        if document_injection:
+            original_message = message
+            message = f"{document_injection}USER QUERY: {message}"
+            logger.info(f"Injected document content into user message (was {len(original_message)} chars, now {len(message)} chars)")
+        
+        # Build document context FIRST (most important)
+        document_context = self._build_document_context(accumulated_docs, history) if accumulated_docs else ""
+        
+        # Get location context
         location_context = ""
         if location_data and location_data.get("source") == "gps":
             location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
-        
-        # Add session summary for better long-conversation context
-        session_summary = ""
-        if session_id:
-            session_summary = self.session_manager.get_context_summary(session_id)
         
         # Add session summary for better long-conversation context
         session_summary = ""
@@ -729,10 +761,14 @@ class AgentService:
                 # If newest document failed to accumulate, use only the newest one as fallback
                 logger.warning(f"Document accumulation issue detected, using newest document as fallback: {newest_doc.get('filename')}")
                 accumulated_docs = [newest_doc]
+                document_context = self._build_document_context(accumulated_docs, history)
         
+        # CRITICAL: Put document context at the BEGINNING (custom_prefix) so AI sees it FIRST
+        # This ensures document content has highest priority in the context window
         system_instruction = get_system_instruction(
             style=style or "general",
-            custom_suffix=self._build_document_context(accumulated_docs, history) + location_context + session_summary,
+            custom_prefix=document_context,  # Documents FIRST
+            custom_suffix=location_context + session_summary,  # Other context after
         )
         
         # Log if document context was added
@@ -758,6 +794,13 @@ class AgentService:
             self.tool_executor.client_ip = client_ip
             self.tool_executor.client_location = None
             logger.info(f"Set IP location for tool executor (fallback): {client_ip}")
+        
+        # CRITICAL: If documents are provided, block scan_document tool to prevent AI confusion
+        if accumulated_docs:
+            self.tool_executor.documents_provided = True
+            logger.info(f"Blocking scan_document tool - {len(accumulated_docs)} document(s) already provided")
+        else:
+            self.tool_executor.documents_provided = False
 
         # Check for conversation loops before processing
         if self._check_for_loops(message):
@@ -978,15 +1021,18 @@ class AgentService:
             unique_documents = unique_documents[-3:]
         
         context_parts = [
-            "\n\n=== UPLOADED DOCUMENTS ===",
+            "\n\n" + "="*80,
+            "🔔 DOCUMENTS ARE UPLOADED AND READY - READ THIS FIRST!",
+            "="*80,
+            "\n⚠️⚠️⚠️ CRITICAL: Documents have been uploaded and their content is provided below.",
+            "\n🚫 DO NOT call scan_document tool - the data is ALREADY HERE",
+            "🚫 DO NOT say 'I don\'t have access' - YOU DO HAVE ACCESS (see below)",
+            "✅ ANALYZE the document content directly - it is ready for you\n",
         ]
         
         if len(unique_documents) > 1:
             context_parts.append(
-                "\n🔄 MULTIPLE DOCUMENTS IN CONTEXT:"
-            )
-            context_parts.append(
-                f"You have access to {len(unique_documents)} document(s) from this conversation."
+                f"\n📚 YOU HAVE ACCESS TO {len(unique_documents)} DOCUMENTS:"
             )
             context_parts.append(
                 "⚠️ Analyze and reference ALL relevant documents when appropriate."
@@ -996,10 +1042,7 @@ class AgentService:
             )
         else:
             context_parts.append(
-                "\n⚠️ IMPORTANT: The document data below is ALREADY PROVIDED to you. DO NOT use the scan_document tool."
-            )
-            context_parts.append(
-                "You have direct access to this data - analyze it immediately without requesting file access.\n"
+                f"\n📄 YOU HAVE ACCESS TO 1 DOCUMENT (see content below):\n"
             )
 
         for idx, doc in enumerate(unique_documents, 1):

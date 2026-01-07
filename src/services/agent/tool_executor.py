@@ -61,6 +61,8 @@ class ToolExecutor:
         self.geocoding = geocoding_service
         self.client_ip = None  # Will be set by agent service
         self.client_location = None  # Will be set by agent service (GPS data)
+        self.documents_provided = False  # Will be set by agent service when documents are in context
+        self.uploaded_documents = {}  # Store uploaded documents temporarily for fallback access: {filename: content_dict}
         
         # Circuit breaker for failing services
         self.service_failures = {}  # Track failures per service
@@ -588,6 +590,29 @@ class ToolExecutor:
                 file_path = args.get("file_path")
                 if not file_path:
                     return {"error": "file_path parameter is required"}
+                
+                # FALLBACK: Check if this is an uploaded document we have in memory
+                # Extract filename from path (user might pass just filename or full path)
+                import os
+                filename = os.path.basename(file_path)
+                
+                # Check uploaded documents cache first (FALLBACK for when AI can't see context)
+                if filename in self.uploaded_documents:
+                    logger.info(f"scan_document: Found uploaded document in cache: {filename}")
+                    doc_data = self.uploaded_documents[filename]
+                    return {
+                        "success": True,
+                        "filename": filename,
+                        "file_type": doc_data.get("file_type", "unknown"),
+                        "content": doc_data.get("content", ""),
+                        "metadata": doc_data.get("metadata", {}),
+                        "truncated": doc_data.get("truncated", False),
+                        "full_length": doc_data.get("full_length", 0),
+                        "source": "uploaded_cache"
+                    }
+                
+                # Otherwise try to scan from disk
+                logger.info(f"scan_document: Attempting to scan from disk: {file_path}")
                 return self.document_scanner.scan_file(file_path)
 
             # Geocoding tools

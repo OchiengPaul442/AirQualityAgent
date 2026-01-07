@@ -241,11 +241,27 @@ class DocumentScanner:
                         if pd.api.types.is_datetime64_any_dtype(preview_df[col]):
                             preview_df[col] = preview_df[col].astype(str)
                     
+                    # Convert preview dict - handle any remaining datetime objects
+                    preview_data = preview_df.to_dict(orient="records")
+                    
+                    # Recursively convert any datetime objects in the preview data
+                    def convert_datetime_to_str(obj):
+                        if isinstance(obj, dict):
+                            return {k: convert_datetime_to_str(v) for k, v in obj.items()}
+                        elif isinstance(obj, list):
+                            return [convert_datetime_to_str(item) for item in obj]
+                        elif pd.isna(obj):
+                            return None
+                        elif hasattr(obj, 'isoformat'):  # datetime-like objects
+                            return obj.isoformat()
+                        else:
+                            return obj
+                    
                     all_sheets_data[sheet_name] = {
                         "rows": len(df),
                         "columns": len(df.columns),
                         "column_names": df.columns.tolist(),
-                        "preview": preview_df.to_dict(orient="records"),
+                        "preview": convert_datetime_to_str(preview_data),
                         "dtypes": df.dtypes.astype(str).to_dict(),
                     }
 

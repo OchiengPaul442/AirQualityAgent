@@ -452,6 +452,12 @@ async def chat(
                 # Wrap in list for agent processing (expects list of documents)
                 document_data = [scan_result]
                 logger.info(f"Document scanned successfully: {file.filename}, type: {scan_result.get('file_type')}, size: {scan_result.get('full_length', 0)} chars")
+                
+                # CRITICAL FIX: Prepend document context to user message so AI KNOWS a document was uploaded
+                # This ensures the AI doesn't ask "where's the document" when it's already provided
+                if not message.strip().lower().startswith("analyze") and not message.strip().lower().startswith("scan"):
+                    message = f"[DOCUMENT UPLOADED: {file.filename}] {message}"
+                    logger.info(f"Prepended document context to user message: {message[:100]}...")
 
             except HTTPException:
                 raise  # Re-raise HTTP exceptions
