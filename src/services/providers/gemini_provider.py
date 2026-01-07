@@ -401,7 +401,7 @@ class GeminiProvider(BaseAIProvider):
                     aqi = m.get("aqi") or m.get("pm2_5", {}).get("aqi") or m.get("aqi_category")
 
                     summary_lines = [f"# Air Quality — {site_name}", ""]
-                    summary_lines.append(f"**Site ID**: {site_id} — **Time**: {time}")
+                    # Removed site ID display for security
                     if isinstance(pm25, dict):
                         summary_lines.append(f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})")
                     if isinstance(pm10, dict):
