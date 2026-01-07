@@ -52,6 +52,7 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
 - **Senior Researcher**: Comprehensive research documents with citations
 - **Policy Advisor**: Evidence-based policy development for regional contexts
 - **Document Analyst**: Upload and analyze PDF, CSV, and Excel files
+- **Reasoning Models**: Transparent thinking process with step-by-step analysis (DeepSeek R1, Gemini 2.5 Flash, Nemotron-3-nano)
 
 ### AI Providers
 
