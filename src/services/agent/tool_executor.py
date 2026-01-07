@@ -169,7 +169,7 @@ class ToolExecutor:
                         if aq_result.get("success"):
                             self._record_success('openmeteo')
                             # Enhance result to indicate fallback was used
-                            aq_result["data_source"] = "OpenMeteo (via geocoding)"
+                            aq_result["data_source"] = "meteorological services"
                             aq_result["location_name"] = city
                             aq_result["note"] = f"Data retrieved using coordinates for {city}"
                             return aq_result
@@ -187,7 +187,7 @@ class ToolExecutor:
                 result = self.defra.get_city_air_quality(city)
                 if result.get("success"):
                     self._record_success('defra')
-                    result["data_source"] = "DEFRA (UK)"
+                    result["data_source"] = "DEFRA UK environmental monitoring"
                     return result
                 logger.info(f"DEFRA returned no data for {city}")
                 self._record_failure('defra')
@@ -203,7 +203,7 @@ class ToolExecutor:
                 result = self.uba.get_city_air_quality(city)
                 if result.get("success"):
                     self._record_success('uba')
-                    result["data_source"] = "UBA (Germany)"
+                    result["data_source"] = "UBA Germany environmental monitoring"
                     return result
                 logger.info(f"UBA returned no data for {city}")
                 self._record_failure('uba')
@@ -219,7 +219,7 @@ class ToolExecutor:
                 result = self.nsw.get_city_air_quality(city)
                 if result.get("success"):
                     self._record_success('nsw')
-                    result["data_source"] = "NSW (Australia)"
+                    result["data_source"] = "NSW Australia environmental monitoring"
                     return result
                 logger.info(f"NSW returned no data for {city}")
                 self._record_failure('nsw')
@@ -238,7 +238,7 @@ class ToolExecutor:
                     result = self.carbon_intensity.get_current_intensity()
                     if result.get("success"):
                         self._record_success('carbon_intensity')
-                        result["data_source"] = "Carbon Intensity (UK)"
+                        result["data_source"] = "UK Carbon Intensity monitoring"
                         result["note"] = "UK carbon intensity data (not specific air quality)"
                         return result
                 logger.info(f"Carbon Intensity not applicable for {city}")
@@ -290,7 +290,7 @@ class ToolExecutor:
                 result = self.waqi.get_city_feed(city)
                 if result.get("success"):
                     self._record_success('waqi')
-                    result["data_source"] = "WAQI (fallback from AirQo)"
+                    result["data_source"] = "World Air Quality Index monitoring network"
                     result["note"] = f"AirQo data unavailable. Using WAQI station data for {city}"
                     return result
                 self._record_failure('waqi')
@@ -311,7 +311,7 @@ class ToolExecutor:
                         aq_result = self.openmeteo.get_current_air_quality(lat, lon)
                         if aq_result.get("success"):
                             self._record_success('openmeteo')
-                            aq_result["data_source"] = "OpenMeteo (fallback)"
+                            aq_result["data_source"] = "meteorological services"
                             aq_result["location_name"] = city
                             aq_result["note"] = f"Local monitoring data unavailable. Using modeled data for {city}"
                             return aq_result
