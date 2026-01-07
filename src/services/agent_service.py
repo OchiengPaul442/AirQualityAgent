@@ -389,6 +389,152 @@ class AgentService:
             # Fallback: simple hash of message only
             return hashlib.md5(message.encode()).hexdigest()
 
+    def _get_fresh_cached_response(self, cache_key: str, message: str) -> dict[str, Any] | None:
+        """
+        Get cached response only if it's still fresh and appropriate to return.
+
+        Implements intelligent cache invalidation based on:
+        - Data type (current vs forecast)
+        - Time elapsed since caching
+        - Query characteristics
+        - User expectations for freshness
+
+        Similar to how Claude/ChatGPT handle caching with different freshness requirements.
+
+        Args:
+            cache_key: Generated cache key
+            message: Original user message
+
+        Returns:
+            Fresh cached response or None if cache should not be used
+        """
+        import time
+        from datetime import datetime, timedelta
+
+        # Get cached data with metadata
+        cached_data = self.cache.get("agent", cache_key)
+        if cached_data is None:
+            return None
+
+        # Ensure cached_data is a dict with expected structure
+        if not isinstance(cached_data, dict):
+            logger.warning(f"Invalid cache data format for key {cache_key[:16]}...")
+            return None
+
+        # Check if cache has timestamp metadata
+        cache_timestamp = cached_data.get("_cache_timestamp")
+        if cache_timestamp is None:
+            # Legacy cache without timestamp - treat as stale
+            logger.info(f"Legacy cache without timestamp for key {cache_key[:16]}... - treating as stale")
+            return None
+
+        # Calculate age of cached data
+        current_time = time.time()
+        cache_age_seconds = current_time - cache_timestamp
+        cache_age_minutes = cache_age_seconds / 60
+
+        # Analyze query type for appropriate freshness requirements
+        message_lower = message.lower()
+        query_analysis = QueryAnalyzer.detect_air_quality_query(message)
+        forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
+
+        # Determine data freshness requirements based on query type
+        if forecast_analysis["is_forecast"]:
+            # Forecast data: Very short TTL (1-2 hours max)
+            max_age_minutes = 60  # 1 hour for forecasts
+            data_type = "forecast"
+        elif any(keyword in message_lower for keyword in ['current', 'now', 'today', 'latest', 'recent']):
+            # Explicitly current/recent data requests
+            max_age_minutes = 30  # 30 minutes
+            data_type = "current_explicit"
+        elif query_analysis["is_air_quality"]:
+            # General air quality queries
+            max_age_minutes = 60  # 1 hour
+            data_type = "air_quality"
+        else:
+            # General conversational queries
+            max_age_minutes = 240  # 4 hours (more lenient for non-data queries)
+            data_type = "conversational"
+
+        # Check if cache is too old
+        if cache_age_minutes > max_age_minutes:
+            logger.info(f"Cache too old for {data_type} query: {cache_age_minutes:.1f}min > {max_age_minutes}min limit")
+            return None
+
+        # Additional freshness checks for air quality data
+        if query_analysis["is_air_quality"] or forecast_analysis["is_forecast"]:
+            # For air quality data, be more strict during peak pollution hours
+            current_hour = datetime.now().hour
+
+            # Morning and evening rush hours + nighttime (when pollution can change rapidly)
+            if current_hour in [6, 7, 8, 17, 18, 19, 20, 21, 22, 23, 0, 1]:
+                # Reduce TTL during high-variability periods
+                adjusted_max_age = max_age_minutes * 0.5  # 50% of normal TTL
+                if cache_age_minutes > adjusted_max_age:
+                    logger.info(f"Cache invalidated during peak hours: {cache_age_minutes:.1f}min > {adjusted_max_age}min adjusted limit")
+                    return None
+
+            # Check for repeated identical queries (user might be testing/refreshed)
+            # If same query within 5 minutes, serve from cache (user expectation management)
+            if cache_age_minutes < 5:
+                logger.info(f"Recent identical query ({cache_age_minutes:.1f}min ago) - serving from cache")
+                return cached_data
+
+        # Log successful cache hit with freshness info
+        logger.info(f"Fresh cache hit: {data_type} data, age {cache_age_minutes:.1f}min (limit {max_age_minutes}min)")
+
+        # Return the cached response (remove internal metadata before returning)
+        response_copy = cached_data.copy()
+        response_copy.pop("_cache_timestamp", None)  # Remove internal metadata
+        return response_copy
+
+    def _cleanup_stale_cache(self) -> int:
+        """
+        Clean up stale cached responses to prevent memory bloat.
+
+        This is called periodically to remove old cache entries that are no longer useful.
+        Similar to cache eviction strategies in production AI systems.
+
+        Returns:
+            Number of cache entries cleaned up
+        """
+        import time
+
+        # Only run cleanup occasionally to avoid performance impact
+        # In production, this could be run by a background task
+        current_time = time.time()
+        cleanup_interval = 300  # 5 minutes between cleanup runs
+
+        if hasattr(self, '_last_cache_cleanup'):
+            if current_time - self._last_cache_cleanup < cleanup_interval:
+                return 0  # Skip cleanup if recently done
+
+        self._last_cache_cleanup = current_time
+
+        # For Redis cache, we rely on TTL expiration
+        # For memory cache, we need manual cleanup
+        if hasattr(self.cache, '_memory_cache'):
+            cleaned_count = 0
+            max_age_seconds = 14400  # 4 hours max age for any cache entry
+
+            keys_to_delete = []
+            for key, value in self.cache._memory_cache.items():
+                if isinstance(value, dict) and "_cache_timestamp" in value:
+                    cache_age = current_time - value["_cache_timestamp"]
+                    if cache_age > max_age_seconds:
+                        keys_to_delete.append(key)
+
+            for key in keys_to_delete:
+                del self.cache._memory_cache[key]
+                cleaned_count += 1
+
+            if cleaned_count > 0:
+                logger.info(f"Cleaned up {cleaned_count} stale cache entries")
+
+            return cleaned_count
+
+        return 0
+
     async def process_message(
         self,
         message: str,
@@ -527,16 +673,18 @@ class AgentService:
                 "error": "cost_limit_exceeded",
             }
 
-        # Check cache
+        # Check cache with intelligent freshness validation
         cache_key = self._generate_cache_key(
             message, history, document_data, style, temperature, top_p, session_id
         )
 
-        # cache.get expects (namespace, key)
-        cached_response = self.cache.get("agent", cache_key)
+        # Check for cached response with freshness validation
+        cached_response = self._get_fresh_cached_response(cache_key, message)
         if cached_response is not None:
-            logger.info(f"Cache hit for key: {cache_key[:16]}...")
+            logger.info(f"Cache hit for key: {cache_key[:16]}... (fresh data)")
             cached_response["cached"] = True
+            # Run occasional cache cleanup
+            self._cleanup_stale_cache()
             return cached_response
 
         # Get response parameters for the style
@@ -700,10 +848,24 @@ class AgentService:
             if tokens_used > 0:
                 self.cost_tracker.track_usage(tokens_used, cost_estimate)
 
-            # Cache the response
+            # Cache the response with timestamp metadata
+            import time
+            response_data["_cache_timestamp"] = time.time()  # Add timestamp for freshness tracking
             response_data["cached"] = False
+
+            # Determine appropriate TTL based on query type
+            query_analysis = QueryAnalyzer.detect_air_quality_query(message)
+            forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
+
+            if forecast_analysis["is_forecast"]:
+                cache_ttl = 3600  # 1 hour for forecasts
+            elif query_analysis["is_air_quality"]:
+                cache_ttl = 1800  # 30 minutes for current air quality
+            else:
+                cache_ttl = 7200  # 2 hours for general queries
+
             # cache.set expects (namespace, key, value, ttl)
-            self.cache.set("agent", cache_key, response_data, ttl=3600)  # 1 hour TTL
+            self.cache.set("agent", cache_key, response_data, ttl=cache_ttl)
 
             # SECURITY: Filter out any sensitive information from response
             response_data = self._filter_sensitive_info(response_data)

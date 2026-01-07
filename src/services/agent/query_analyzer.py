@@ -150,56 +150,135 @@ class QueryAnalyzer:
     @staticmethod
     def detect_forecast_query(message: str) -> dict[str, Any]:
         """
-        Detect if the query is asking for air quality forecasts.
+        Detect if the query is asking for air quality forecasts using advanced NLP patterns.
+
+        Handles various natural language patterns for forecasting:
+        - Direct forecast requests: "forecast for tomorrow"
+        - Future tense: "will the air quality be good tomorrow?"
+        - Time references: "next week", "this weekend", "in 3 days"
+        - Conditional forecasts: "should I go outside tomorrow?"
+        - Comparative: "better tomorrow than today?"
 
         Returns:
             Dict with:
                 - is_forecast: bool
                 - cities: list of detected cities
-                - days_ahead: number of days to forecast (default 1 for "tomorrow")
+                - days_ahead: number of days to forecast (1-7, default 1)
+                - confidence: float (0.0-1.0) confidence score
+                - time_references: list of detected time expressions
         """
         message_lower = message.lower()
+        words = message_lower.split()
 
-        # Forecast keywords
-        forecast_keywords = [
-            'forecast', 'tomorrow', 'next day', 'future', 'prediction',
-            'will be', 'going to be', 'expect', 'predicted', 'outlook',
-            'next week', 'next month', 'in the future', 'upcoming'
-        ]
+        # Advanced forecast detection patterns
+        forecast_indicators = {
+            # Direct forecast terms
+            'forecast': 1.0, 'prediction': 0.9, 'outlook': 0.8, 'projection': 0.8,
 
-        # Time-specific keywords that indicate forecasting
-        time_keywords = [
-            'tomorrow', 'next day', 'day after', 'in 2 days', 'in 3 days',
-            'next week', 'this weekend', 'weekend', 'monday', 'tuesday',
-            'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
-        ]
+            # Future time references
+            'tomorrow': 1.0, 'next day': 1.0, 'day after tomorrow': 0.9,
+            'next week': 0.8, 'this weekend': 0.9, 'weekend': 0.7,
+            'next month': 0.6, 'coming days': 0.7, 'upcoming': 0.6,
 
-        is_forecast = (
-            any(keyword in message_lower for keyword in forecast_keywords) or
-            any(keyword in message_lower for keyword in time_keywords)
-        )
+            # Future tense and modal verbs
+            'will': 0.4, 'going to': 0.5, 'shall': 0.4, 'expect': 0.6,
+            'predict': 0.7, 'anticipate': 0.6, 'likely': 0.5,
 
-        # Determine days ahead
-        days_ahead = 1  # Default to tomorrow
-        if 'tomorrow' in message_lower or 'next day' in message_lower:
-            days_ahead = 1
-        elif 'day after' in message_lower or 'in 2 days' in message_lower:
-            days_ahead = 2
-        elif 'in 3 days' in message_lower:
-            days_ahead = 3
-        elif 'next week' in message_lower or 'weekend' in message_lower:
-            days_ahead = 7
+            # Question patterns indicating future interest
+            'should i': 0.3, 'can i': 0.3, 'is it safe': 0.4,
+            'better tomorrow': 0.8, 'worse tomorrow': 0.8,
+        }
 
-        # Extract cities (reuse logic from air quality detection)
+        # Time-specific patterns with day calculations
+        time_patterns = {
+            r'\btomorrow\b': (1, 1.0),
+            r'\bnext day\b': (1, 1.0),
+            r'\bday after\b': (2, 0.9),
+            r'\bin 2 days\b': (2, 1.0),
+            r'\bin 3 days\b': (3, 1.0),
+            r'\bnext week\b': (7, 0.8),
+            r'\bthis weekend\b': (3, 0.9),  # Assume current weekend
+            r'\bweekend\b': (3, 0.7),  # Generic weekend reference
+            r'\bmonday\b': (1, 0.6),  # Could be today or next Monday
+            r'\btuesday\b': (1, 0.6),
+            r'\bwednesday\b': (1, 0.6),
+            r'\bthursday\b': (1, 0.6),
+            r'\bfriday\b': (1, 0.6),
+            r'\bsaturday\b': (2, 0.5),  # Often refers to upcoming weekend
+            r'\bsunday\b': (2, 0.5),
+        }
+
+        # Calculate confidence score
+        confidence = 0.0
+        detected_indicators = []
+
+        # Check for forecast indicators
+        for indicator, weight in forecast_indicators.items():
+            if indicator in message_lower:
+                confidence += weight
+                detected_indicators.append(indicator)
+
+        # Check for time patterns
+        days_ahead = 1  # Default
+        time_references = []
+
+        import re
+        for pattern, (days, weight) in time_patterns.items():
+            if re.search(pattern, message_lower):
+                days_ahead = days
+                confidence += weight
+                time_references.append(pattern.strip(r'\\b'))
+
+        # Boost confidence for air quality + time combinations
+        air_quality_terms = ['air quality', 'aqi', 'pollution', 'pm2.5', 'pm10', 'smog']
+        has_air_quality = any(term in message_lower for term in air_quality_terms)
+
+        if has_air_quality and (detected_indicators or time_references):
+            confidence += 0.3  # Boost for clear air quality + time combination
+
+        # Context-aware adjustments
+        # Questions about future activities often imply forecasts
+        activity_questions = ['exercise', 'run', 'walk', 'outdoor', 'outside', 'safe to']
+        if any(activity in message_lower for activity in activity_questions) and time_references:
+            confidence += 0.2
+
+        # Comparative language
+        comparative_terms = ['better than', 'worse than', 'compared to', 'versus']
+        if any(term in message_lower for term in comparative_terms) and time_references:
+            confidence += 0.2
+
+        # Determine if this is actually a forecast query
+        is_forecast = confidence >= 0.5  # Threshold for forecast detection
+
+        # Cap confidence at 1.0
+        confidence = min(confidence, 1.0)
+
+        # Extract cities with improved detection
         cities = []
-        for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES:
+        city_detection_boost = 0.0
+
+        # Check all known cities
+        all_cities = QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES
+        for city in all_cities:
             if city in message_lower:
                 cities.append(city.title())
+                city_detection_boost += 0.1  # Small boost for city detection
+
+        # If cities found, slightly boost confidence
+        confidence = min(confidence + city_detection_boost, 1.0)
+
+        # Special case: Very short messages with just city + time might be forecasts
+        if len(words) <= 5 and cities and time_references:
+            is_forecast = True
+            confidence = max(confidence, 0.7)
 
         return {
             "is_forecast": is_forecast,
             "cities": cities,
-            "days_ahead": days_ahead
+            "days_ahead": days_ahead,
+            "confidence": confidence,
+            "time_references": time_references,
+            "detected_indicators": detected_indicators
         }
 
     @staticmethod
