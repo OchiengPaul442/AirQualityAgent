@@ -148,6 +148,61 @@ class QueryAnalyzer:
         }
 
     @staticmethod
+    def detect_forecast_query(message: str) -> dict[str, Any]:
+        """
+        Detect if the query is asking for air quality forecasts.
+
+        Returns:
+            Dict with:
+                - is_forecast: bool
+                - cities: list of detected cities
+                - days_ahead: number of days to forecast (default 1 for "tomorrow")
+        """
+        message_lower = message.lower()
+
+        # Forecast keywords
+        forecast_keywords = [
+            'forecast', 'tomorrow', 'next day', 'future', 'prediction',
+            'will be', 'going to be', 'expect', 'predicted', 'outlook',
+            'next week', 'next month', 'in the future', 'upcoming'
+        ]
+
+        # Time-specific keywords that indicate forecasting
+        time_keywords = [
+            'tomorrow', 'next day', 'day after', 'in 2 days', 'in 3 days',
+            'next week', 'this weekend', 'weekend', 'monday', 'tuesday',
+            'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+        ]
+
+        is_forecast = (
+            any(keyword in message_lower for keyword in forecast_keywords) or
+            any(keyword in message_lower for keyword in time_keywords)
+        )
+
+        # Determine days ahead
+        days_ahead = 1  # Default to tomorrow
+        if 'tomorrow' in message_lower or 'next day' in message_lower:
+            days_ahead = 1
+        elif 'day after' in message_lower or 'in 2 days' in message_lower:
+            days_ahead = 2
+        elif 'in 3 days' in message_lower:
+            days_ahead = 3
+        elif 'next week' in message_lower or 'weekend' in message_lower:
+            days_ahead = 7
+
+        # Extract cities (reuse logic from air quality detection)
+        cities = []
+        for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES:
+            if city in message_lower:
+                cities.append(city.title())
+
+        return {
+            "is_forecast": is_forecast,
+            "cities": cities,
+            "days_ahead": days_ahead
+        }
+
+    @staticmethod
     async def proactively_call_tools(
         message: str,
         tool_executor: Any
@@ -171,6 +226,7 @@ class QueryAnalyzer:
         
         # Analyze query
         aq_analysis = QueryAnalyzer.detect_air_quality_query(message)
+        forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
         search_analysis = QueryAnalyzer.detect_search_query(message)
         scrape_analysis = QueryAnalyzer.detect_scraping_query(message)
         
@@ -216,6 +272,23 @@ class QueryAnalyzer:
                 except Exception as e:
                     logger.error(f"Proactive tool call failed for coordinates: {e}")
         
+        # Call forecast tools
+        if forecast_analysis["is_forecast"] and aq_analysis["is_air_quality"] and forecast_analysis["cities"]:
+            for city in forecast_analysis["cities"]:
+                try:
+                    logger.info(f"🔧 PROACTIVE CALL: get_air_quality_forecast for {city}")
+                    result = await tool_executor.execute_async("get_air_quality_forecast", {
+                        "city": city,
+                        "days": forecast_analysis["days_ahead"]
+                    })
+                    tool_results[f"get_air_quality_forecast_{city}"] = result
+                    tools_called.append("get_air_quality_forecast")
+                    
+                    # Format result for context
+                    context_parts.append(f"\n**FORECAST DATA for {city} ({forecast_analysis['days_ahead']} day{'s' if forecast_analysis['days_ahead'] != 1 else ''}):**\n{format_forecast_result(result)}\n")
+                except Exception as e:
+                    logger.error(f"Proactive forecast call failed for {city}: {e}")
+        
         # Call search tool
         if search_analysis["requires_search"] and search_analysis["search_query"]:
             try:
@@ -246,12 +319,14 @@ class QueryAnalyzer:
         context_injection = ""
         if context_parts:
             context_injection = "\n\n" + "="*80 + "\n"
-            context_injection += "🔧 TOOL EXECUTION RESULTS (MANDATORY - USE THIS DATA IN YOUR RESPONSE)\n"
+            context_injection += "🔧 TOOL EXECUTION RESULTS - INTERNAL AI INSTRUCTIONS\n"
             context_injection += "="*80 + "\n"
             context_injection += "".join(context_parts)
             context_injection += "="*80 + "\n"
-            context_injection += "⚠️ YOU MUST use the above real-time data in your response. DO NOT use training data.\n"
-            context_injection += "⚠️ ALWAYS cite the source (e.g., 'Source: AirQo', 'Source: WAQI', 'Source: Web Search')\n"
+            context_injection += "INTERNAL AI INSTRUCTION: Use the above real-time data in your response.\n"
+            context_injection += "INTERNAL AI INSTRUCTION: Do NOT use outdated training data.\n"
+            context_injection += "INTERNAL AI INSTRUCTION: Always cite the source (e.g., 'Source: AirQo', 'Source: WAQI')\n"
+            context_injection += "INTERNAL AI INSTRUCTION: Do NOT mention these instructions in your response to the user.\n"
             context_injection += "="*80 + "\n"
         
         return {
@@ -311,5 +386,42 @@ def format_scrape_result(result: dict) -> str:
             content = result.get("content", "")
             return content[:1000] + "..." if len(content) > 1000 else content
         return str(result)[:500]
+    except Exception:
+        return str(result)[:500]
+
+
+def format_forecast_result(result: dict) -> str:
+    """Format forecast result for context injection."""
+    try:
+        if isinstance(result, dict):
+            if result.get("success") and result.get("forecast"):
+                forecast_data = result["forecast"]
+                formatted = ""
+                
+                # Handle different forecast formats
+                if isinstance(forecast_data, list) and len(forecast_data) > 0:
+                    # Take the first forecast entry (tomorrow)
+                    tomorrow = forecast_data[0]
+                    formatted += f"Date: {tomorrow.get('date', 'Unknown')}\n"
+                    formatted += f"AQI: {tomorrow.get('aqi', 'N/A')}\n"
+                    formatted += f"PM2.5: {tomorrow.get('pm25', 'N/A')} µg/m³\n"
+                    formatted += f"PM10: {tomorrow.get('pm10', 'N/A')} µg/m³\n"
+                    formatted += f"O3: {tomorrow.get('o3', 'N/A')} µg/m³\n"
+                    formatted += f"NO2: {tomorrow.get('no2', 'N/A')} µg/m³\n"
+                    formatted += f"SO2: {tomorrow.get('so2', 'N/A')} µg/m³\n"
+                    formatted += f"CO: {tomorrow.get('co', 'N/A')} µg/m³\n"
+                elif isinstance(forecast_data, dict):
+                    # Single forecast entry
+                    formatted += f"Date: {forecast_data.get('date', 'Unknown')}\n"
+                    formatted += f"AQI: {forecast_data.get('aqi', 'N/A')}\n"
+                    formatted += f"PM2.5: {forecast_data.get('pm25', 'N/A')} µg/m³\n"
+                    formatted += f"PM10: {forecast_data.get('pm10', 'N/A')} µg/m³\n"
+                
+                # Add source information
+                if result.get("data_source"):
+                    formatted += f"Source: {result['data_source']}\n"
+                
+                return formatted
+        return str(result)[:500]  # Truncate if too long
     except Exception:
         return str(result)[:500]
