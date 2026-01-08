@@ -103,10 +103,11 @@ interface AirQualityQueryRequest {
   forecast_days?: number; // Number of forecast days 1-7 (default: 5)
   timezone?: string; // Timezone (default: "auto")
   document?: File; // Optional: PDF/CSV/Excel file (max 8MB, multipart/form-data)
+  image?: File; // Optional: Image file (max 10MB, vision-capable models only)
 }
 ```
 
-**Note:** When uploading a document, use `Content-Type: multipart/form-data` instead of JSON.
+**Note:** When uploading a document or image, use `Content-Type: multipart/form-data` instead of JSON.
 
 #### Routing Logic
 
@@ -226,6 +227,8 @@ interface ChatRequest {
   session_id?: string; // Optional: continue existing session
   latitude?: number; // Optional: GPS latitude (-90 to 90) for precise location queries
   longitude?: number; // Optional: GPS longitude (-180 to 180) for precise location queries
+  file?: File; // Optional: document upload (PDF, CSV, Excel) - max 8MB
+  image?: File; // Optional: image upload (JPG, PNG, WebP, etc.) - max 10MB (vision models only)
 }
 ```
 
@@ -239,6 +242,18 @@ interface ChatResponse {
   tokens_used?: number; // Approximate token count
   cached: boolean; // Whether response was cached
   message_count?: number; // Total messages in session
+  document_processed?: boolean; // Whether a document was processed
+  image_processed?: boolean; // Whether an image was analyzed
+  vision_capable?: boolean; // Whether current model supports images
+  reasoning_steps?: string[]; // AI thinking steps (human-like conversation)
+  cost_info?: CostInfo; // Cost optimization statistics
+}
+
+interface CostInfo {
+  cache_hit: boolean; // Whether response was from cache
+  tokens_saved: number; // Tokens saved by caching
+  session_token_usage: number; // Total tokens used in session
+  session_token_limit: number; // Maximum tokens per session
 }
 ```
 
@@ -1420,7 +1435,196 @@ const results = await queryMultipleCities([
 - Keep sessions forever (implement TTL cleanup)
 - Send messages without session_id in ongoing conversations
 
-### 2. Error Handling
+### 2. Image Upload (Vision Models)
+
+✅ **DO:**
+
+- Check model capabilities before showing upload UI (`GET /api/v1/agent/capabilities`)
+- Validate file size client-side (max 10MB)
+- Use supported formats: JPG, PNG, WebP, GIF, BMP
+- Show preview before uploading
+- Display error if model doesn't support vision
+
+**Example: Check Model Capabilities**
+
+```typescript
+async function checkVisionSupport(): Promise<boolean> {
+  const response = await fetch("/api/v1/agent/capabilities");
+  const capabilities = await response.json();
+  return capabilities.supports_vision;
+}
+
+// Show upload UI only if supported
+const supportsVision = await checkVisionSupport();
+if (supportsVision) {
+  // Show image upload button
+}
+```
+
+**Example: Upload Image with Message**
+
+```typescript
+async function sendImageMessage(
+  message: string,
+  image: File,
+  sessionId?: string
+) {
+  const formData = new FormData();
+  formData.append("message", message);
+  formData.append("image", image);
+  if (sessionId) formData.append("session_id", sessionId);
+
+  const response = await fetch("/api/v1/agent/chat", {
+    method: "POST",
+    body: formData, // Don't set Content-Type header - FormData does it
+  });
+
+  return await response.json();
+}
+```
+
+❌ **DON'T:**
+
+- Upload images without checking model support
+- Exceed 10MB image size
+- Send unsupported formats (PDF, TIFF, etc.)
+- Forget to use FormData for multipart uploads
+
+### 3. Cost Optimization
+
+✅ **DO:**
+
+- **Implement request debouncing** - Wait 500ms before sending search queries
+- **Cache responses locally** - Store recent queries in localStorage/sessionStorage
+- **Use reasoning display wisely** - Let users toggle thinking steps on/off
+- **Monitor session tokens** - Check `cost_info.session_token_usage` in responses
+- **Batch related queries** - Combine multiple questions when possible
+
+**Example: Debounced Search**
+
+```typescript
+import { useDebounce } from "use-debounce";
+
+function AirQualitySearch() {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery] = useDebounce(query, 500); // Wait 500ms
+
+  useEffect(() => {
+    if (debouncedQuery) {
+      // Only make API call after user stops typing
+      searchAirQuality(debouncedQuery);
+    }
+  }, [debouncedQuery]);
+
+  return <input value={query} onChange={(e) => setQuery(e.target.value)} />;
+}
+```
+
+**Example: Local Caching**
+
+```typescript
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedAirQuality(city: string) {
+  const cacheKey = `aqi_${city}`;
+  const cached = localStorage.getItem(cacheKey);
+
+  if (cached) {
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp < CACHE_DURATION) {
+      return data; // Return cached data
+    }
+  }
+
+  // Fetch fresh data
+  const data = await fetchAirQuality(city);
+  localStorage.setItem(
+    cacheKey,
+    JSON.stringify({
+      data,
+      timestamp: Date.now(),
+    })
+  );
+
+  return data;
+}
+```
+
+**Example: Monitor Token Usage**
+
+```typescript
+function ChatInterface() {
+  const [tokenWarning, setTokenWarning] = useState<string | null>(null);
+  const [showNewChatPrompt, setShowNewChatPrompt] = useState(false);
+
+  async function sendMessage(message: string) {
+    const response = await chatAPI.send(message, sessionId);
+
+    // Check token usage and display warnings
+    if (response.cost_info) {
+      const { warning, recommendation, usage_percentage } = response.cost_info;
+
+      if (warning) {
+        // Display user-friendly warning
+        setTokenWarning(warning);
+
+        // Show "Start New Chat" button at 90%
+        if (usage_percentage >= 90) {
+          setShowNewChatPrompt(true);
+        }
+      }
+
+      // Log for debugging
+      console.log(`Token usage: ${usage_percentage.toFixed(1)}%`);
+    }
+
+    return response;
+  }
+
+  function startNewChat() {
+    // Clear current session and create new one
+    setSessionId(null);
+    setMessages([]);
+    setTokenWarning(null);
+    setShowNewChatPrompt(false);
+  }
+
+  return (
+    <div>
+      {tokenWarning && (
+        <Alert severity={showNewChatPrompt ? "error" : "warning"}>
+          {tokenWarning}
+          {showNewChatPrompt && (
+            <Button onClick={startNewChat}>Start New Chat</Button>
+          )}
+        </Alert>
+      )}
+      {/* Chat UI */}
+    </div>
+  );
+}
+```
+
+**Token Warning Thresholds:**
+
+- **75% usage**: Warning displayed, user can continue
+- **90% usage**: Critical warning with "Start New Chat" button
+
+**Document Sessions:**
+
+- Document content cached for 24 hours (not 5 minutes)
+- Users can ask multiple questions about uploaded documents
+- No need to re-upload files within same session
+
+❌ **DON'T:**
+
+- Send requests on every keystroke without debouncing
+- Ignore cache-related fields in responses
+- Make duplicate requests for same data
+- Forget to clear old sessions (increases token usage)
+- Upload unnecessary images or documents
+
+### 4. Error Handling
 
 ✅ **DO:**
 
@@ -1435,7 +1639,7 @@ const results = await queryMultipleCities([
 - Fail silently without logging
 - Retry indefinitely without backoff
 
-### 3. Performance
+### 5. Performance
 
 ✅ **DO:**
 
@@ -1450,7 +1654,7 @@ const results = await queryMultipleCities([
 - Request forecast data if not needed
 - Load all messages for every session
 
-### 4. Security
+### 6. Security
 
 ✅ **DO:**
 

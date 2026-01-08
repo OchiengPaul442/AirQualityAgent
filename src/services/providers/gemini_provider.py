@@ -12,6 +12,9 @@ from typing import Any
 from google import genai
 from google.genai import types
 
+from src.utils.markdown_formatter import MarkdownFormatter
+
+from ..agent.reasoning_engine import ReasoningEngine
 from ..tool_definitions import gemini_tools
 from .base_provider import BaseAIProvider
 
@@ -60,7 +63,7 @@ class GeminiProvider(BaseAIProvider):
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """
-        Process a message with Gemini.
+        Process a message with Gemini and show reasoning process.
 
         Args:
             message: User message
@@ -72,7 +75,7 @@ class GeminiProvider(BaseAIProvider):
             max_tokens: Maximum tokens to generate
 
         Returns:
-            Dictionary with response and tools_used
+            Dictionary with response, tools_used, and reasoning_steps
         """
         if not self.client:
             return {
@@ -80,6 +83,17 @@ class GeminiProvider(BaseAIProvider):
                 "tools_used": [],
             }
 
+        # Initialize reasoning engine for transparent thinking
+        reasoning = ReasoningEngine()
+        reasoning.add_step(
+            "Received Query",
+            f"User asked: '{message[:100]}{'...' if len(message) > 100 else ''}'",
+            "thinking"
+        )
+
+        # Analyze query
+        query_analysis = reasoning.analyze_query(message)
+        
         # Convert history to Gemini format
         chat_history = []
         for msg in history:
@@ -92,6 +106,13 @@ class GeminiProvider(BaseAIProvider):
         tools = None
         if self.settings.AI_MODEL in ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash"]:
             tools = self.get_tool_definitions()
+            if tools:
+                tool_names = [t.function_declarations[0].name for t in tools if t.function_declarations]
+                reasoning.add_step(
+                    "Tools Available",
+                    f"I have access to {len(tool_names)} tools for data retrieval",
+                    "planning"
+                )
 
         # Create chat session
         config_params = {
@@ -112,8 +133,14 @@ class GeminiProvider(BaseAIProvider):
         # Retry configuration for network resilience
         max_retries = 3
         base_delay = 1
-        response = None  # Initialize response to prevent NoneType errors
-        chat = None  # Initialize chat to prevent NoneType errors
+        response = None
+        chat = None
+        
+        reasoning.add_step(
+            "Initiating Communication",
+            "Connecting to Gemini AI to process your request",
+            "executing"
+        )
         
         for attempt in range(max_retries):
             try:
@@ -125,6 +152,11 @@ class GeminiProvider(BaseAIProvider):
 
                 # Send message
                 response = chat.send_message(message)
+                reasoning.add_step(
+                    "Response Received",
+                    "Successfully received response from AI model",
+                    "validating"
+                )
                 break  # Success, exit retry loop
             except Exception as e:
                 logger.error(f"Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
@@ -212,6 +244,14 @@ class GeminiProvider(BaseAIProvider):
             ]
 
             if function_calls:
+                # Add reasoning step for tool usage
+                tool_names = [fc.name for fc in function_calls]
+                reasoning.add_step(
+                    "Calling Tools",
+                    f"Retrieving data using: {', '.join(tool_names)}",
+                    "executing"
+                )
+                
                 # Safety: Limit concurrent functions
                 MAX_CONCURRENT = 5
                 if len(function_calls) > MAX_CONCURRENT:
@@ -225,12 +265,23 @@ class GeminiProvider(BaseAIProvider):
 
                 # Execute functions in parallel
                 function_results = await self._execute_functions(function_calls, tools_used)
+                
+                # Record tool execution in reasoning
+                for tool_name in tools_used:
+                    reasoning.record_tool_execution(tool_name, "success", "Data retrieved successfully")
 
                 # Send function results back as text message
                 function_results_text = "\n".join([
                     f"Function {result['function_call'].name} result: {result['result']}"
                     for result in function_results
                 ])
+                
+                reasoning.add_step(
+                    "Processing Retrieved Data",
+                    "Analyzing and formatting the data for your response",
+                    "processing"
+                )
+                
                 response = chat.send_message(function_results_text)
 
         # Get final response text
@@ -241,7 +292,6 @@ class GeminiProvider(BaseAIProvider):
             finish_reason = response.candidates[0].finish_reason
             logger.info(f"Gemini response finish reason: {finish_reason}")
             
-            # Log but don't add unhelpful truncation message - the response is already complete
             if finish_reason == "MAX_TOKENS":
                 logger.warning("Gemini response reached max tokens, but response should still be useful")
 
@@ -249,9 +299,7 @@ class GeminiProvider(BaseAIProvider):
         if not final_response or not final_response.strip() or len(final_response.strip()) < 20:
             logger.warning(f"Gemini returned empty or very short response (length: {len(final_response) if final_response else 0}). Tools used: {tools_used}")
             
-            # Check if tools were called but response is still empty
             if tools_used:
-                # Try to generate a basic response from tool results
                 logger.info("Attempting to generate fallback response from tool results")
                 try:
                     fallback_response = await self._generate_tool_based_response(message, tools_used, history)
@@ -280,17 +328,33 @@ class GeminiProvider(BaseAIProvider):
                     "Is there anything else I can help you with?"
                 )
 
-        # Clean the response
+        # Clean and format the response with proper markdown
         final_response = self._clean_response(final_response)
+        final_response = MarkdownFormatter.format_response(final_response)
+        
+        # Validate response quality
+        has_data = len(final_response) > 100 and any(indicator in final_response.lower() 
+                                                       for indicator in ['aqi', 'pm2.5', 'pm10', 'good', 'moderate', 'data'])
+        quality = "high" if has_data else "basic"
+        reasoning.validate_response(quality, has_data)
         
         # Extract thinking steps if available (Gemini 2.5 Flash thinking mode)
         thinking_steps = self._extract_thinking_steps(response)
+        
+        # Combine reasoning with thinking steps
+        all_reasoning = reasoning.get_all_steps()
+        
+        # Prepend reasoning to response (collapsible format)
+        reasoning_markdown = reasoning.to_compact_markdown()
+        if reasoning_markdown:
+            final_response = reasoning_markdown + "\n\n" + final_response
 
         return {
             "response": final_response,
             "tools_used": tools_used,
             "thinking_steps": thinking_steps,
-            "reasoning_content": "\n".join(thinking_steps) if thinking_steps else None,
+            "reasoning_steps": [step.to_dict() for step in all_reasoning],
+            "reasoning_content": reasoning.to_markdown(include_header=False),
         }
 
     def _extract_thinking_steps(self, response) -> list[str]:

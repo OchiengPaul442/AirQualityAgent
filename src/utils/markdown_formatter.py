@@ -12,10 +12,12 @@ optimized for air quality research and environmental data presentation. It handl
 - Consistent formatting throughout
 
 Based on established markdown standards and best practices for scientific communication.
-# DUMMY LINE
 """
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 class MarkdownFormatter:
@@ -331,55 +333,77 @@ class MarkdownFormatter:
 
     @staticmethod
     def _format_table_buffer(table_rows: list[str]) -> list[str]:  # type: ignore
-        """Format a complete table with aligned columns"""
+        """
+        Format a complete table with aligned columns.
+        
+        CRITICAL FIX: Handle malformed tables with dash separators that cause rendering issues
+        """
         if not table_rows:
             return []
 
+        # CRITICAL: Filter out rows that are pure dash separators (not proper markdown)
+        # These cause the rendering issue seen in the screenshot
+        filtered_rows = []
+        for row in table_rows:
+            # Skip rows that are just dashes and pipes without proper structure
+            stripped = row.strip()
+            if not stripped:
+                continue
+            
+            # Check if this is a malformed separator row (all dashes/pipes, no proper alignment markers)
+            # Proper markdown separator: | --- | --- | or | :--- | :---: |
+            # Malformed: |-----------------------------|------------------------------------------------------|
+            if '|' in stripped:
+                cells = [c.strip() for c in stripped.split('|') if c.strip()]
+                if cells:
+                    # Check if ALL cells are pure dashes (malformed)
+                    all_dashes = all(re.match(r'^-+$', cell) for cell in cells)
+                    if all_dashes and len(cells) > 0:
+                        # This is a malformed separator - skip it entirely
+                        logger.warning(f"Skipping malformed table separator row: {stripped[:50]}")
+                        continue
+            
+            filtered_rows.append(row)
+        
+        if not filtered_rows:
+            return []
+
         # Check if first row looks like a title (contains date or comparison text)
-        # and doesn't have the same number of columns as other rows
         title_row = None
-        if len(table_rows) > 1:
-            first_cells = [cell.strip() for cell in table_rows[0].split('|') if cell.strip()]
-            second_cells = [cell.strip() for cell in table_rows[1].split('|') if cell.strip()]
+        if len(filtered_rows) > 1:
+            first_cells = [cell.strip() for cell in filtered_rows[0].split('|') if cell.strip()]
+            second_cells = [cell.strip() for cell in filtered_rows[1].split('|') if cell.strip()]
 
             # If first row has different column count or contains date/comparison keywords
-            # or if it looks like a title spanning the table
             is_title_row = (len(first_cells) != len(second_cells) or
-                          any(keyword in table_rows[0].lower() for keyword in ['comparison', '202', 'summary', 'data']) or
-                          ('(' in table_rows[0] and ')' in table_rows[0] and len(first_cells) > len(second_cells)))
+                          any(keyword in filtered_rows[0].lower() for keyword in ['comparison', '202', 'summary', 'data']) or
+                          ('(' in filtered_rows[0] and ')' in filtered_rows[0] and len(first_cells) > len(second_cells)))
 
             if is_title_row and len(first_cells) > 1:
-                # Check if first cell looks like a title (contains date or comparison keywords)
                 first_cell = first_cells[0]
                 is_first_cell_title = any(keyword in first_cell.lower() for keyword in ['comparison', '202', 'summary', 'data']) or \
                                     ('(' in first_cell and ')' in first_cell)
 
                 if is_first_cell_title:
-                    # Extract only the first cell as title, treat rest as header row
                     title_row = first_cell
-                    # Reconstruct the header row from remaining cells
                     header_cells = first_cells[1:]
-                    table_rows[0] = '| ' + ' | '.join(header_cells) + ' |'
+                    filtered_rows[0] = '| ' + ' | '.join(header_cells) + ' |'
                 else:
-                    # Extract title by splitting on pipes and joining with spaces
                     title_text = ' '.join(first_cells)
-                    # Clean up extra spaces
                     title_text = re.sub(r'\s+', ' ', title_text)
                     title_row = title_text
-                    table_rows = table_rows[1:]
+                    filtered_rows = filtered_rows[1:]
 
         # Parse table cells
         parsed_rows = []
-        for row in table_rows:
-            # Split by | and clean up cells
+        for row in filtered_rows:
             cells = [cell.strip() for cell in row.split('|')]
-            # Remove empty first/last elements from split
             cells = [c for c in cells if c or cells.index(c) not in (0, len(cells)-1)]
             if cells:
                 parsed_rows.append(cells)
 
         if not parsed_rows:
-            return table_rows
+            return filtered_rows
 
         # Calculate column widths
         num_cols = max(len(row) for row in parsed_rows)
@@ -387,38 +411,54 @@ class MarkdownFormatter:
 
         for row in parsed_rows:
             for col_idx, cell in enumerate(row):
-                # Skip separator rows for width calculation
                 if not re.match(r'^[\-:]+$', cell):
                     col_widths[col_idx] = max(col_widths[col_idx], len(cell))  # type: ignore
 
         # Ensure minimum width of 3 for separator dashes
-        new_col_widths = [max(w, 3) for w in col_widths]  # type: ignore
-        col_widths = new_col_widths  # type: ignore
+        col_widths = [max(w, 3) for w in col_widths]  # type: ignore
 
         # Format each row with padding
         formatted_rows: list[str] = []
 
-        # Add title as a header if detected
+        # Add title if detected
         if title_row:
             formatted_rows.append(f"**{title_row}**")
-            formatted_rows.append('')  # Blank line after title
+            formatted_rows.append('')
 
+        # Track if we need to add a separator row (after header)
+        needs_separator = True
+        separator_added = False
+        
         for row_idx, row in enumerate(parsed_rows):
             formatted_cells = []
             for col_idx in range(num_cols):
                 cell = row[col_idx] if col_idx < len(row) else ''
 
-                # Check if this is a separator row
+                # Check if this is already a separator row
                 if re.match(r'^[\-:]+$', cell):
-                    # Format as separator with proper dashes
                     formatted_cells.append('-' * col_widths[col_idx])
                 else:
-                    # Regular cell - pad to width
                     formatted_cells.append(cell.ljust(col_widths[col_idx]))
 
-            # Join with proper spacing around pipes
             formatted_row = '| ' + ' | '.join(formatted_cells) + ' |'
             formatted_rows.append(formatted_row)
+            
+            # Add separator after first row (header) if not already present
+            if needs_separator and row_idx == 0 and not separator_added:
+                # Check if next row is separator
+                if row_idx + 1 < len(parsed_rows):
+                    next_row = parsed_rows[row_idx + 1]
+                    is_next_separator = all(re.match(r'^[\-:]+$', cell) for cell in next_row if cell)
+                    if not is_next_separator:
+                        # Add separator
+                        separator = '| ' + ' | '.join(['-' * col_widths[i] for i in range(num_cols)]) + ' |'
+                        formatted_rows.append(separator)
+                        separator_added = True
+                else:
+                    # No next row, add separator
+                    separator = '| ' + ' | '.join(['-' * col_widths[i] for i in range(num_cols)]) + ' |'
+                    formatted_rows.append(separator)
+                    separator_added = True
 
         return formatted_rows
 

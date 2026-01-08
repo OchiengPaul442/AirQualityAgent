@@ -141,21 +141,54 @@ class SearchService:
 
     def _search_duckduckgo(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
         """
-        Search using DuckDuckGo.
+        Search using DuckDuckGo with enhanced metadata.
+        
+        Returns results with: title, href, body, and metadata (source, timestamp, relevance)
         """
         try:
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
+                raw_results = list(ddgs.text(query, max_results=max_results))
 
-            if not results:
+            if not raw_results:
                 logger.warning(f"No search results found for query: {query}")
                 return []
 
-            return results
+            # Enhance results with metadata
+            enhanced_results = []
+            for idx, result in enumerate(raw_results):
+                enhanced = {
+                    "title": result.get("title", ""),
+                    "href": result.get("href", ""),
+                    "body": result.get("body", ""),
+                    "metadata": {
+                        "source": self._extract_domain(result.get("href", "")),
+                        "relevance_rank": idx + 1,
+                        "is_trusted": self._is_trusted_source(result.get("href", "")),
+                        "snippet_length": len(result.get("body", "")),
+                        "query": query
+                    }
+                }
+                enhanced_results.append(enhanced)
+            
+            logger.info(f"Enhanced {len(enhanced_results)} search results with metadata")
+            return enhanced_results
 
         except Exception as e:
             logger.error(f"DuckDuckGo search failed for '{query}': {e}")
             raise
+    
+    def _extract_domain(self, url: str) -> str:
+        """Extract domain name from URL."""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            return parsed.netloc
+        except Exception:
+            return "unknown"
+    
+    def _is_trusted_source(self, url: str) -> bool:
+        """Check if URL is from a trusted source."""
+        return any(source in url for source in self.TRUSTED_SOURCES)
 
     def _prioritize_trusted_sources(self, results: list[dict]) -> list[dict]:
         """

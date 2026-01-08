@@ -74,6 +74,42 @@ Check if the service is running.
 
 ---
 
+## Check Model Capabilities
+
+Check if the current AI model supports specific features like vision (image input).
+
+**Endpoint:** `GET /api/v1/agent/capabilities`
+
+**Response:**
+
+```json
+{
+  "provider": "gemini",
+  "model": "gemini-1.5-flash",
+  "supports_vision": true,
+  "supports_reasoning": true,
+  "max_image_size_mb": 10,
+  "allowed_image_formats": ["jpg", "jpeg", "png", "gif", "webp", "bmp"],
+  "cost_optimization_enabled": true,
+  "cache_hit_rate_pct": 45.2
+}
+```
+
+**Response Fields:**
+
+| Field                       | Type    | Description                          |
+| --------------------------- | ------- | ------------------------------------ |
+| `provider`                  | string  | AI provider (gemini, openai, ollama) |
+| `model`                     | string  | AI model name                        |
+| `supports_vision`           | boolean | Whether model can process images     |
+| `supports_reasoning`        | boolean | Whether model shows thinking steps   |
+| `max_image_size_mb`         | integer | Maximum image size in megabytes      |
+| `allowed_image_formats`     | array   | Supported image file formats         |
+| `cost_optimization_enabled` | boolean | Whether cost optimization is active  |
+| `cache_hit_rate_pct`        | float   | Cache effectiveness percentage       |
+
+---
+
 ## Chat with Agent
 
 Send a message to the AI agent and receive a response with automatic conversation saving. **Now supports document upload** for file analysis.
@@ -86,14 +122,15 @@ Send a message to the AI agent and receive a response with automatic conversatio
 
 **Form Fields:**
 
-| Field        | Type   | Required | Description                                                             |
-| ------------ | ------ | -------- | ----------------------------------------------------------------------- |
-| `message`    | string | Yes      | User's question or request                                              |
-| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new.            |
-| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB                    |
-| `latitude`   | float  | No       | GPS latitude (-90 to 90) for precise location-based queries             |
-| `longitude`  | float  | No       | GPS longitude (-180 to 180) for precise location-based queries          |
-| `role`       | string | No       | Response style: `general`, `executive`, `technical`, `simple`, `policy` |
+| Field        | Type   | Required | Description                                                                                        |
+| ------------ | ------ | -------- | -------------------------------------------------------------------------------------------------- |
+| `message`    | string | Yes      | User's question or request                                                                         |
+| `session_id` | string | No       | Session ID for continuing a conversation. Omit to start new.                                       |
+| `file`       | file   | No       | Optional document upload (PDF, CSV, Excel) - Max 8MB                                               |
+| `image`      | file   | No       | Optional image upload (JPG, PNG, WebP, etc.) - Max 10MB. Only available with vision-capable models |
+| `latitude`   | float  | No       | GPS latitude (-90 to 90) for precise location-based queries                                        |
+| `longitude`  | float  | No       | GPS longitude (-180 to 180) for precise location-based queries                                     |
+| `role`       | string | No       | Response style: `general`, `executive`, `technical`, `simple`, `policy`                            |
 
 **Without File (JSON):**
 
@@ -158,11 +195,55 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
 
 **Response Fields:**
 
-| Field        | Type   | Description                                                        |
-| ------------ | ------ | ------------------------------------------------------------------ |
-| `response`   | string | AI agent's response                                                |
-| `session_id` | string | Session identifier (save this for continuing conversation)         |
-| `tools_used` | array  | APIs/tools called during processing (guaranteed via QueryAnalyzer) |
+| Field                | Type    | Description                                                        |
+| -------------------- | ------- | ------------------------------------------------------------------ |
+| `response`           | string  | AI agent's response                                                |
+| `session_id`         | string  | Session identifier (save this for continuing conversation)         |
+| `tools_used`         | array   | APIs/tools called during processing (guaranteed via QueryAnalyzer) |
+| `tokens_used`        | integer | Approximate tokens consumed (for cost tracking)                    |
+| `cached`             | boolean | Whether response was served from cache                             |
+| `message_count`      | integer | Total messages in this session                                     |
+| `document_processed` | boolean | Whether a document was uploaded and processed                      |
+| `document_filename`  | string  | Name of uploaded file (if any)                                     |
+| `image_processed`    | boolean | Whether an image was uploaded and analyzed                         |
+| `vision_capable`     | boolean | Whether current model supports image input                         |
+| `reasoning_steps`    | array   | AI thinking steps in human-like conversational format              |
+| `cost_info`          | object  | Cost optimization stats (tokens, cache hits, session usage)        |
+
+### Cost Info Object
+
+The `cost_info` object provides real-time token usage and warnings:
+
+```json
+{
+  "cost_info": {
+    "session_id": "abc123",
+    "tokens_used": 450,
+    "total_tokens": 8500,
+    "max_tokens": 100000,
+    "usage_percentage": 8.5,
+    "total_cost_usd": 0.085,
+    "warning": null,
+    "recommendation": null
+  }
+}
+```
+
+**Warning Thresholds:**
+
+- **75% usage**: "Your conversation has used 75% of tokens. Consider starting a new chat soon"
+- **90% usage**: "Your conversation is at 90% of the token limit. Please start a new chat to continue"
+
+**Best Practice:** Display warnings to users and prompt them to start a new session when approaching limits.
+
+### Document Session Persistence
+
+When documents are uploaded, the content is cached for the entire session (24 hours) instead of the standard 5-minute cache:
+
+- **Standard cache**: 5 minutes (3600 seconds)
+- **Document session cache**: 24 hours (86400 seconds)
+- Users can ask multiple questions about uploaded documents without re-uploading
+- Cache automatically cleared when session is deleted
 
 ### Tool Calling Guarantee
 
