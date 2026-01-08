@@ -13,6 +13,12 @@ import os
 from io import BytesIO
 from typing import Any
 
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
 from src.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -93,10 +99,14 @@ class DocumentScanner:
                 "filename": os.path.basename(file_path),
             }
 
-    def _scan_pdf_bytes(self, file_bytes: BytesIO, filename: str) -> dict[str, Any]:
+    def _scan_pdf_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract text from PDF file bytes"""
         try:
             import PyPDF2
+
+            # Ensure file_bytes is BytesIO
+            if isinstance(file_bytes, bytes):
+                file_bytes = BytesIO(file_bytes)
 
             text = ""
             reader = PyPDF2.PdfReader(file_bytes)
@@ -127,12 +137,16 @@ class DocumentScanner:
         except Exception as e:
             return {"error": f"Error reading PDF: {str(e)}", "filename": filename}
 
-    def _scan_csv_bytes(self, file_bytes: BytesIO, filename: str) -> dict[str, Any]:
+    def _scan_csv_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract data from CSV file bytes"""
         try:
             import gc  # Garbage collection for memory management
 
             import pandas as pd
+
+            # Ensure file_bytes is BytesIO
+            if isinstance(file_bytes, bytes):
+                file_bytes = BytesIO(file_bytes)
 
             # Read CSV from bytes
             df = pd.read_csv(file_bytes, encoding="utf-8", on_bad_lines="skip")
@@ -195,12 +209,16 @@ class DocumentScanner:
         except Exception as e:
             return {"error": f"Error reading CSV: {str(e)}", "filename": filename}
 
-    def _scan_excel_bytes(self, file_bytes: BytesIO, filename: str) -> dict[str, Any]:
+    def _scan_excel_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract data from Excel file bytes - processes ALL sheets"""
         try:
             import gc  # Garbage collection for memory management
 
             import pandas as pd
+
+            # Ensure file_bytes is BytesIO
+            if isinstance(file_bytes, bytes):
+                file_bytes = BytesIO(file_bytes)
 
             # Read all sheets from bytes
             excel_file = pd.ExcelFile(file_bytes)

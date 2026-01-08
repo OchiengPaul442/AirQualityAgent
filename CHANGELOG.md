@@ -4,6 +4,144 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.1.0] - 2026-01-09
+
+### 🎨 MAJOR FEATURE: Professional Chart Generation & Enhanced Streaming
+
+**NEW: AI can now generate real, professional charts from data**
+
+#### Problem Solved
+
+1. **ASCII Charts Not Actual Visualizations**: AI was returning text-based ASCII charts instead of real matplotlib/plotly visualizations
+2. **Thinking Process Shown in Final Response**: Reasoning steps were exposed in final response, cluttering the UI (should only show during streaming like ChatGPT/DeepSeek/Kimi K2)
+3. **No Separation of Thinking and Content**: Streaming didn't properly separate thinking events from content events
+
+#### Solution: Complete Visualization & Streaming Overhaul
+
+**Professional chart generation** with matplotlib/plotly + **proper streaming implementation** following industry best practices (ChatGPT, DeepSeek, Kimi K2).
+
+#### New Features
+
+✅ **Chart Generation Service** (`src/services/visualization_service.py`)
+  - Supports 9 chart types: line, bar, scatter, histogram, box, pie, area, violin, timeseries
+  - Base64-encoded PNG output for direct display
+  - Matplotlib for static charts, Plotly for interactive
+  - Professional styling with seaborn
+  - Handles missing data, auto-labeling, multiple series
+
+✅ **generate_chart Tool**
+  - Added to Gemini tools (`src/services/tool_definitions/gemini_tools.py`)
+  - Added to OpenAI tools (`src/services/tool_definitions/openai_tools.py`)
+  - Integrated with tool_executor (`src/services/agent/tool_executor.py`)
+  - AI can automatically generate charts when users request visualizations
+
+✅ **Proper Thinking/Content Separation**
+  - `thinking_steps` and `reasoning_content` now **hidden in final `/agent/chat` response**
+  - Only exposed during `/agent/chat/stream` SSE events
+  - Follows ChatGPT/DeepSeek/Kimi K2 pattern
+
+✅ **Enhanced Streaming Endpoint** (`/agent/chat/stream`)
+  - Separate SSE events: `start`, `thinking`, `tools`, `content`, `chart`, `done`, `error`
+  - Real-time thinking display during processing
+  - Content chunking for typing effect
+  - Chart streaming support
+
+✅ **Updated API Response Models**
+  - `chart_data`: Base64-encoded chart image (PNG)
+  - `chart_metadata`: Chart type, data rows, columns, engine info
+  - `thinking_steps`: Now `null` in final response (only in streaming)
+  - `reasoning_content`: Now `null` in final response (only in streaming)
+
+#### Files Created
+
+1. **src/services/visualization_service.py** (380 lines)
+   - `VisualizationService` class
+   - `generate_chart()` - Main chart generation method
+   - `_generate_matplotlib_chart()` - Static chart generation
+   - `_generate_plotly_chart()` - Interactive chart generation
+   - Convenience methods: `generate_time_series_chart()`, `generate_comparison_chart()`
+
+#### Files Modified
+
+1. **src/services/agent/tool_executor.py**
+   - Added `generate_chart` case in `execute()` method
+   - Lazy-load visualization service
+   - Chart result capture and validation
+
+2. **src/services/tool_definitions/gemini_tools.py**
+   - Added `get_visualization_tools()` function
+   - Integrated in `get_all_tools()`
+
+3. **src/services/tool_definitions/openai_tools.py**
+   - Added `get_visualization_tools()` function
+   - Integrated in `get_all_tools()`
+
+4. **src/api/models.py**
+   - Added `chart_data` and `chart_metadata` fields to `ChatResponse`
+   - Updated field descriptions for `thinking_steps` and `reasoning_content`
+
+5. **src/api/routes.py**
+   - `/agent/chat`: Set `thinking_steps` and `reasoning_content` to `None` in final response
+   - `/agent/chat`: Added chart data extraction and passing
+   - `/agent/chat/stream`: Complete rewrite with proper SSE events (thinking, content, tools, chart, done)
+   - Proper streaming pattern following Kimi K2 approach
+
+6. **src/services/agent_service.py**
+   - Extract chart data from tool results
+   - Pass chart data through response pipeline
+
+7. **src/services/providers/gemini_provider.py**
+   - Capture chart results from `generate_chart` tool calls
+   - Pass chart data in response
+
+8. **docs/API_REFERENCE.md**
+   - Added "Chart Generation & Visualization 📊" section
+   - Updated response field descriptions
+   - Added chart display examples (React, HTML, Python)
+   - Updated "Reasoning & Thinking Process" to reflect hiding in final response
+   - Added streaming event documentation
+
+#### Usage Examples
+
+**Request a chart:**
+```python
+response = requests.post('http://localhost:8000/api/v1/agent/chat',
+    data={'message': 'Plot PM2.5 trends from the uploaded data'},
+    files={'file': open('data.csv', 'rb')}
+)
+
+# Display chart
+if response.json()['chart_data']:
+    chart_base64 = response.json()['chart_data'].split(',')[1]
+    image_bytes = base64.b64decode(chart_base64)
+    # Display or save image
+```
+
+**Streaming with thinking:**
+```javascript
+await fetchEventSource('/api/v1/agent/chat/stream', {
+  method: 'POST',
+  body: formData,
+  onmessage(ev) {
+    if (ev.event === 'thinking') {
+      console.log('Thinking:', JSON.parse(ev.data).content);
+    } else if (ev.event === 'chart') {
+      const chartData = JSON.parse(ev.data).data;
+      // Display chart
+    }
+  }
+});
+```
+
+#### Testing
+
+- All imports successful ✅
+- Type errors fixed in visualization service ✅
+- Server starts without errors ✅
+- Chart generation tool integrated ✅
+
+---
+
 ## [2.0.0] - 2026-01-07
 
 ### 🚀 MAJOR RELEASE: Proactive Tool Calling System

@@ -936,6 +936,21 @@ class AgentService:
             
             if all_tools_used:
                 logger.info(f"🔧 Combined tool usage - Proactive: {tools_called_proactively}, Provider: {provider_tools}, Total: {all_tools_used}")
+            
+            # Extract chart data from tool results if chart was generated
+            # Check if generate_chart was called and capture the chart data
+            if "generate_chart" in all_tools_used:
+                chart_result = response_data.get("chart_result")
+                if chart_result and isinstance(chart_result, dict):
+                    response_data["chart_data"] = chart_result.get("chart_data")
+                    response_data["chart_metadata"] = {
+                        "chart_type": chart_result.get("chart_type"),
+                        "data_rows": chart_result.get("data_rows"),
+                        "columns_used": chart_result.get("columns_used"),
+                        "format": chart_result.get("format"),
+                        "engine": chart_result.get("engine")
+                    }
+                    logger.info(f"📊 Chart generated: {chart_result.get('chart_type')} with {chart_result.get('data_rows')} rows")
 
             # Track costs
             tokens_used = response_data.get("tokens_used", 0)

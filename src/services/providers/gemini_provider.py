@@ -269,6 +269,14 @@ class GeminiProvider(BaseAIProvider):
                 # Record tool execution in reasoning
                 for tool_name in tools_used:
                     reasoning.record_tool_execution(tool_name, "success", "Data retrieved successfully")
+                
+                # Extract chart data if generate_chart was called
+                chart_result = None
+                for result in function_results:
+                    if result['function_call'].name == 'generate_chart':
+                        chart_result = result['result']
+                        logger.info("📊 Chart generation detected in tool results")
+                        break
 
                 # Send function results back as text message
                 function_results_text = "\n".join([
@@ -349,13 +357,20 @@ class GeminiProvider(BaseAIProvider):
         if reasoning_markdown:
             final_response = reasoning_markdown + "\n\n" + final_response
 
-        return {
+        result_data = {
             "response": final_response,
             "tools_used": tools_used,
             "thinking_steps": thinking_steps,
             "reasoning_steps": [step.to_dict() for step in all_reasoning],
             "reasoning_content": reasoning.to_markdown(include_header=False),
         }
+        
+        # Add chart data if present
+        if 'chart_result' in locals() and chart_result:
+            result_data["chart_result"] = chart_result
+            logger.info("📊 Chart data added to response")
+        
+        return result_data
 
     def _extract_thinking_steps(self, response) -> list[str]:
         """

@@ -758,6 +758,84 @@ def get_geocoding_tools() -> list[dict]:
     ]
 
 
+def get_visualization_tools() -> list[dict]:
+    """Get chart/visualization generation tool definitions."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "generate_chart",
+                "description": """🎨 Generate professional charts and graphs from data.
+
+⚠️ WHEN TO USE THIS TOOL:
+- User explicitly requests "plot a chart", "show me a graph", "visualize this data"
+- User wants to see trends over time
+- User asks for comparison visualizations
+- User uploads CSV/Excel data and requests visual analysis
+- User mentions "chart", "graph", "plot", "visualize", "show visually"
+
+📊 SUPPORTED CHART TYPES:
+- line: Trends over time (PM2.5 over days, temperature changes)
+- bar: Comparisons between categories (cities, pollutants)
+- scatter: Correlations (PM2.5 vs temperature)
+- histogram: Data distributions (AQI frequency)
+- box: Statistical summaries (quartiles, outliers)
+- pie: Proportions (pollutant composition)
+- area: Cumulative trends (stacked areas)
+- timeseries: Time-based data with date parsing
+
+🔄 RETURNS: Base64-encoded PNG image ready for display in UI
+
+💡 IMPORTANT: You must provide the data array. This tool doesn't fetch data - it only visualizes what you give it.
+
+Example usage:
+User: "Plot PM2.5 levels from the uploaded data"
+→ Call generate_chart with data from scan_document""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "type": "array",
+                            "items": {"type": "object"},
+                            "description": "Array of data objects. Each object should have consistent keys. Example: [{'date': '2025-01-01', 'pm25': 45}, {'date': '2025-01-02', 'pm25': 52}]",
+                        },
+                        "chart_type": {
+                            "type": "string",
+                            "enum": ["line", "bar", "scatter", "histogram", "box", "pie", "area", "timeseries"],
+                            "description": "Type of chart to generate",
+                        },
+                        "x_column": {
+                            "type": "string",
+                            "description": "Name of the data field for x-axis (e.g., 'date', 'city', 'time')",
+                        },
+                        "y_column": {
+                            "type": "string",
+                            "description": "Name of the data field(s) for y-axis (e.g., 'pm25', 'aqi')",
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Title for the chart (e.g., 'Air Quality (PM2.5) Over Time')",
+                        },
+                        "x_label": {
+                            "type": "string",
+                            "description": "Label for x-axis (optional)",
+                        },
+                        "y_label": {
+                            "type": "string",
+                            "description": "Label for y-axis (optional)",
+                        },
+                        "color_column": {
+                            "type": "string",
+                            "description": "Optional column name for color coding data points",
+                        },
+                    },
+                    "required": ["data", "chart_type", "title"],
+                },
+            },
+        },
+    ]
+
+
 def get_all_tools() -> list[dict]:
     """
     Get all tool definitions for OpenAI.
@@ -778,4 +856,5 @@ def get_all_tools() -> list[dict]:
     all_tools.extend(get_nsw_tools())
     all_tools.extend(get_document_tools())
     all_tools.extend(get_geocoding_tools())
+    all_tools.extend(get_visualization_tools())
     return all_tools

@@ -210,7 +210,10 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
 | `document_filename`  | string  | Name of uploaded file (if any)                                     |
 | `image_processed`    | boolean | Whether an image was uploaded and analyzed                         |
 | `vision_capable`     | boolean | Whether current model supports image input                         |
-| `reasoning_steps`    | array   | AI thinking steps in human-like conversational format              |
+| `thinking_steps`     | array   | **HIDDEN in final response** - Only shown during streaming         |
+| `reasoning_content`  | object  | **HIDDEN in final response** - Only shown during streaming         |
+| `chart_data`         | string  | **NEW**: Base64-encoded chart image (data:image/png;base64,...)    |
+| `chart_metadata`     | object  | **NEW**: Chart metadata (type, data rows, columns used, etc.)      |
 | `cost_info`          | object  | Cost optimization stats (tokens, cache hits, session usage)        |
 
 ### Cost Info Object
@@ -270,9 +273,16 @@ AERIS-AQ uses **QueryAnalyzer** - an intelligent pre-processing system that proa
   | `thinking_steps` | array | **NEW**: AI reasoning steps showing how the answer was derived |
   | `reasoning_content` | object | **NEW**: Full reasoning data with metadata and timing |
 
-### Reasoning & Thinking Process 🧠 **NEW**
+### Reasoning & Thinking Process 🧠
 
-**AERIS-AQ now displays its thinking process** for complete transparency, similar to DeepSeek R1, Claude, and Kimi K2. This is especially important for health-critical air quality recommendations.
+**AERIS-AQ displays its thinking process during streaming** for complete transparency, similar to ChatGPT, DeepSeek R1, Claude, and Kimi K2. 
+
+**IMPORTANT CHANGE**: Following industry best practices (ChatGPT, DeepSeek, Kimi K2):
+- ✅ **Thinking steps are shown DURING streaming** - Users see the AI's reasoning process in real-time
+- ❌ **Thinking steps are HIDDEN in final response** - The final `/agent/chat` response excludes thinking_steps and reasoning_content
+- 📊 **Use `/agent/chat/stream` endpoint** to see real-time thinking process
+
+This is especially important for health-critical air quality recommendations where transparency builds trust.
 
 **How It Works:**
 
@@ -280,41 +290,170 @@ AERIS-AQ uses **QueryAnalyzer** - an intelligent pre-processing system that proa
 2. **Tool Selection**: Identifies which data sources to use (WAQI, AirQo, research papers, etc.)
 3. **Data Retrieval**: Fetches real-time data from selected sources
 4. **Analysis & Synthesis**: Processes data and formulates recommendations
-5. **Response Generation**: Delivers final answer with reasoning shown
+5. **Response Generation**: Delivers final answer (thinking hidden in final response)
 
-**Example Response with Thinking Steps:**
+**Example: Streaming Response with Thinking (recommended):**
+
+```typescript
+await fetchEventSource('/api/v1/agent/chat/stream', {
+  method: 'POST',
+  body: formData,
+  onmessage(ev) {
+    if (ev.event === 'thinking') {
+      // Show thinking step in UI (collapsible)
+      console.log('Thinking:', JSON.parse(ev.data).content);
+    } else if (ev.event === 'content') {
+      // Show final response content
+      console.log('Content:', JSON.parse(ev.data).content);
+    }
+  }
+});
+```
+
+**Example: Final Response (thinking hidden):**
 
 ```json
 {
   "response": "The air quality in Kampala currently shows PM2.5 at 45 µg/m³ (Moderate)...",
   "session_id": "abc123",
   "tools_used": ["get_african_city_air_quality"],
-  "tokens_used": 1247, // Precisely counted using tiktoken
+  "tokens_used": 1247,
   "cached": false,
-  "thinking_steps": [
-    "**Query Classification**: Identified query type: air_quality_data. User is asking about current air quality conditions.",
-    "**Location Detection**: Found location(s): Kampala. Will retrieve real-time air quality data. [locations: Kampala, count: 1]",
-    "**Tool Selection**: Selected tools: get_african_city_air_quality. [requires_external_data: true]",
-    "**Context Analysis**: Session context: Ongoing conversation (3 messages). Will build on previous context: air quality. [has_history: true]",
-    "**Response Planning**: Will execute 1 tool(s) to fetch real-time data, then synthesize findings into actionable insights."
-  ],
-  "reasoning_content": {
-    "enabled": true,
-    "steps": [
-      {
-        "content": "**Query Classification**: Identified query type: air_quality_data...",
-        "type": "thinking",
-        "timestamp": "2026-01-08T23:45:12.123Z",
-        "duration_ms": 45
-      }
-    ],
-    "total_steps": 5,
-    "total_thinking_time_ms": 234
+  "thinking_steps": null,  // Hidden in final response
+  "reasoning_content": null,  // Hidden in final response
+  "chart_data": "data:image/png;base64,iVBORw0...",  // NEW: Chart if requested
+  "chart_metadata": {  // NEW: Chart metadata
+    "chart_type": "line",
+    "data_rows": 30,
+    "columns_used": {"x": "date", "y": "pm25"},
+    "format": "png",
+    "engine": "matplotlib"
   }
 }
 ```
 
-For detailed information on reasoning models, see [REASONING_MODELS.md](./REASONING_MODELS.md).
+---
+
+## Chart Generation & Visualization 📊 **NEW**
+
+**AERIS-AQ can now generate professional charts and graphs** automatically when you ask for visualizations. The AI uses the `generate_chart` tool to create charts from data.
+
+### Supported Chart Types
+
+| Chart Type  | Best For                              | Example Request                                |
+| ----------- | ------------------------------------- | ---------------------------------------------- |
+| `line`      | Trends over time                      | "Plot PM2.5 levels over the past week"         |
+| `bar`       | Comparisons between categories        | "Compare AQI across different cities"          |
+| `scatter`   | Correlations between variables        | "Show correlation between PM2.5 and temperature" |
+| `histogram` | Data distributions                    | "Show distribution of AQI values"              |
+| `box`       | Statistical summaries                 | "Box plot of PM2.5 by city"                    |
+| `pie`       | Proportions/percentages               | "Show pollutant composition breakdown"         |
+| `area`      | Cumulative trends                     | "Area chart of cumulative emissions"           |
+| `timeseries`| Time-based data with date parsing     | "Time series of air quality from uploaded CSV" |
+
+### How to Request Charts
+
+Simply ask AERIS-AQ to visualize data in natural language:
+
+**Examples:**
+- "Generate a chart showing PM2.5 trends from the uploaded data"
+- "Plot a line graph of air quality over time"
+- "Create a bar chart comparing pollution levels across cities"
+- "Visualize the data as a scatter plot"
+
+**Response with Chart:**
+
+```json
+{
+  "response": "I've generated a line chart showing PM2.5 levels over time...",
+  "session_id": "abc123",
+  "tools_used": ["scan_document", "generate_chart"],
+  "chart_data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA...",
+  "chart_metadata": {
+    "chart_type": "line",
+    "data_rows": 30,
+    "columns_used": {
+      "x": "date",
+      "y": "pm25"
+    },
+    "format": "png",
+    "engine": "matplotlib",
+    "timestamp": "2026-01-09T10:30:00Z"
+  }
+}
+```
+
+### Displaying Charts in Your Frontend
+
+The `chart_data` field contains a base64-encoded PNG image that can be directly displayed:
+
+**React/JavaScript:**
+```jsx
+{response.chart_data && (
+  <img 
+    src={response.chart_data} 
+    alt="Generated Chart"
+    style={{ maxWidth: '100%', height: 'auto' }}
+  />
+)}
+```
+
+**HTML:**
+```html
+<img src="data:image/png;base64,iVBORw0..." alt="Chart" />
+```
+
+### Chart Generation Workflow
+
+1. **Upload Data**: Upload a CSV/Excel file with air quality data
+2. **Request Visualization**: Ask AERIS-AQ to plot/visualize the data
+3. **AI Generates Chart**: AI calls `generate_chart` tool automatically
+4. **Receive Image**: Get base64-encoded chart in `chart_data` field
+5. **Display to User**: Render the image in your UI
+
+**Complete Example:**
+
+```python
+import requests
+import base64
+from io import BytesIO
+from PIL import Image
+
+# Upload data and request chart
+with open('air_quality_data.csv', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/v1/agent/chat',
+        data={
+            'message': 'Generate a line chart showing PM2.5 trends over time from this data',
+            'session_id': 'your-session-id'
+        },
+        files={'file': f}
+    )
+
+data = response.json()
+
+# Extract and display chart
+if data.get('chart_data'):
+    # Remove data URL prefix
+    chart_base64 = data['chart_data'].split(',')[1]
+    
+    # Decode and save/display
+    chart_bytes = base64.b64decode(chart_base64)
+    image = Image.open(BytesIO(chart_bytes))
+    image.show()  # Or save: image.save('chart.png')
+    
+    print(f"Chart type: {data['chart_metadata']['chart_type']}")
+    print(f"Data rows: {data['chart_metadata']['data_rows']}")
+```
+
+### Chart Quality & Features
+
+- **High Resolution**: 100 DPI PNG images, professional quality
+- **Professional Styling**: Clean, readable charts with proper labels
+- **Auto-Sizing**: Charts automatically sized for readability
+- **Color Coding**: Support for color-coded data points
+- **Multiple Series**: Can plot multiple data series on same chart
+- **Date Parsing**: Automatic parsing of date/time columns
 
 ---
 

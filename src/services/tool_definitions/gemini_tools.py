@@ -582,6 +582,57 @@ def get_geocoding_tools() -> types.Tool:
     )
 
 
+def get_visualization_tools() -> types.Tool:
+    """Get chart/visualization generation tool definitions."""
+    return types.Tool(
+        function_declarations=[
+            types.FunctionDeclaration(
+                name="generate_chart",
+                description="🎨 Generate professional charts and graphs from data. Use this when the user requests visualizations like 'plot a chart', 'show me a graph', 'visualize this data', 'create a chart showing trends', etc. Returns a base64-encoded image that can be displayed. Supports line charts, bar charts, scatter plots, histograms, box plots, pie charts, area charts, and time series. IMPORTANT: You must provide the data to visualize - this tool cannot fetch data from external sources.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "data": types.Schema(
+                            type=types.Type.ARRAY,
+                            items=types.Schema(type=types.Type.OBJECT),
+                            description="Array of data objects to visualize. Each object should have consistent keys. Example: [{'date': '2025-01-01', 'pm25': 45}, {'date': '2025-01-02', 'pm25': 52}]",
+                        ),
+                        "chart_type": types.Schema(
+                            type=types.Type.STRING,
+                            description="Type of chart: 'line' (trends over time), 'bar' (comparisons), 'scatter' (correlations), 'histogram' (distributions), 'box' (statistical summary), 'pie' (proportions), 'area' (cumulative trends), 'timeseries' (time-based data)",
+                        ),
+                        "x_column": types.Schema(
+                            type=types.Type.STRING,
+                            description="Name of the data field to use for x-axis (e.g., 'date', 'city', 'time')",
+                        ),
+                        "y_column": types.Schema(
+                            type=types.Type.STRING,
+                            description="Name of the data field(s) to use for y-axis (e.g., 'pm25', 'aqi'). Can be a single column or multiple columns separated by commas.",
+                        ),
+                        "title": types.Schema(
+                            type=types.Type.STRING,
+                            description="Title for the chart (e.g., 'Air Quality (PM2.5) Over Time')",
+                        ),
+                        "x_label": types.Schema(
+                            type=types.Type.STRING,
+                            description="Label for x-axis (optional, defaults to x_column name)",
+                        ),
+                        "y_label": types.Schema(
+                            type=types.Type.STRING,
+                            description="Label for y-axis (optional, defaults to y_column name)",
+                        ),
+                        "color_column": types.Schema(
+                            type=types.Type.STRING,
+                            description="Optional: Name of column to use for color coding data points",
+                        ),
+                    },
+                    required=["data", "chart_type", "title"],
+                ),
+            ),
+        ]
+    )
+
+
 def get_all_tools() -> list[types.Tool]:
     """
     Get all tool definitions for Gemini.
@@ -602,4 +653,5 @@ def get_all_tools() -> list[types.Tool]:
         get_nsw_tools(),
         get_document_tools(),
         get_geocoding_tools(),
+        get_visualization_tools(),
     ]

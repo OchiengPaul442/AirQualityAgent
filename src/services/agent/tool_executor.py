@@ -64,10 +64,21 @@ class ToolExecutor:
         self.documents_provided = False  # Will be set by agent service when documents are in context
         self.uploaded_documents = {}  # Store uploaded documents temporarily for fallback access: {filename: content_dict}
         
+        # Lazy-load visualization service
+        self._visualization_service = None
+        
         # Circuit breaker for failing services
         self.service_failures = {}  # Track failures per service
         self.circuit_breaker_threshold = 5  # Failures before circuit opens
         self.circuit_breaker_timeout = 300  # 5 minutes before retry
+    
+    @property
+    def visualization_service(self):
+        """Lazy-load visualization service."""
+        if self._visualization_service is None:
+            from src.services.visualization_service import get_visualization_service
+            self._visualization_service = get_visualization_service()
+        return self._visualization_service
 
     def _is_circuit_open(self, service_name: str) -> bool:
         """Check if circuit breaker is open for a service."""
@@ -690,6 +701,60 @@ class ToolExecutor:
                     else:
                         # Location retrieval failed, return the error
                         return location_result
+            
+            elif function_name == "generate_chart":
+                """
+                Generate a chart/graph from data.
+                
+                Expected args:
+                    - data: List of dictionaries with data points
+                    - chart_type: Type of chart (line, bar, scatter, etc.)
+                    - x_column: Column name for x-axis
+                    - y_column: Column name(s) for y-axis
+                    - title: Chart title
+                    - x_label: X-axis label (optional)
+                    - y_label: Y-axis label (optional)
+                """
+                try:
+                    logger.info(f"Generating {args.get('chart_type', 'line')} chart: {args.get('title', 'Chart')}")
+                    
+                    # Validate required fields
+                    if "data" not in args:
+                        return {
+                            "success": False,
+                            "error": "Missing 'data' parameter. Please provide data as a list of dictionaries."
+                        }
+                    
+                    if not args["data"]:
+                        return {
+                            "success": False,
+                            "error": "Empty data provided. Cannot generate chart without data."
+                        }
+                    
+                    # Use visualization service to generate chart
+                    result = self.visualization_service.generate_chart(
+                        data=args["data"],
+                        chart_type=args.get("chart_type", "line"),
+                        x_column=args.get("x_column"),
+                        y_column=args.get("y_column"),
+                        title=args.get("title"),
+                        x_label=args.get("x_label"),
+                        y_label=args.get("y_label"),
+                        color_column=args.get("color_column"),
+                        interactive=args.get("interactive", False)
+                    )
+                    
+                    if result.get("success"):
+                        logger.info(f"Chart generated successfully: {result.get('chart_type')} with {result.get('data_rows')} rows")
+                    
+                    return result
+                    
+                except Exception as e:
+                    logger.error(f"Chart generation error: {e}", exc_info=True)
+                    return {
+                        "success": False,
+                        "error": f"Failed to generate chart: {str(e)}"
+                    }
 
             else:
                 return {
