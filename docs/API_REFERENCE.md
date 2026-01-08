@@ -44,16 +44,19 @@ Currently, the API does not require authentication. For production deployments, 
 
 ## Endpoints Overview
 
-| Endpoint                  | Method | Purpose                            |
-| ------------------------- | ------ | ---------------------------------- |
-| `/health`                 | GET    | Health check                       |
-| `/agent/chat`             | POST   | Chat with AI agent                 |
-| `/air-quality/query`      | POST   | Get air quality data (all sources) |
-| `/sessions/new`           | POST   | Create new session                 |
-| `/sessions`               | GET    | List all sessions                  |
-| `/sessions/{id}`          | GET    | Get session details                |
-| `/sessions/{id}`          | DELETE | Delete session                     |
-| `/sessions/{id}/messages` | GET    | Get paginated messages             |
+| Endpoint                      | Method | Purpose                            |
+| ----------------------------- | ------ | ---------------------------------- |
+| `/health`                     | GET    | Health check                       |
+| `/agent/chat`                 | POST   | Chat with AI agent                 |
+| `/air-quality/query`          | POST   | Get air quality data (all sources) |
+| `/sessions/new`               | POST   | Create new session                 |
+| `/sessions`                   | GET    | List all sessions                  |
+| `/sessions/{id}`              | GET    | Get session details                |
+| `/sessions/{id}`              | DELETE | Delete session                     |
+| `/sessions/{id}/messages`     | GET    | Get paginated messages             |
+| `/visualization/from-search`  | POST   | Visualize search results           |
+| `/visualization/from-file`    | POST   | Visualize uploaded file            |
+| `/visualization/capabilities` | GET    | Get visualization capabilities     |
 
 ---
 
@@ -1053,6 +1056,113 @@ curl -X DELETE "http://localhost:8000/api/v1/sessions/abc-123"
 
 ---
 
+## Data Visualization
+
+### Visualize Search Results
+
+Generate dynamic charts from search result data.
+
+**Endpoint:** `POST /api/v1/visualization/from-search`
+
+**Request Body:**
+
+```json
+{
+  "search_results": [
+    {
+      "title": "Air Quality Monday",
+      "content": "PM2.5 levels...",
+      "metrics": {
+        "date": "2024-01-01",
+        "pm25": 45,
+        "city": "Nairobi"
+      }
+    }
+  ],
+  "user_prompt": "Show me PM2.5 trends over time",
+  "chart_type": "line"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "chart_image": "base64_encoded_image...",
+  "chart_html": "<div>...</div>",
+  "reasoning": "Line chart shows trends over time...",
+  "chart_type": "line",
+  "data_analysis": {
+    "shape": [7, 3],
+    "columns": ["date", "pm25", "city"],
+    "recommended_charts": ["line", "bar"]
+  }
+}
+```
+
+### Visualize Uploaded File
+
+Generate charts from CSV/Excel/PDF files.
+
+**Endpoint:** `POST /api/v1/visualization/from-file`
+
+**Request:** `multipart/form-data`
+
+- `file`: File upload (CSV, XLSX, XLS, PDF)
+- `user_prompt`: What to visualize
+- `chart_type`: Optional chart type
+
+**Example:**
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/visualization/from-file" \
+  -F "file=@air_quality_data.csv" \
+  -F "user_prompt=Create a bar chart comparing cities" \
+  -F "chart_type=bar"
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "chart_image": "base64_encoded_image...",
+  "chart_html": "<div>...</div>",
+  "reasoning": "Bar chart compares categories...",
+  "chart_type": "bar"
+}
+```
+
+### Get Visualization Capabilities
+
+Get supported file formats and chart types.
+
+**Endpoint:** `GET /api/v1/visualization/capabilities`
+
+**Response:**
+
+```json
+{
+  "supported_formats": ["csv", "xlsx", "xls", "pdf"],
+  "description": "I can create dynamic visualizations..."
+}
+```
+
+**Supported Chart Types:**
+
+- `line` - Trends, time series
+- `bar` - Comparisons, rankings
+- `scatter` - Relationships, correlations
+- `histogram` - Distributions
+- `box` - Outliers, quartiles
+- `heatmap` - Correlation matrices
+- `pie` - Proportions
+- `area` - Cumulative trends
+- `violin` - Distribution density
+
+---
+
 ## Summary
 
 | Feature                | Implementation                          |
@@ -1063,6 +1173,7 @@ curl -X DELETE "http://localhost:8000/api/v1/sessions/abc-123"
 | **Rate Limiting**      | 20 req/min per IP                       |
 | **Data Sources**       | WAQI + AirQo with failure tolerance     |
 | **Cleanup**            | DELETE endpoint for sessions            |
+| **Visualization**      | Dynamic charts from data files/searches |
 
 📖 **For detailed guides, see:**
 

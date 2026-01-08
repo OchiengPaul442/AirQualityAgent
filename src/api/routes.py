@@ -1000,3 +1000,20 @@ async def disconnect_mcp_server(name: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# VISUALIZATION ENDPOINTS
+# ============================================================================
+
+@router.get("/visualization/capabilities")
+async def get_visualization_capabilities():
+    """Get visualization capabilities and supported formats"""
+    return {
+        "supported_formats": ["csv", "xlsx", "xls", "pdf"],
+        "supported_chart_types": [
+            "line", "bar", "scatter", "histogram", 
+            "box", "heatmap", "pie", "area", "violin"
+        ],
+        "description": "Create dynamic visualizations from CSV, Excel, PDF files or search results"
+    }

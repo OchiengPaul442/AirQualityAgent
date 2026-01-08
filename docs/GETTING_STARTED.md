@@ -192,5 +192,31 @@ curl -X POST http://localhost:8000/api/v1/air-quality/query \
 ## Next Steps
 
 - Read the [API Documentation](./API_REFERENCE.md) for detailed endpoint information
+- Try [Data Visualization](#data-visualization-quick-start) features with CSV/Excel files
 - Check [Architecture](./ARCHITECTURE.md) to understand the system design
 - See [Deployment Guide](./DEPLOYMENT.md) for production deployment instructions
+
+## Data Visualization Quick Start
+
+Upload a CSV file and generate charts:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/visualization/from-file \
+  -F "file=@air_quality_data.csv" \
+  -F "user_prompt=Show me PM2.5 trends over time" \
+  -F "chart_type=line"
+```
+
+The agent can also:
+
+- Automatically detect best chart types for your data
+- Visualize search results directly
+- Support CSV, Excel (xlsx/xls), and PDF files
+- Generate interactive charts (line, bar, scatter, histogram, box, heatmap, pie, area, violin)
+
+**Example conversation:**
+
+```
+User: "Can you analyze this air quality data?" [uploads CSV]
+Agent: "I'll create a visualization for you..." [generates chart]
+```

@@ -44,6 +44,11 @@ python-dotenv==1.0.1               # Load environment variables
 pydantic-settings==2.7.0           # Settings management
 
 # -----------------------------------------------------------------------------
+# Token Counting & Cost Management
+# -----------------------------------------------------------------------------
+tiktoken==0.8.0                    # Accurate token counting for LLMs
+
+# -----------------------------------------------------------------------------
 # Web Scraping & Data Extraction
 # -----------------------------------------------------------------------------
 requests==2.32.3                   # HTTP library
@@ -60,6 +65,15 @@ python-multipart==0.0.20           # Form data parsing
 pandas==2.2.3                      # Data analysis (CSV/Excel support)
 openpyxl==3.1.5                    # Excel file support (.xlsx)
 xlrd==2.0.1                        # Excel file support (.xls)
+tabula-py==2.9.3                   # PDF table extraction (requires Java)
+
+# -----------------------------------------------------------------------------
+# Data Visualization
+# -----------------------------------------------------------------------------
+matplotlib==3.8.2                  # Static plotting library
+seaborn==0.13.0                    # Statistical data visualization
+plotly==5.18.0                     # Interactive charts and graphs
+kaleido==0.2.1                     # Static image export from Plotly
 
 # -----------------------------------------------------------------------------
 # Security & Rate Limiting
