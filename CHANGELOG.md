@@ -23,34 +23,39 @@ All notable changes to the Air Quality AI Agent project.
 #### New Features
 
 ✅ **Chart Generation Service** (`src/services/visualization_service.py`)
-  - Supports 9 chart types: line, bar, scatter, histogram, box, pie, area, violin, timeseries
-  - Base64-encoded PNG output for direct display
-  - Matplotlib for static charts, Plotly for interactive
-  - Professional styling with seaborn
-  - Handles missing data, auto-labeling, multiple series
+
+- Supports 9 chart types: line, bar, scatter, histogram, box, pie, area, violin, timeseries
+- Base64-encoded PNG output for direct display
+- Matplotlib for static charts, Plotly for interactive
+- Professional styling with seaborn
+- Handles missing data, auto-labeling, multiple series
 
 ✅ **generate_chart Tool**
-  - Added to Gemini tools (`src/services/tool_definitions/gemini_tools.py`)
-  - Added to OpenAI tools (`src/services/tool_definitions/openai_tools.py`)
-  - Integrated with tool_executor (`src/services/agent/tool_executor.py`)
-  - AI can automatically generate charts when users request visualizations
+
+- Added to Gemini tools (`src/services/tool_definitions/gemini_tools.py`)
+- Added to OpenAI tools (`src/services/tool_definitions/openai_tools.py`)
+- Integrated with tool_executor (`src/services/agent/tool_executor.py`)
+- AI can automatically generate charts when users request visualizations
 
 ✅ **Proper Thinking/Content Separation**
-  - `thinking_steps` and `reasoning_content` now **hidden in final `/agent/chat` response**
-  - Only exposed during `/agent/chat/stream` SSE events
-  - Follows ChatGPT/DeepSeek/Kimi K2 pattern
+
+- `thinking_steps` and `reasoning_content` now **hidden in final `/agent/chat` response**
+- Only exposed during `/agent/chat/stream` SSE events
+- Follows ChatGPT/DeepSeek/Kimi K2 pattern
 
 ✅ **Enhanced Streaming Endpoint** (`/agent/chat/stream`)
-  - Separate SSE events: `start`, `thinking`, `tools`, `content`, `chart`, `done`, `error`
-  - Real-time thinking display during processing
-  - Content chunking for typing effect
-  - Chart streaming support
+
+- Separate SSE events: `start`, `thinking`, `tools`, `content`, `chart`, `done`, `error`
+- Real-time thinking display during processing
+- Content chunking for typing effect
+- Chart streaming support
 
 ✅ **Updated API Response Models**
-  - `chart_data`: Base64-encoded chart image (PNG)
-  - `chart_metadata`: Chart type, data rows, columns, engine info
-  - `thinking_steps`: Now `null` in final response (only in streaming)
-  - `reasoning_content`: Now `null` in final response (only in streaming)
+
+- `chart_data`: Base64-encoded chart image (PNG)
+- `chart_metadata`: Chart type, data rows, columns, engine info
+- `thinking_steps`: Now `null` in final response (only in streaming)
+- `reasoning_content`: Now `null` in final response (only in streaming)
 
 #### Files Created
 
@@ -64,33 +69,40 @@ All notable changes to the Air Quality AI Agent project.
 #### Files Modified
 
 1. **src/services/agent/tool_executor.py**
+
    - Added `generate_chart` case in `execute()` method
    - Lazy-load visualization service
    - Chart result capture and validation
 
 2. **src/services/tool_definitions/gemini_tools.py**
+
    - Added `get_visualization_tools()` function
    - Integrated in `get_all_tools()`
 
 3. **src/services/tool_definitions/openai_tools.py**
+
    - Added `get_visualization_tools()` function
    - Integrated in `get_all_tools()`
 
 4. **src/api/models.py**
+
    - Added `chart_data` and `chart_metadata` fields to `ChatResponse`
    - Updated field descriptions for `thinking_steps` and `reasoning_content`
 
 5. **src/api/routes.py**
+
    - `/agent/chat`: Set `thinking_steps` and `reasoning_content` to `None` in final response
    - `/agent/chat`: Added chart data extraction and passing
    - `/agent/chat/stream`: Complete rewrite with proper SSE events (thinking, content, tools, chart, done)
    - Proper streaming pattern following Kimi K2 approach
 
 6. **src/services/agent_service.py**
+
    - Extract chart data from tool results
    - Pass chart data through response pipeline
 
 7. **src/services/providers/gemini_provider.py**
+
    - Capture chart results from `generate_chart` tool calls
    - Pass chart data in response
 
@@ -104,6 +116,7 @@ All notable changes to the Air Quality AI Agent project.
 #### Usage Examples
 
 **Request a chart:**
+
 ```python
 response = requests.post('http://localhost:8000/api/v1/agent/chat',
     data={'message': 'Plot PM2.5 trends from the uploaded data'},
@@ -118,18 +131,19 @@ if response.json()['chart_data']:
 ```
 
 **Streaming with thinking:**
+
 ```javascript
-await fetchEventSource('/api/v1/agent/chat/stream', {
-  method: 'POST',
+await fetchEventSource("/api/v1/agent/chat/stream", {
+  method: "POST",
   body: formData,
   onmessage(ev) {
-    if (ev.event === 'thinking') {
-      console.log('Thinking:', JSON.parse(ev.data).content);
-    } else if (ev.event === 'chart') {
+    if (ev.event === "thinking") {
+      console.log("Thinking:", JSON.parse(ev.data).content);
+    } else if (ev.event === "chart") {
       const chartData = JSON.parse(ev.data).data;
       // Display chart
     }
-  }
+  },
 });
 ```
 

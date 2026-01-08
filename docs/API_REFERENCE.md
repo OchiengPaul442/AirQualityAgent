@@ -275,9 +275,10 @@ AERIS-AQ uses **QueryAnalyzer** - an intelligent pre-processing system that proa
 
 ### Reasoning & Thinking Process 🧠
 
-**AERIS-AQ displays its thinking process during streaming** for complete transparency, similar to ChatGPT, DeepSeek R1, Claude, and Kimi K2. 
+**AERIS-AQ displays its thinking process during streaming** for complete transparency, similar to ChatGPT, DeepSeek R1, Claude, and Kimi K2.
 
 **IMPORTANT CHANGE**: Following industry best practices (ChatGPT, DeepSeek, Kimi K2):
+
 - ✅ **Thinking steps are shown DURING streaming** - Users see the AI's reasoning process in real-time
 - ❌ **Thinking steps are HIDDEN in final response** - The final `/agent/chat` response excludes thinking_steps and reasoning_content
 - 📊 **Use `/agent/chat/stream` endpoint** to see real-time thinking process
@@ -295,18 +296,18 @@ This is especially important for health-critical air quality recommendations whe
 **Example: Streaming Response with Thinking (recommended):**
 
 ```typescript
-await fetchEventSource('/api/v1/agent/chat/stream', {
-  method: 'POST',
+await fetchEventSource("/api/v1/agent/chat/stream", {
+  method: "POST",
   body: formData,
   onmessage(ev) {
-    if (ev.event === 'thinking') {
+    if (ev.event === "thinking") {
       // Show thinking step in UI (collapsible)
-      console.log('Thinking:', JSON.parse(ev.data).content);
-    } else if (ev.event === 'content') {
+      console.log("Thinking:", JSON.parse(ev.data).content);
+    } else if (ev.event === "content") {
       // Show final response content
-      console.log('Content:', JSON.parse(ev.data).content);
+      console.log("Content:", JSON.parse(ev.data).content);
     }
-  }
+  },
 });
 ```
 
@@ -319,13 +320,14 @@ await fetchEventSource('/api/v1/agent/chat/stream', {
   "tools_used": ["get_african_city_air_quality"],
   "tokens_used": 1247,
   "cached": false,
-  "thinking_steps": null,  // Hidden in final response
-  "reasoning_content": null,  // Hidden in final response
-  "chart_data": "data:image/png;base64,iVBORw0...",  // NEW: Chart if requested
-  "chart_metadata": {  // NEW: Chart metadata
+  "thinking_steps": null, // Hidden in final response
+  "reasoning_content": null, // Hidden in final response
+  "chart_data": "data:image/png;base64,iVBORw0...", // NEW: Chart if requested
+  "chart_metadata": {
+    // NEW: Chart metadata
     "chart_type": "line",
     "data_rows": 30,
-    "columns_used": {"x": "date", "y": "pm25"},
+    "columns_used": { "x": "date", "y": "pm25" },
     "format": "png",
     "engine": "matplotlib"
   }
@@ -340,22 +342,23 @@ await fetchEventSource('/api/v1/agent/chat/stream', {
 
 ### Supported Chart Types
 
-| Chart Type  | Best For                              | Example Request                                |
-| ----------- | ------------------------------------- | ---------------------------------------------- |
-| `line`      | Trends over time                      | "Plot PM2.5 levels over the past week"         |
-| `bar`       | Comparisons between categories        | "Compare AQI across different cities"          |
-| `scatter`   | Correlations between variables        | "Show correlation between PM2.5 and temperature" |
-| `histogram` | Data distributions                    | "Show distribution of AQI values"              |
-| `box`       | Statistical summaries                 | "Box plot of PM2.5 by city"                    |
-| `pie`       | Proportions/percentages               | "Show pollutant composition breakdown"         |
-| `area`      | Cumulative trends                     | "Area chart of cumulative emissions"           |
-| `timeseries`| Time-based data with date parsing     | "Time series of air quality from uploaded CSV" |
+| Chart Type   | Best For                          | Example Request                                  |
+| ------------ | --------------------------------- | ------------------------------------------------ |
+| `line`       | Trends over time                  | "Plot PM2.5 levels over the past week"           |
+| `bar`        | Comparisons between categories    | "Compare AQI across different cities"            |
+| `scatter`    | Correlations between variables    | "Show correlation between PM2.5 and temperature" |
+| `histogram`  | Data distributions                | "Show distribution of AQI values"                |
+| `box`        | Statistical summaries             | "Box plot of PM2.5 by city"                      |
+| `pie`        | Proportions/percentages           | "Show pollutant composition breakdown"           |
+| `area`       | Cumulative trends                 | "Area chart of cumulative emissions"             |
+| `timeseries` | Time-based data with date parsing | "Time series of air quality from uploaded CSV"   |
 
 ### How to Request Charts
 
 Simply ask AERIS-AQ to visualize data in natural language:
 
 **Examples:**
+
 - "Generate a chart showing PM2.5 trends from the uploaded data"
 - "Plot a line graph of air quality over time"
 - "Create a bar chart comparing pollution levels across cities"
@@ -388,17 +391,21 @@ Simply ask AERIS-AQ to visualize data in natural language:
 The `chart_data` field contains a base64-encoded PNG image that can be directly displayed:
 
 **React/JavaScript:**
+
 ```jsx
-{response.chart_data && (
-  <img 
-    src={response.chart_data} 
-    alt="Generated Chart"
-    style={{ maxWidth: '100%', height: 'auto' }}
-  />
-)}
+{
+  response.chart_data && (
+    <img
+      src={response.chart_data}
+      alt="Generated Chart"
+      style={{ maxWidth: "100%", height: "auto" }}
+    />
+  );
+}
 ```
 
 **HTML:**
+
 ```html
 <img src="data:image/png;base64,iVBORw0..." alt="Chart" />
 ```
@@ -436,12 +443,12 @@ data = response.json()
 if data.get('chart_data'):
     # Remove data URL prefix
     chart_base64 = data['chart_data'].split(',')[1]
-    
+
     # Decode and save/display
     chart_bytes = base64.b64decode(chart_base64)
     image = Image.open(BytesIO(chart_bytes))
     image.show()  # Or save: image.save('chart.png')
-    
+
     print(f"Chart type: {data['chart_metadata']['chart_type']}")
     print(f"Data rows: {data['chart_metadata']['data_rows']}")
 ```
