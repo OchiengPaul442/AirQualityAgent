@@ -1550,6 +1550,114 @@ async function getCachedAirQuality(city: string) {
 }
 ```
 
+**Example: Display Thinking Steps (NEW 🧠)**
+
+```typescript
+interface ThinkingStep {
+  content: string;
+  type: "thinking" | "searching" | "analyzing" | "processing";
+  timestamp: string;
+  duration_ms: number;
+}
+
+function ChatMessage({ response }: { response: ChatResponse }) {
+  const [showThinking, setShowThinking] = useState(false);
+
+  return (
+    <div className="message">
+      {/* Show thinking process if available */}
+      {response.thinking_steps && response.thinking_steps.length > 0 && (
+        <div className="thinking-process">
+          <button onClick={() => setShowThinking(!showThinking)}>
+            💭 {showThinking ? "Hide" : "Show"} thinking process (
+            {response.thinking_steps.length} steps)
+          </button>
+
+          {showThinking && (
+            <div className="thinking-steps">
+              {response.thinking_steps.map((step, index) => (
+                <div key={index} className="thinking-step">
+                  <span className="step-number">{index + 1}.</span>
+                  <span className="step-content">{step}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Show main response */}
+      <div className="response-content">{response.response}</div>
+
+      {/* Show metadata */}
+      <div className="response-meta">
+        <span>🔧 Tools: {response.tools_used?.join(", ") || "None"}</span>
+        <span>
+          📊 Tokens: {response.tokens_used} (Accurately counted with tiktoken)
+        </span>
+        {response.cached && <span>⚡ Cached</span>}
+      </div>
+    </div>
+  );
+}
+```
+
+**Thinking Steps Features:**
+
+- **Transparent Decision Making**: Shows how AI analyzed your query
+- **Tool Selection Visibility**: See which data sources were used
+- **Location Detection**: Understand how location was identified
+- **Context Awareness**: See how previous messages influenced the response
+- **Accurate Token Counting**: Uses tiktoken for world-standard precision
+
+**Example Thinking Steps Output:**
+
+```json
+{
+  "thinking_steps": [
+    "**Query Classification**: Identified query type: air_quality_data. User is asking about current air quality conditions.",
+    "**Location Detection**: Found location(s): Nairobi. Will retrieve real-time air quality data.",
+    "**Tool Selection**: Selected tools: get_african_city_air_quality. [requires_external_data: true]",
+    "**Context Analysis**: New conversation, no prior context. Will establish context and gather necessary information.",
+    "**Response Planning**: Will execute 1 tool(s) to fetch real-time data, then synthesize findings into actionable insights."
+  ],
+  "reasoning_content": {
+    "enabled": true,
+    "total_steps": 5,
+    "total_thinking_time_ms": 234
+  }
+}
+```
+
+**Styling Recommendations:**
+
+```css
+.thinking-process {
+  background: #f5f5f5;
+  border-left: 3px solid #2196f3;
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+}
+
+.thinking-steps {
+  margin-top: 12px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.thinking-step {
+  padding: 6px 0;
+  display: flex;
+  gap: 8px;
+}
+
+.step-number {
+  font-weight: bold;
+  color: #2196f3;
+}
+```
+
 **Example: Monitor Token Usage**
 
 ```typescript

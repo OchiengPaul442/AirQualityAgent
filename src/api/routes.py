@@ -34,6 +34,7 @@ from src.services.openmeteo_service import OpenMeteoService
 from src.services.waqi_service import WAQIService
 from src.utils.markdown_formatter import MarkdownFormatter
 from src.utils.security import ResponseFilter, validate_request_data
+from src.utils.token_counter import get_token_counter
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -564,24 +565,33 @@ async def chat(
             logger.error(f"Failed to save assistant response to database: {db_error}")
             # Continue to return response to user even if db save fails
 
-        # Estimate tokens for cost tracking
-        tokens_used = len(message.split()) + len(final_response.split())
-        for msg in history:
-            tokens_used += len(msg["content"].split())
+        # Accurate token counting using tiktoken (world-standard precision)
+        token_counter = get_token_counter(settings.AI_PROVIDER)
         
-        # Extract document filenames for tracking
+        # Count tokens accurately for each component
+        message_tokens = token_counter.count_tokens(message)
+        response_tokens = token_counter.count_tokens(final_response)
+        history_tokens = token_counter.count_messages_tokens(history)
+        
+        # Extract document filenames and count tokens
         document_filenames = []
+        document_tokens = 0
         if document_data:
-            # Add document content to token count (document_data is a list)
             for doc in document_data:
                 if isinstance(doc, dict):
-                    doc_content = doc.get("content", "")
-                    tokens_used += len(str(doc_content).split())
+                    document_tokens += token_counter.count_document_tokens(doc)
                     # Track filenames
                     filename = doc.get("filename")
                     if filename:
                         document_filenames.append(filename)
-        tokens_used = int(tokens_used * 1.3)  # Rough multiplier for actual tokens
+        
+        # Total with accurate counting (no estimation multiplier needed)
+        tokens_used = message_tokens + response_tokens + history_tokens + document_tokens
+        
+        logger.info(
+            f"Accurate token count - Message: {message_tokens}, Response: {response_tokens}, "
+            f"History: {history_tokens}, Documents: {document_tokens}, Total: {tokens_used}"
+        )
 
         # Get total message count for this session
         try:

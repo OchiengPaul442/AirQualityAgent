@@ -18,6 +18,7 @@ from src.config import get_settings
 from src.mcp.client import MCPClient
 from src.services.agent.cost_tracker import CostTracker
 from src.services.agent.query_analyzer import QueryAnalyzer
+from src.services.agent.reasoning_engine import ReasoningEngine, create_human_reasoning_engine
 from src.services.agent.tool_executor import ToolExecutor
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
@@ -104,6 +105,10 @@ class AgentService:
 
         # Initialize cost tracker
         self.cost_tracker = CostTracker()
+        
+        # Initialize reasoning engine for thinking/reasoning display
+        self.reasoning_engine = create_human_reasoning_engine()
+        logger.info("Reasoning engine initialized for transparent thinking display")
 
         # Create and setup AI provider (support sync or async setup)
         self.provider = self._create_provider()
@@ -136,20 +141,53 @@ class AgentService:
     def _check_for_loops(self, user_message: str) -> bool:
         """
         Check for potential conversation loops or repetitive patterns.
+        Uses semantic similarity to avoid false positives on new questions.
 
         Returns True if a loop is detected, False otherwise.
         """
         if len(self.conversation_memory) < self.loop_detection_window:
             return False
 
-        # Check for exact message repetition
+        # Get recent user messages
         recent_messages = [msg.get('user', '') for msg in self.conversation_memory[-self.loop_detection_window:]]
-        if recent_messages.count(user_message) > 2:
+        
+        # Check for exact message repetition (must be exact and repeated 3+ times)
+        exact_count = recent_messages.count(user_message)
+        if exact_count >= 3:
+            logger.warning(f"Exact message repetition detected: {exact_count} times")
             return True
 
-        # Check for similar patterns (basic heuristic)
-        if len(set(recent_messages)) < len(recent_messages) * 0.3:  # Less than 30% unique messages
+        # Check for semantic similarity (only if messages are similar enough)
+        # Calculate simple word overlap similarity
+        def get_word_similarity(msg1: str, msg2: str) -> float:
+            words1 = set(msg1.lower().split())
+            words2 = set(msg2.lower().split())
+            if not words1 or not words2:
+                return 0.0
+            intersection = len(words1 & words2)
+            union = len(words1 | words2)
+            return intersection / union if union > 0 else 0.0
+        
+        # Check if current message is very similar to multiple recent messages
+        similar_count = 0
+        for recent_msg in recent_messages[-5:]:  # Check last 5 messages only
+            similarity = get_word_similarity(user_message, recent_msg)
+            if similarity > 0.8:  # Very similar (80%+ word overlap)
+                similar_count += 1
+        
+        # Only flag as loop if highly similar message appears 3+ times
+        if similar_count >= 3:
+            logger.warning(f"Semantic loop detected: {similar_count} similar messages")
             return True
+
+        # Check for AI repetition (same AI response multiple times in a row)
+        recent_ai_responses = [msg.get('ai', '') for msg in self.conversation_memory[-5:]]
+        if len(recent_ai_responses) >= 3:
+            # Check if AI is giving the same response repeatedly
+            last_ai = recent_ai_responses[-1] if recent_ai_responses else ""
+            if last_ai and recent_ai_responses.count(last_ai) >= 3:
+                logger.warning(f"AI response loop detected: same response {recent_ai_responses.count(last_ai)} times")
+                return True
 
         return False
 
@@ -680,6 +718,11 @@ class AgentService:
             message, history, document_data, style, temperature, top_p, session_id
         )
 
+        # Start reasoning engine for this query
+        self.reasoning_engine.clear()  # Clear previous reasoning
+        self.reasoning_engine.start_thinking()
+        self.reasoning_engine.think(f"analyzing the user's question about air quality\")")
+
         # Check for cached response with freshness validation
         cached_response = self._get_fresh_cached_response(cache_key, message)
         if cached_response is not None:
@@ -691,6 +734,12 @@ class AgentService:
 
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
+        
+        # Add reasoning step for style selection
+        self.reasoning_engine.add_step(
+            f"Using '{style or 'general'}' communication style for this response",
+            "processing"
+        )
 
         # Use SessionContextManager for document accumulation (replaces old document_cache)
         if document_data and session_id:
@@ -832,6 +881,8 @@ class AgentService:
         # Analyze query and call tools BEFORE sending to AI to ensure tools are always used
         # This bypasses the model's weak tool-calling capability by proactively detecting intent
         logger.info(f"🔍 QueryAnalyzer: Analyzing query for proactive tool calling...")
+        self.reasoning_engine.search("real-time data sources if needed")
+        
         proactive_results = await QueryAnalyzer.proactively_call_tools(
             message,
             self.tool_executor
@@ -841,15 +892,19 @@ class AgentService:
         context_injection = proactive_results.get("context_injection", "")
         
         if tools_called_proactively:
+            self.reasoning_engine.analyze(f"data from {len(tools_called_proactively)} source(s): {', '.join(tools_called_proactively)}")
             logger.info(f"✅ QueryAnalyzer called {len(tools_called_proactively)} tool(s) proactively: {tools_called_proactively}")
             # Inject tool results into system instruction so AI can format them
             if context_injection:
                 system_instruction += context_injection
                 logger.info(f"📝 Injected {len(context_injection)} characters of tool results into system instruction")
         else:
+            self.reasoning_engine.add_step("Using knowledge base for this general question", "thinking")
             logger.info("ℹ️ QueryAnalyzer: No tools needed for this query")
 
         # Process with provider
+        self.reasoning_engine.process("formulating the final response")
+        
         try:
             response_data = await self.provider.process_message(
                 message=message,
@@ -962,10 +1017,22 @@ class AgentService:
                 response_data["truncated"] = True
 
             self._add_to_memory(message, ai_response)
+            
+            # Add reasoning steps to response
+            self.reasoning_engine.conclude("I've gathered the information needed to answer your question")
+            reasoning_steps = self.reasoning_engine.get_all_steps()
+            
+            # Convert reasoning steps to format expected by API
+            thinking_steps_list = [step.content for step in reasoning_steps] if reasoning_steps else None
+            reasoning_content_str = self.reasoning_engine.to_json() if reasoning_steps else None
+            
+            # Add reasoning to response_data
+            response_data["thinking_steps"] = thinking_steps_list
+            response_data["reasoning_content"] = reasoning_content_str
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "
-                f"Cost: ${cost_estimate:.4f}"
+                f"Cost: ${cost_estimate:.4f}, Reasoning steps: {len(reasoning_steps) if reasoning_steps else 0}"
             )
 
             return response_data

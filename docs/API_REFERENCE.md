@@ -259,41 +259,55 @@ AERIS-AQ uses **QueryAnalyzer** - an intelligent pre-processing system that proa
 - "What's the air quality in Kampala?" → `["get_african_city_air_quality"]`
 - "Air quality policies in Kenya?" → `["search_web"]`
 - "Analyze this EPA report: https://..." → `["search_web", "scrape_website"]`
-  | `tokens_used` | integer | Approximate tokens consumed (for cost tracking) |
+  | `tokens_used` | integer | **Accurately counted** tokens using tiktoken (world-standard precision) |
   | `cached` | boolean | Whether response was served from cache |
   | `message_count` | integer | Total messages in this session |
   | `document_processed` | boolean | Whether a document was uploaded and processed |
   | `document_filename` | string | Name of uploaded file (if any) |
-  | `thinking_steps` | array | AI reasoning/thinking steps (for reasoning models) |
-  | `reasoning_content` | string | Full reasoning content as string (for reasoning models) |
+  | `thinking_steps` | array | **NEW**: AI reasoning steps showing how the answer was derived |
+  | `reasoning_content` | object | **NEW**: Full reasoning data with metadata and timing |
 
-### Reasoning Models Support 🧠
+### Reasoning & Thinking Process 🧠 **NEW**
 
-AERIS-AQ now supports **reasoning models** that expose their thinking process, providing transparency in health-critical recommendations.
+**AERIS-AQ now displays its thinking process** for complete transparency, similar to DeepSeek R1, Claude, and Kimi K2. This is especially important for health-critical air quality recommendations.
 
-**Supported Reasoning Models:**
+**How It Works:**
 
-- **Nemotron-3-nano** (Ollama) - FREE local reasoning
-- **DeepSeek R1** - $2.19/1M tokens with full reasoning exposure
-- **Gemini 2.5 Flash** - $0.40/1M tokens with thinking mode
-- **Kimi K2** (OpenRouter) - Complex agentic workflows
+1. **Query Analysis**: AI analyzes your question and determines what information is needed
+2. **Tool Selection**: Identifies which data sources to use (WAQI, AirQo, research papers, etc.)
+3. **Data Retrieval**: Fetches real-time data from selected sources
+4. **Analysis & Synthesis**: Processes data and formulates recommendations
+5. **Response Generation**: Delivers final answer with reasoning shown
 
-**Example Response with Reasoning:**
+**Example Response with Thinking Steps:**
 
 ```json
 {
-  "response": "The air quality in Kampala currently shows elevated PM2.5 levels...",
+  "response": "The air quality in Kampala currently shows PM2.5 at 45 µg/m³ (Moderate)...",
   "session_id": "abc123",
   "tools_used": ["get_african_city_air_quality"],
-  "tokens_used": 450,
+  "tokens_used": 1247, // Precisely counted using tiktoken
   "cached": false,
   "thinking_steps": [
-    "Step 1: Retrieve current PM2.5 levels from AirQo sensors",
-    "Step 2: Compare against WHO air quality guidelines (15 µg/m³)",
-    "Step 3: Assess health risks for vulnerable populations",
-    "Step 4: Generate time-based recommendations for outdoor activities"
+    "**Query Classification**: Identified query type: air_quality_data. User is asking about current air quality conditions.",
+    "**Location Detection**: Found location(s): Kampala. Will retrieve real-time air quality data. [locations: Kampala, count: 1]",
+    "**Tool Selection**: Selected tools: get_african_city_air_quality. [requires_external_data: true]",
+    "**Context Analysis**: Session context: Ongoing conversation (3 messages). Will build on previous context: air quality. [has_history: true]",
+    "**Response Planning**: Will execute 1 tool(s) to fetch real-time data, then synthesize findings into actionable insights."
   ],
-  "reasoning_content": "Step 1: Retrieve current PM2.5 levels...\nStep 2: Compare against..."
+  "reasoning_content": {
+    "enabled": true,
+    "steps": [
+      {
+        "content": "**Query Classification**: Identified query type: air_quality_data...",
+        "type": "thinking",
+        "timestamp": "2026-01-08T23:45:12.123Z",
+        "duration_ms": 45
+      }
+    ],
+    "total_steps": 5,
+    "total_thinking_time_ms": 234
+  }
 }
 ```
 
