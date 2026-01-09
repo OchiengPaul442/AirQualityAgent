@@ -2,82 +2,103 @@
 
 ## Overview
 
-The API sanitizes all input to prevent attacks while allowing legitimate technical, scientific, and programming content to pass through. Dangerous patterns are **cleaned** rather than **rejected**, ensuring users can paste any content without 400 errors.
+The API **sanitizes dangerous patterns first**, then validates only critical threats. All legitimate technical content (code blocks, scientific notation, tutorials) passes through.
 
-## Security Approach
+**Strategy:** Sanitize → Validate Critical Only → Allow
 
-**Philosophy:** Clean, don't block (unless critical)
+## How It Works
 
-- ✅ **Sanitize** SQL keywords, shell commands, code execution attempts
-- ✅ **Allow** scientific notation, markdown code, technical content
-- ❌ **Block** only critical attacks that could compromise the system
+### Request Flow
+
+1. Check length (max 100KB)
+2. **Check CRITICAL patterns** → Block if found
+3. **Sanitize content** → Remove dangerous patterns
+4. **Allow request** → Pass to AI agent
+
+### Pattern Types
+
+**CRITICAL (Blocked Immediately):**
+
+- Multi-stage SQL injection: `'; DROP TABLE; SELECT`
+- Command chains with destructive flags: `rm -rf /`
+- Code execution chains: `eval(__import__('os').system())`
+- Deep path traversal: `../../../../etc/passwd`
+
+**SANITIZE (Cleaned & Allowed):**
+
+- SQL keywords in text → `[removed]`
+- Shell command references → Neutralized
+- XSS patterns → Stripped
+- Single `eval`, `exec`, `__import__` mentions → Removed
 
 ## What Works
 
-### Accepted Content
+**✅ Always Accepted:**
 
 - Scientific papers: `µg/m³`, `NO₂`, `(peak 180 µg/m³)`
-- Programming guides: ` ```python `, `` `code` ``, URLs
-- Technical terms: "drop", "select", "join", "create" in normal context
-- Long content: Up to 100KB (50KB sanitized)
-- Special characters: Parentheses, superscripts, math symbols (50% threshold)
+- Programming guides: ` ```python `, `` `code` ``, `!pip install`
+- Installation commands: Full code blocks preserved
+- Technical tutorials: Complete examples with imports
+- Markdown docs: All formatting maintained
+- Content up to 100KB
 
-### Blocked Only If Critical
+**❌ Always Blocked (Critical Only):**
 
-- Actual SQL injection with proper syntax: `SELECT * FROM users WHERE id=1 DROP TABLE`
-- Active command chains: `test; rm -rf / && shutdown`
-- Direct code execution: `eval(__import__('os').system('rm -rf /'))`
+- `test; rm -rf / && shutdown`
+- `'; DROP TABLE users; SELECT * FROM passwords`
+- `eval(__import__('os').system('rm -rf /'))`
 
-### Sanitized (Cleaned)
+**⚠️ Sanitized & Allowed:**
 
-- SQL keywords in normal text → Kept but monitored
-- Shell commands in markdown → Code formatting preserved
-- Backticks/parentheses → Allowed for technical content
+- "Please select and drop old data" → Cleaned, allowed
+- `` `whoami` command`` → Neutralized, allowed
+- `Use __import__('module')` → Reference removed, allowed
 
-## Technical Changes
+## Examples
 
-### Key Improvements
-
-1. **Context-aware SQL detection** - Only blocks with SQL syntax structure
-2. **Markdown-safe command patterns** - Allows `` `code` ``, blocks `` `whoami` ``
-3. **Expanded special chars** - Added `°µ²³/[]()` to allowed set
-4. **Increased limits** - 50KB max (100KB validation)
-5. **Sanitization over blocking** - Cleans dangerous patterns, allows request
-
-### Patterns
+### ✅ GPT-OSS Colab Guide (Accepted)
 
 ```python
-# SQL - Context required
-r"\b(SELECT|DELETE)\s+.*\s+(FROM|WHERE)\b"
-r"\bINSERT\s+INTO\s+\w+\s+(VALUES|\()"
-r"\b(DROP|CREATE|ALTER)\s+(TABLE|DATABASE|INDEX|VIEW|USER)\b"
+!pip install -q --upgrade torch
+!pip install transformers accelerate
 
-# Commands - Specific names only
-r"`\s*(whoami|id|pwd|rm|kill|sudo)\s*`"
-r"[;&|]\s+"  # Shell chaining
-
-# Code execution - Direct threats
-r"\b(eval|exec|__import__)\s*\("
+from transformers import AutoTokenizer, AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained("gpt-oss-20b")
 ```
 
-## Test Results
+**Result:** Passed through, some patterns sanitized
 
-**Content Accepted:**
+### ✅ Scientific Query (Accepted)
 
-- Scientific query (500 chars, complex notation) ✅
-- GPT-OSS guide (2,015 chars, code blocks) ✅
-- Programming tutorials (all languages) ✅
+```
+A city experiencing high ozone (180 µg/m³) and elevated NO₂ (85 µg/m³).
+Explain the photochemical reaction chain including OH radicals.
+```
 
-**Security Maintained:**
+**Result:** Accepted as-is, notation preserved
 
-- SQL injection (context-required) ❌ Blocked
-- Command injection (with chaining) ❌ Blocked
-- Code execution (direct calls) ❌ Blocked
+### ❌ Critical Attack (Blocked)
 
-## Files Modified
+```bash
+test; rm -rf / && shutdown -h now
+```
 
-- `src/utils/security.py` - Sanitization logic
+**Result:** Blocked - Critical security threat detected
 
-## Status
+## Technical Details
 
-✅ Production ready - Handles any technical content safely
+**Core Flow:**
+
+```python
+validate_request_data(data):
+  1. Length check (100KB max)
+  2. CRITICAL pattern check → Block if match
+  3. Sanitize SANITIZE patterns → Clean
+  4. Return sanitized data → Allow request
+```
+
+**Files Modified:**
+
+- `src/utils/security.py`
+
+**Status:** ✅ Production ready

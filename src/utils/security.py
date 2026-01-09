@@ -307,6 +307,9 @@ class ResponseFilter:
 def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate and sanitize request data.
+    
+    Strategy: Sanitize first, then check only for critical attacks.
+    This allows technical content to be cleaned and accepted.
 
     Args:
         data: Request data dictionary
@@ -315,7 +318,7 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
         Validated and sanitized data
 
     Raises:
-        ValueError: If validation fails
+        ValueError: If critical attack detected
     """
     sanitized = {}
 
@@ -323,10 +326,22 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
         if key == "message":
             if not isinstance(value, str):
                 raise ValueError("Message must be a string")
-            if not InputSanitizer.validate_message_content(value):
-                raise ValueError("Message contains potentially dangerous content")
-            # Don't HTML escape chat messages - preserve original formatting
-            sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
+            
+            # Check length limit first
+            if len(value) > 100000:
+                raise ValueError("Message too long (max 100KB)")
+            
+            # Check for CRITICAL patterns only (before sanitization)
+            for pattern in CRITICAL_PATTERNS:
+                if re.search(pattern, value, re.IGNORECASE | re.MULTILINE | re.DOTALL):
+                    raise ValueError("Critical security threat detected")
+            
+            # Sanitize the message (cleans dangerous patterns)
+            try:
+                sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
+            except ValueError as e:
+                # If sanitization fails due to critical pattern, block it
+                raise ValueError(f"Message contains dangerous content: {str(e)}")
         elif key == "session_id":
             if value is not None:
                 if not isinstance(value, str):
