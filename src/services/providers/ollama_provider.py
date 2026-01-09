@@ -842,6 +842,21 @@ class OllamaProvider(BaseAIProvider):
             if not isinstance(result, dict):
                 return ""
             
+            # Handle chart generation results
+            if result.get("chart_data") and result.get("chart_type"):
+                chart_type = result.get("chart_type", "chart")
+                data_rows = result.get("data_rows", 0)
+                original_rows = result.get("original_rows", data_rows)
+                data_sampled = result.get("data_sampled", False)
+                
+                summary = f"Chart created! Generated a {chart_type} chart"
+                if data_rows > 0:
+                    summary += f" with {data_rows} data points"
+                    if data_sampled and original_rows > data_rows:
+                        summary += f" (sampled from {original_rows} total rows)"
+                summary += ".\n\nThe chart shows the data visualization you requested. Review the chart above for insights."
+                return summary
+            
             # Handle search_web results
             if result.get("results") and isinstance(result["results"], list):
                 results = result["results"][:3]  # Top 3 results

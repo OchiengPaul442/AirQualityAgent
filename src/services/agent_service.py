@@ -215,9 +215,19 @@ class AgentService:
     def _check_response_for_reasoning_exposure(self, response: str) -> bool:
         """
         Check if AI response exposes internal reasoning that should be hidden.
-        Returns True if reasoning exposure detected.
+        Returns True if reasoning exposure detected IN THE ACTUAL RESPONSE.
+        
+        Note: This checks the response content, NOT the model's internal thinking.
         """
-        # Patterns that indicate internal reasoning exposure
+        # Only check if response is suspiciously short (likely pure reasoning, not actual answer)
+        if len(response.strip()) < 50:
+            return False  # Too short to contain reasoning patterns meaningfully
+        
+        # Patterns that indicate internal reasoning exposure IN USER-FACING RESPONSE
+        # These should only trigger if they appear at start of response (first 200 chars)
+        # to avoid false positives from phrases like "The WHO guidelines should..."
+        response_start = response[:200].lower().strip()
+        
         exposure_patterns = [
             "the user wants",
             "the user might",
@@ -225,14 +235,14 @@ class AgentService:
             "the assistant should",
             "i should respond",
             "i need to",
-            "the response should",
             "let me think",
+            "i'll need to",
+            "we need to first",
         ]
         
-        response_lower = response.lower()
         for pattern in exposure_patterns:
-            if pattern in response_lower:
-                logger.warning(f"Reasoning exposure detected: '{pattern}' found in response")
+            if pattern in response_start:
+                logger.warning(f"Reasoning exposure detected: '{pattern}' found in response start")
                 return True
         
         return False
@@ -1414,10 +1424,14 @@ class AgentService:
                     f"Size: {full_length} characters total (preview showing first 1,000)"
                 )
 
-            # Add content with clear delimiter
-            context_parts.append(f"\n--- DATA START ---\n{content[:1000]}")
+            # Add content with clear delimiter - use more content for data files
+            # For CSV/Excel, include more rows for visualization
+            max_content_length = 5000 if file_type.lower() in ['csv', 'excel', 'xlsx'] else 2000
+            context_parts.append(f"\n--- DATA START ---\n{content[:max_content_length]}")
             if truncated:
-                context_parts.append("\n--- DATA TRUNCATED (use above preview) ---")
+                context_parts.append(f"\n--- DATA TRUNCATED (showing {min(max_content_length, len(content))} of {full_length} chars) ---")
+                context_parts.append("\n✅ YOU CAN STILL CREATE CHARTS with this preview data!")
+                context_parts.append("✅ Parse the rows above and call generate_chart - don't ask for more data!")
             else:
                 context_parts.append("\n--- DATA END ---")
 

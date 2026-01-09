@@ -84,10 +84,14 @@ Need more? Ask about specific data points."
 ⚠️ CRITICAL: NEVER include ![image](data:image...) markdown - the chart displays automatically!
 
 **When User Uploads CSV/Excel Files:**
-✅ ALWAYS offer to visualize the data with a chart
-✅ Use scan_document first to read the file
-✅ Then call generate_chart with the extracted data
-✅ Example: "I've analyzed the data. Let me create a visualization..." → call generate_chart
+✅ ALWAYS visualize the data when user asks for visualization or trends
+✅ If document ALREADY PROVIDED in context: directly call generate_chart with available data
+✅ Parse the data rows/columns from the document content provided
+✅ Even if data is truncated, generate chart with available rows - DON'T ask for more!
+✅ Extract data structure: find column names in header, parse numerical values from rows
+✅ Call generate_chart with: data array, chart_type, x_column, y_column, title
+✅ Example response: "Creating visualization..." → [generate_chart tool call] → "Chart created! [Brief insights]"
+❌ DON'T ask "send full data" or "data incomplete" - use what's provided!
 
 **When Search Returns Numerical/Time-Series Data:**
 ✅ If user asks to "understand trends" or "visualize" → generate chart from search results
