@@ -106,19 +106,55 @@ class QueryAnalyzer:
         """
         message_lower = message.lower()
         
-        # Search trigger keywords
+        # Search trigger keywords - EXPANDED LIST
         search_keywords = [
             'latest', 'recent', 'new', 'current', 'update', 'up-to-date',
             'policy', 'regulation', 'legislation', 'law', 'government',
             'research', 'study', 'studies', 'who', 'epa', 'guideline',
             'news', 'development', 'announcement', 'breaking',
-            '2024', '2025', '2026', 'this year', 'last year'
+            '2024', '2025', '2026', 'this year', 'last year', 'past',
+            'statistics', 'stats', 'data', 'chart', 'graph', 'visualize',
+            'show me', 'generate', 'deaths', 'mortality', 'impact',
+            'trends', 'analysis', 'report', 'findings', 'evidence',
+            'global', 'worldwide', 'international', 'epidemiology',
+            'health effects', 'risk assessment', 'burden', 'prevalence'
         ]
         
-        requires_search = any(keyword in message_lower for keyword in search_keywords)
+        # Data analysis keywords that definitely require search
+        data_keywords = [
+            'statistics', 'stats', 'data', 'chart', 'graph', 'visualize',
+            'show me', 'generate', 'deaths', 'mortality', 'trends',
+            'analysis', 'report', 'findings', 'evidence', 'burden'
+        ]
+        
+        # Check for data/statistics requests
+        has_data_keywords = any(keyword in message_lower for keyword in data_keywords)
+        
+        # Check for temporal keywords (past years, recent, etc.)
+        temporal_keywords = ['2023', '2024', '2025', '2026', 'past', 'last year', 'recent', 'latest']
+        has_temporal = any(keyword in message_lower for keyword in temporal_keywords)
+        
+        # Check for research/health impact keywords
+        research_keywords = ['deaths', 'mortality', 'impact', 'burden', 'epidemiology', 'risk']
+        has_research = any(keyword in message_lower for keyword in research_keywords)
+        
+        # DEFINITE search triggers
+        requires_search = (
+            any(keyword in message_lower for keyword in search_keywords) or
+            has_data_keywords or
+            (has_temporal and has_research) or
+            'pollution' in message_lower and (has_data_keywords or has_temporal)
+        )
         
         # Generate search query
-        search_query = message if requires_search else None
+        if requires_search:
+            # For data/statistics requests, create a focused search query
+            if has_data_keywords:
+                search_query = message + " WHO EPA statistics data"
+            else:
+                search_query = message
+        else:
+            search_query = None
         
         return {
             "requires_search": requires_search,
@@ -126,25 +162,85 @@ class QueryAnalyzer:
         }
 
     @staticmethod
-    def detect_scraping_query(message: str) -> dict[str, Any]:
+    def detect_data_analysis_query(message: str) -> dict[str, Any]:
         """
-        Detect if the query requires web scraping.
+        Detect if the query is asking for data analysis, statistics, or visualizations.
+        This is separate from location-based air quality queries.
         
         Returns:
             Dict with:
-                - requires_scraping: bool
-                - url: URL to scrape if detected
+                - is_data_analysis: bool
+                - requires_search: bool
+                - requires_visualization: bool
+                - topic: detected topic (deaths, trends, statistics, etc.)
+                - time_period: detected time period if any
         """
-        # Extract URLs
-        url_pattern = r'https?://[^\s]+'
-        urls = re.findall(url_pattern, message)
+        message_lower = message.lower()
         
-        scraping_keywords = ['scrape', 'check this', 'analyze this', 'what does this say']
-        requires_scraping = len(urls) > 0 or any(keyword in message.lower() for keyword in scraping_keywords)
+        # Data analysis keywords
+        data_keywords = [
+            'statistics', 'stats', 'data', 'chart', 'graph', 'plot', 'visualize',
+            'show me', 'generate', 'create', 'display', 'deaths', 'mortality',
+            'trends', 'analysis', 'report', 'findings', 'evidence', 'burden',
+            'prevalence', 'epidemiology', 'risk assessment', 'impact', 'global',
+            'worldwide', 'international', 'numbers', 'figures', 'metrics'
+        ]
+        
+        # Visualization keywords
+        viz_keywords = [
+            'chart', 'graph', 'plot', 'visualize', 'show me', 'generate',
+            'create', 'display', 'diagram', 'map'
+        ]
+        
+        # Time period keywords
+        time_keywords = [
+            '2023', '2024', '2025', '2026', 'past', 'last year', 'recent',
+            'latest', 'current', 'this year', 'previous', 'annual', 'yearly'
+        ]
+        
+        # Topic detection
+        topic_keywords = {
+            'deaths': ['deaths', 'mortality', 'fatalities', 'died', 'killed'],
+            'health': ['health', 'disease', 'illness', 'medical', 'hospital'],
+            'pollution': ['pollution', 'air quality', 'contamination', 'emissions'],
+            'trends': ['trends', 'changes', 'patterns', 'evolution', 'over time'],
+            'statistics': ['statistics', 'stats', 'data', 'numbers', 'figures']
+        }
+        
+        # Check for data analysis intent
+        has_data_keywords = any(keyword in message_lower for keyword in data_keywords)
+        has_viz_keywords = any(keyword in message_lower for keyword in viz_keywords)
+        has_time_keywords = any(keyword in message_lower for keyword in time_keywords)
+        
+        # Determine topic
+        detected_topic = None
+        for topic, keywords in topic_keywords.items():
+            if any(keyword in message_lower for keyword in keywords):
+                detected_topic = topic
+                break
+        
+        # Determine time period
+        time_period = None
+        for time_kw in time_keywords:
+            if time_kw in message_lower:
+                time_period = time_kw
+                break
+        
+        # This is data analysis if it has data keywords OR (visualization + time period)
+        is_data_analysis = has_data_keywords or (has_viz_keywords and has_time_keywords)
+        
+        # Data analysis almost always requires search for current statistics
+        requires_search = is_data_analysis
+        
+        # Requires visualization if asking for charts/graphs
+        requires_visualization = has_viz_keywords
         
         return {
-            "requires_scraping": requires_scraping and len(urls) > 0,
-            "url": urls[0] if urls else None
+            "is_data_analysis": is_data_analysis,
+            "requires_search": requires_search,
+            "requires_visualization": requires_visualization,
+            "topic": detected_topic,
+            "time_period": time_period
         }
 
     @staticmethod
@@ -307,7 +403,7 @@ class QueryAnalyzer:
         aq_analysis = QueryAnalyzer.detect_air_quality_query(message)
         forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
         search_analysis = QueryAnalyzer.detect_search_query(message)
-        scrape_analysis = QueryAnalyzer.detect_scraping_query(message)
+        data_analysis = QueryAnalyzer.detect_data_analysis_query(message)
         
         # Call air quality tools
         if aq_analysis["is_air_quality"] and (aq_analysis["cities"] or aq_analysis["coordinates"]):
@@ -381,18 +477,29 @@ class QueryAnalyzer:
             except Exception as e:
                 logger.error(f"Proactive search call failed: {e}")
         
-        # Call scraping tool
-        if scrape_analysis["requires_scraping"] and scrape_analysis["url"]:
+        # Call data analysis tools (search + visualization)
+        if data_analysis["is_data_analysis"]:
             try:
-                logger.info(f"🔧 PROACTIVE CALL: scrape_website for {scrape_analysis['url']}")
-                result = await tool_executor.execute_async("scrape_website", {"url": scrape_analysis["url"]})
-                tool_results["scrape_website"] = result
-                tools_called.append("scrape_website")
+                # Create a focused search query for data analysis
+                search_query = message
+                if data_analysis["topic"]:
+                    search_query += f" {data_analysis['topic']} WHO EPA statistics data"
+                if data_analysis["time_period"]:
+                    search_query += f" {data_analysis['time_period']}"
+                
+                logger.info(f"🔧 PROACTIVE CALL: search_web for data analysis '{search_query[:50]}...'")
+                result = await tool_executor.execute_async("search_web", {"query": search_query})
+                tool_results["data_analysis_search"] = result
+                tools_called.append("search_web")
                 
                 # Format result for context
-                context_parts.append(f"\n**CONTENT from {scrape_analysis['url']}:**\n{format_scrape_result(result)}\n")
+                context_parts.append(f"\n**DATA ANALYSIS INFORMATION from web search:**\n{format_search_result(result)}\n")
+                
+                # Note: Visualization tool not yet implemented in tool executor
+                # For now, just provide search results that can be used for visualization
+                
             except Exception as e:
-                logger.error(f"Proactive scrape call failed: {e}")
+                logger.error(f"Proactive data analysis call failed: {e}")
         
         # Build context injection
         context_injection = ""
