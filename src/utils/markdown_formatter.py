@@ -52,7 +52,8 @@ class MarkdownFormatter:
 
         # Apply formatting in specific order
         text = MarkdownFormatter._normalize_line_breaks(text)
-        text = MarkdownFormatter._remove_chart_markdown(text)  # Remove any chart images first
+        # KEEP chart images embedded in markdown for automatic frontend rendering
+        # text = MarkdownFormatter._remove_chart_markdown(text)  # Charts now stay in markdown
         text = MarkdownFormatter._fix_broken_parentheses(text)
         text = MarkdownFormatter._convert_emoji_numbering(text)
         text = MarkdownFormatter._format_headers(text)

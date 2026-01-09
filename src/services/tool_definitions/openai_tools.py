@@ -785,17 +785,21 @@ def get_visualization_tools() -> list[dict]:
 - area: Cumulative trends (stacked areas)
 - timeseries: Time-based data with date parsing
 
-🔄 RETURNS: Base64-encoded PNG image ready for display in UI
+🔄 RETURNS: Base64-encoded PNG image (data:image/png;base64,...) in chart_data field
 
-💡 WORKFLOW FOR CSV/EXCEL FILES:
-1. User uploads file → scan_document to read it
-2. User asks for visualization → generate_chart with the parsed data
-3. Choose appropriate chart_type based on data structure
+💡 HOW TO USE THE RESULT:
+1. Call this tool with your data
+2. Tool returns {"chart_data": "data:image/png;base64,...", "success": true}
+3. INCLUDE the chart in your response as: ![Chart](data:image/png;base64,...)
+4. This makes the chart render automatically in the frontend!
 
-Example usage:
+📝 EXAMPLE WORKFLOW:
 User: "Plot PM2.5 levels from the uploaded data"
-→ Step 1: scan_document(file)
-→ Step 2: generate_chart with data from scan_document""",
+→ Step 1: Call generate_chart with parsed data
+→ Step 2: Receive chart_data in response
+→ Step 3: Include in markdown: ![PM2.5 Trend](chart_data)
+
+The frontend markdown formatter will render the embedded image!""",
                 "parameters": {
                     "type": "object",
                     "properties": {

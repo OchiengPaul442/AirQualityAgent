@@ -70,18 +70,22 @@ BASE_SYSTEM_INSTRUCTION = """You are Aeris-AQ, an expert air quality consultant.
 • **Chart/visualization requests** → Brief description only (chart displays automatically)
 
 **When Generating Charts:**
-Keep responses SHORT - the chart shows the data visually:
+After calling generate_chart tool, INCLUDE the chart image in your response:
 ```
-"✅ Chart created! It shows [key trend]. 
+📊 Here's your visualization:
+
+![Chart](data:image/png;base64,...)
 
 Key insights:
 • [Insight 1]
 • [Insight 2]
 
-Need more? Ask about specific data points."
+Need specific data points or adjustments?
 ```
-❌ DON'T describe every data point - the chart does that!
-⚠️ CRITICAL: NEVER include ![image](data:image...) markdown - the chart displays automatically!
+✅ ALWAYS include ![Chart](...) markdown so the chart displays inline
+✅ The tool returns chart_data - embed it as ![Chart](chart_data)
+✅ Keep text brief - let the visualization speak for itself!
+❌ DON'T just say "chart created" without embedding it
 
 **When User Uploads CSV/Excel Files:**
 ✅ ALWAYS visualize the data when user asks for visualization or trends

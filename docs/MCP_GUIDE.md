@@ -310,34 +310,63 @@ Pass environment variables to MCP servers:
 
 ---
 
-## Chart Generation Fix (Jan 2026)
+## Chart Generation & Visualization (Jan 2026)
 
-### Problem
+### How It Works
 
-Chart requests caused infinite loading due to AI provider errors when processing large visualizations.
+Charts are now **embedded directly in markdown responses** for automatic rendering:
 
-### Solutions (All Providers ✅)
+1. 📊 **AI generates chart** using `generate_chart` tool
+2. 🖼️ **Tool returns base64 image** as `data:image/png;base64,...`
+3. ✅ **AI embeds in response** using markdown syntax: `![Chart](data:image/png;base64,...)`
+4. 🎉 **Frontend renders automatically** - no special handling needed!
 
-**Works consistently across Gemini, OpenAI, and Ollama**
+### Best Practices (Like ChatGPT)
+
+✅ **Embedded Images**: Charts are inline markdown images, not separate fields  
+✅ **Auto-Rendering**: Markdown formatters display charts automatically  
+✅ **Data URI Format**: Base64-encoded PNG embedded directly in response  
+✅ **Self-Contained**: Single markdown response contains both text and visualization
+
+### Technical Implementation
 
 **1. Data Sampling**: Max 1000 rows (was 5000), prioritizing recent data  
 **2. Font Fix**: DejaVu Sans for Unicode support (PM₂.₅)  
 **3. Error Handling**: Graceful fallback for all 3 providers  
-**4. Response Optimization**: AI keeps chart descriptions brief  
-**5. Chart Capture**: All providers extract chart_result
+**4. Markdown Embedding**: Charts included as `![Chart](data:image/...)` in response  
+**5. No Stripping**: Markdown formatter preserves chart images
 
-| Provider | Error Handling         | Chart Capture |
-| -------- | ---------------------- | ------------- |
-| Ollama   | ✅ 500 errors          | ✅ Yes        |
-| OpenAI   | ✅ Exceptions          | ✅ Yes        |
-| Gemini   | ✅ Generation failures | ✅ Yes        |
+| Provider | Error Handling         | Chart Embedding |
+| -------- | ---------------------- | --------------- |
+| Ollama   | ✅ 500 errors          | ✅ Yes          |
+| OpenAI   | ✅ Exceptions          | ✅ Yes          |
+| Gemini   | ✅ Generation failures | ✅ Yes          |
 
 ### Results
 
 - ✅ <2 second chart generation (was timing out)
+- ✅ Charts render inline with text
+- ✅ No special frontend handling needed
+- ✅ Compatible with all markdown renderers
+- ✅ **Works like ChatGPT - embed & render**
 - ✅ User notified when data sampled
 - ✅ Helpful alternatives on errors
 - ✅ **Consistent across all 3 providers**
 - ✅ No more infinite loading
 
-**Test**: `python test_cross_provider_charts.py`
+### Example Response
+
+```markdown
+📊 Here's your PM2.5 trend visualization:
+
+![PM2.5 Trend Chart](data:image/png;base64,iVBORw0KG...)
+
+Key insights:
+• Peak levels on Jan 5th (65 µg/m³)
+• Improving trend over last 3 days
+• Currently at "Moderate" level
+
+Need specific data points or date ranges?
+```
+
+**The chart displays automatically when the markdown is rendered!**

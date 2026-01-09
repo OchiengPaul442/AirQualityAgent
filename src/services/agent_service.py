@@ -1158,20 +1158,10 @@ class AgentService:
                     chart_result = proactive_tool_results.get("generate_chart")
                     logger.info(f"Looking for chart in proactive results: {chart_result is not None}")
                 
-                # Remove any image markdown that the AI might have generated
-                # (chart data is sent separately via API response)
-                if "response" in response_data and response_data["response"]:
-                    import re
-
-                    # Remove markdown images with data URIs (with or without https:// prefix)
-                    original_response = response_data["response"]
-                    response_data["response"] = re.sub(
-                        r'!\[([^\]]*)\]\((https?://)?data:image/[^)]+\)',
-                        '',
-                        response_data["response"]
-                    ).strip()
-                    if original_response != response_data["response"]:
-                        logger.info("🧹 Removed chart markdown from AI response (chart sent separately)")
+                # KEEP chart markdown embedded in response for automatic rendering
+                # Charts are now embedded directly in markdown for frontend rendering
+                # No need to strip them - this allows markdown formatters to display them
+                logger.info("📊 Chart kept embedded in markdown response for automatic rendering")
                 
                 if chart_result and isinstance(chart_result, dict):
                     response_data["chart_data"] = chart_result.get("chart_data")
