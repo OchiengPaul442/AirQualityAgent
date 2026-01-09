@@ -48,12 +48,12 @@ The streaming and thinking process implementation was based on an incorrect appr
 #### Problem Solved
 
 1. **ASCII Charts Not Actual Visualizations**: AI was returning text-based ASCII charts instead of real matplotlib/plotly visualizations
-2. **Thinking Process Shown in Final Response**: Reasoning steps were exposed in final response, cluttering the UI (should only show during streaming like ChatGPT/DeepSeek/Kimi K2)
+2. **Thinking Process Shown in Final Response**: Reasoning steps were exposed in final response, cluttering the UI (should only show during streaming, not in the final output)
 3. **No Separation of Thinking and Content**: Streaming didn't properly separate thinking events from content events
 
 #### Solution: Complete Visualization & Streaming Overhaul
 
-**Professional chart generation** with matplotlib/plotly + **proper streaming implementation** following industry best practices (ChatGPT, DeepSeek, Kimi K2).
+**Professional chart generation** with matplotlib/plotly + **proper streaming implementation** following modern AI agent best practices.
 
 #### New Features
 
@@ -909,7 +909,7 @@ OpenMeteo       ✅ PASSED (Concentration handling)
 
 **Problem**: Agent was giving 300-word apologies instead of using tools. System prompt had bloated to 33,828 characters causing paralysis by analysis.
 
-**Solution**: Complete rewrite following OpenAI/Google best practices. Reduced to 500 characters with "Tool-First Architecture".
+**Solution**: Complete rewrite following AI agent best practices. Reduced to 500 characters with "Tool-First Architecture".
 
 #### Changed
 

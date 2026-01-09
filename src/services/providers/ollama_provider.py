@@ -378,7 +378,7 @@ class OllamaProvider(BaseAIProvider):
         if response is None:
             logger.error("Ollama response is None after retry loop - all attempts failed")
             return {
-                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "response": "I was unable to process your request. The AI service did not respond. Please try again or rephrase your question.",
                 "tools_used": [],
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
@@ -397,7 +397,7 @@ class OllamaProvider(BaseAIProvider):
         if not has_message:
             logger.error(f"Ollama response message is None or empty: {response}")
             return {
-                "response": "I apologize, but I received an invalid response from the AI service. Please try again.",
+                "response": "I was unable to generate a response. The AI service returned invalid data. Please try again.",
                 "tools_used": [],
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
@@ -486,7 +486,7 @@ class OllamaProvider(BaseAIProvider):
                 if not final_message:
                     logger.error(f"Ollama final response message is None: {final_response}")
                     return {
-                        "response": "I apologize, but I encountered an error processing the tool results. Please try again.",
+                        "response": "I was unable to process the data retrieved. Please try again or rephrase your question.",
                         "tools_used": tools_used,
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
@@ -495,7 +495,7 @@ class OllamaProvider(BaseAIProvider):
             except Exception as e:
                 logger.error(f"Ollama final response error: {e}")
                 return {
-                    "response": "I apologize, but I encountered an error processing the tool results. Please try again.",
+                    "response": "I was unable to process the data retrieved. Please try again with a different question.",
                     "tools_used": tools_used,
                     "tokens_used": 0,
                     "cost_estimate": 0.0,
@@ -507,7 +507,7 @@ class OllamaProvider(BaseAIProvider):
             except (TypeError, KeyError, AttributeError) as e:
                 logger.error(f"Invalid response structure: {response}, error: {e}")
                 return {
-                    "response": "I apologize, but I received an invalid response from the AI service. Please try again.",
+                    "response": "I was unable to generate a valid response. The AI service returned unexpected data. Please try again.",
                     "tools_used": tools_used,
                     "tokens_used": 0,
                     "cost_estimate": 0.0,
@@ -542,10 +542,16 @@ class OllamaProvider(BaseAIProvider):
                 cleaned_response = "Here's the information I found:\n\n" + "\n\n".join(fallback_parts)
                 logger.info("✅ Generated fallback response from tool results")
             else:
-                cleaned_response = "I apologize, but I couldn't generate a proper response from the data retrieved."
+                cleaned_response = "I was unable to find the data needed to answer your question. Please try rephrasing or asking about a different topic."
+        
+        # CRITICAL FIX: If no tools were used and response is empty/generic, provide helpful message
+        if not tools_used and (not cleaned_response or len(cleaned_response) < 50):
+            logger.warning("⚠️ No tools called and response is empty/short - may need data retrieval")
+            if not cleaned_response:
+                cleaned_response = "I was unable to find the specific data needed to answer your question. Please try rephrasing or providing more details."
 
         return {
-            "response": cleaned_response or "I apologize, but I couldn't generate a response.",
+            "response": cleaned_response or "I was unable to generate a response. Please try again with a different question.",
             "tools_used": tools_used,
             "thinking_steps": thinking_steps,
             "reasoning_content": "\n".join(thinking_steps) if thinking_steps else None,

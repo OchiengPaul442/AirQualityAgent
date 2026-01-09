@@ -79,7 +79,26 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = (
         16384  # Maximum tokens for AI responses - increased for comprehensive outputs
     )
-
+    # Role-specific max tokens (configurable per role)
+    MAX_TOKENS_EXECUTIVE: int = 1500
+    MAX_TOKENS_TECHNICAL: int = 2000
+    MAX_TOKENS_GENERAL: int = 1500
+    MAX_TOKENS_SIMPLE: int = 1200
+    MAX_TOKENS_POLICY: int = 2000
+    
+    # Style preset temperature/top_p (configurable per role)
+    TEMPERATURE_EXECUTIVE: float = 0.3
+    TEMPERATURE_TECHNICAL: float = 0.4
+    TEMPERATURE_GENERAL: float = 0.5
+    TEMPERATURE_SIMPLE: float = 0.6
+    TEMPERATURE_POLICY: float = 0.35
+    
+    TOP_P_EXECUTIVE: float = 0.85
+    TOP_P_TECHNICAL: float = 0.88
+    TOP_P_GENERAL: float = 0.9
+    TOP_P_SIMPLE: float = 0.92
+    TOP_P_POLICY: float = 0.87
+    
     # Image Upload Support
     SUPPORT_IMAGE_UPLOAD: bool = True  # Enable/disable image upload feature
     MAX_IMAGE_SIZE_MB: int = 10  # Maximum image size in megabytes
@@ -98,7 +117,7 @@ class Settings(BaseSettings):
 
     # Reasoning Engine
     ENABLE_REASONING_DISPLAY: bool = True  # Show thinking process to users
-    REASONING_STYLE: str = "human"  # human (ChatGPT-like) or technical
+    REASONING_STYLE: str = "human"  # human (conversational) or technical
 
     # Document Processing Limits
     DOCUMENT_MAX_LENGTH_PDF: int = 50000  # Max characters for PDF processing

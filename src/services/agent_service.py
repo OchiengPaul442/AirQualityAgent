@@ -503,7 +503,7 @@ class AgentService:
         - Query characteristics
         - User expectations for freshness
 
-        Similar to how Claude/ChatGPT handle caching with different freshness requirements.
+        Uses modern AI caching strategies with context-aware freshness requirements.
 
         Args:
             cache_key: Generated cache key
@@ -1011,28 +1011,30 @@ class AgentService:
                 "security_filtered": True,
             }
 
-        # PROACTIVE TOOL CALLING SYSTEM
-        # Analyze query and call tools BEFORE sending to AI to ensure tools are always used
-        # This bypasses the model's weak tool-calling capability by proactively detecting intent
-        logger.info(f"🔍 QueryAnalyzer: Analyzing query for proactive tool calling...")
+        # INTELLIGENT PROACTIVE TOOL CALLING SYSTEM
+        # Optimized for: low-quality models, speed, accuracy
+        # Uses smart classification to skip unnecessary tool calls
+        logger.info(f"🔍 Analyzing query for intelligent tool selection...")
 
         proactive_results = await QueryAnalyzer.proactively_call_tools(message, self.tool_executor)
 
         tools_called_proactively = proactive_results.get("tools_called", [])
         context_injection = proactive_results.get("context_injection", "")
+        classification = proactive_results.get("query_classification", {})
+        
+        query_type = classification.get("query_type", "general")
+        logger.info(f"📊 Query classified as: {query_type}")
 
         if tools_called_proactively:
             logger.info(
-                f"✅ QueryAnalyzer called {len(tools_called_proactively)} tool(s) proactively: {tools_called_proactively}"
+                f"✅ Proactively called {len(tools_called_proactively)} tool(s): {tools_called_proactively}"
             )
-            # Inject tool results into system instruction so AI can format them
+            # Inject tool results into system instruction
             if context_injection:
                 system_instruction += context_injection
-                logger.info(
-                    f"📝 Injected {len(context_injection)} characters of tool results into system instruction"
-                )
+                logger.info(f"📝 Injected tool results into context")
         else:
-            logger.info("ℹ️ QueryAnalyzer: No tools needed for this query")
+            logger.info(f"ℹ️ No tools needed (query type: {query_type})")
 
         # Process with provider
 
@@ -1386,7 +1388,7 @@ class AgentService:
         Filter out any sensitive information from the response.
 
         This includes API keys, tokens, internal methods, tool calls, internal IDs, etc.
-        Based on best practices from leading AI companies (OpenAI, Gemini, Kimi).
+        Based on security best practices for production AI systems.
 
         If sensitive information is detected, provide a professional response instead of
         showing redaction markers to maintain user trust and professionalism.

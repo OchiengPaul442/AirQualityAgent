@@ -13,7 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 class QueryAnalyzer:
-    """Analyzes queries and determines which tools need to be called proactively."""
+    """
+    Analyzes queries and determines which tools need to be called proactively.
+    
+    Implements intelligent tool selection to optimize for:
+    - Low-quality AI models (proactive tool calling)
+    - Speed (parallel tool execution)
+    - Accuracy (smart query classification)
+    """
 
     # City patterns for detection
     AFRICAN_CITIES = [
@@ -80,6 +87,100 @@ class QueryAnalyzer:
         "mexico city",
         "sao paulo",
     ]
+
+    @staticmethod
+    def classify_query_type(message: str) -> dict[str, Any]:
+        """
+        Intelligently classify query to determine optimal tool strategy.
+        
+        This reduces unnecessary tool calls and improves response speed.
+        
+        Returns:
+            Dict with:
+                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research'
+                - confidence: float (0-1)
+                - recommended_tools: list of tool names
+                - skip_ai_tools: bool (whether AI should call additional tools)
+        """
+        message_lower = message.lower()
+        
+        # Educational queries - No tools needed, pure AI knowledge
+        educational_patterns = [
+            r'\bwhat is\b',
+            r'\bexplain\b',
+            r'\bdefine\b',
+            r'\bhow does\b',
+            r'\bwhy does\b',
+            r'\btell me about\b',
+            r'\bdifference between\b',
+            r'\bcompare.*and\b',  # "compare PM2.5 and PM10" (concepts, not cities)
+        ]
+        
+        # Check if it's educational (no location mentions)
+        if any(re.search(pattern, message_lower) for pattern in educational_patterns):
+            # Verify it's not location-specific
+            if not any(city in message_lower for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES):
+                return {
+                    "query_type": "educational",
+                    "confidence": 0.9,
+                    "recommended_tools": [],
+                    "skip_ai_tools": True,  # AI can answer without tools
+                }
+        
+        # Location-specific queries - Need air quality tools
+        location_indicators = [
+            'in kampala', 'in london', 'in nairobi', 'in paris',
+            'air quality', 'aqi', 'pollution level', 'pm2.5', 'pm10',
+            'safe to', 'breathe', 'outdoor', 'exercise',
+        ]
+        
+        has_location = any(city in message_lower for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES)
+        has_aq_keyword = any(indicator in message_lower for indicator in location_indicators)
+        
+        if has_location and has_aq_keyword:
+            return {
+                "query_type": "location_specific",
+                "confidence": 0.95,
+                "recommended_tools": ["get_city_air_quality", "get_african_city_air_quality"],
+                "skip_ai_tools": False,  # Let proactive system handle it
+            }
+        
+        # Data analysis queries - Need web search + visualization
+        data_indicators = [
+            'statistics', 'stats', 'data', 'chart', 'graph', 'trend',
+            'deaths', 'mortality', 'study', 'research', 'report',
+        ]
+        
+        if any(indicator in message_lower for indicator in data_indicators):
+            return {
+                "query_type": "data_analysis",
+                "confidence": 0.85,
+                "recommended_tools": ["search_web", "generate_chart"],
+                "skip_ai_tools": False,
+            }
+        
+        # Research queries - Need web search only
+        research_indicators = [
+            'latest', 'recent', 'current', 'new', 'update',
+            'policy', 'regulation', 'guideline', 'standard',
+            '2024', '2025', '2026',
+        ]
+        
+        if any(indicator in message_lower for indicator in research_indicators):
+            return {
+                "query_type": "research",
+                "confidence": 0.8,
+                "recommended_tools": ["search_web"],
+                "skip_ai_tools": False,
+            }
+        
+        # Default: Let proactive system decide
+        return {
+            "query_type": "general",
+            "confidence": 0.5,
+            "recommended_tools": [],
+            "skip_ai_tools": False,
+        }
 
     @staticmethod
     def detect_air_quality_query(message: str) -> dict[str, Any]:
@@ -155,8 +256,9 @@ class QueryAnalyzer:
     @staticmethod
     def detect_search_query(message: str) -> dict[str, Any]:
         """
-        Detect if the query requires web search.
-
+        Detect if query requires web search to supplement response.
+        Liberal by default - searches to provide current, comprehensive information.
+        
         Returns:
             Dict with:
                 - requires_search: bool
@@ -164,121 +266,29 @@ class QueryAnalyzer:
         """
         message_lower = message.lower()
 
-        # Search trigger keywords - EXPANDED LIST
-        search_keywords = [
-            "latest",
-            "recent",
-            "new",
-            "current",
-            "update",
-            "up-to-date",
-            "policy",
-            "regulation",
-            "legislation",
-            "law",
-            "government",
-            "research",
-            "study",
-            "studies",
-            "who",
-            "epa",
-            "guideline",
-            "news",
-            "development",
-            "announcement",
-            "breaking",
-            "2024",
-            "2025",
-            "2026",
-            "this year",
-            "last year",
-            "past",
-            "statistics",
-            "stats",
-            "data",
-            "chart",
-            "graph",
-            "visualize",
-            "show me",
-            "generate",
-            "deaths",
-            "mortality",
-            "impact",
-            "trends",
-            "analysis",
-            "report",
-            "findings",
-            "evidence",
-            "global",
-            "worldwide",
-            "international",
-            "epidemiology",
-            "health effects",
-            "risk assessment",
-            "burden",
-            "prevalence",
-        ]
-
-        # Data analysis keywords that definitely require search
-        data_keywords = [
-            "statistics",
-            "stats",
-            "data",
-            "chart",
-            "graph",
-            "visualize",
-            "show me",
-            "generate",
-            "deaths",
-            "mortality",
-            "trends",
-            "analysis",
-            "report",
-            "findings",
-            "evidence",
-            "burden",
-        ]
-
-        # Check for data/statistics requests
-        has_data_keywords = any(keyword in message_lower for keyword in data_keywords)
-
-        # Check for temporal keywords (past years, recent, etc.)
-        temporal_keywords = [
-            "2023",
-            "2024",
-            "2025",
-            "2026",
-            "past",
-            "last year",
-            "recent",
-            "latest",
-        ]
-        has_temporal = any(keyword in message_lower for keyword in temporal_keywords)
-
-        # Check for research/health impact keywords
-        research_keywords = ["deaths", "mortality", "impact", "burden", "epidemiology", "risk"]
-        has_research = any(keyword in message_lower for keyword in research_keywords)
-
-        # DEFINITE search triggers
-        requires_search = (
-            any(keyword in message_lower for keyword in search_keywords)
-            or has_data_keywords
-            or (has_temporal and has_research)
-            or "pollution" in message_lower
-            and (has_data_keywords or has_temporal)
-        )
-
-        # Generate search query
-        if requires_search:
-            # For data/statistics requests, create a focused search query
-            if has_data_keywords:
-                search_query = message + " WHO EPA statistics data"
-            else:
-                search_query = message
-        else:
-            search_query = None
-
-        return {"requires_search": requires_search, "search_query": search_query}
+        # Keywords that indicate need for current/supplemental information
+        temporal_keywords = ["latest", "recent", "new", "current", "update", "2024", "2025", "2026", "this year", "last year"]
+        policy_keywords = ["policy", "regulation", "legislation", "law", "government"]
+        research_keywords = ["research", "study", "studies", "report", "findings", "evidence"]
+        data_keywords = ["statistics", "stats", "data", "trends", "analysis", "deaths", "mortality"]
+        
+        # Exclude simple definitional questions
+        basic_definition = any(q in message_lower for q in ["what is", "what are", "define", "explain"]) and len(message.split()) < 12
+        
+        # Search if: temporal, policy, research, data keywords present OR not a basic definition
+        has_search_keyword = any(k in message_lower for k in temporal_keywords + policy_keywords + research_keywords + data_keywords)
+        
+        requires_search = has_search_keyword or not basic_definition
+        
+        # Generate focused search query
+        search_query = message
+        if any(k in message_lower for k in data_keywords):
+            search_query += " WHO EPA statistics"
+        
+        return {
+            "requires_search": requires_search,
+            "search_query": search_query if requires_search else None
+        }
 
     @staticmethod
     def detect_data_analysis_query(message: str) -> dict[str, Any]:
@@ -557,8 +567,13 @@ class QueryAnalyzer:
     @staticmethod
     async def proactively_call_tools(message: str, tool_executor: Any) -> dict[str, Any]:
         """
-        Analyze the query and proactively call necessary tools.
-
+        Intelligently analyze query and proactively call relevant tools.
+        
+        Optimized for:
+        - Low-quality AI models (bypasses weak tool calling)
+        - Speed (parallel execution, skip unnecessary tools)
+        - Accuracy (smart classification reduces errors)
+        
         Args:
             message: User's query
             tool_executor: ToolExecutor instance
@@ -568,18 +583,36 @@ class QueryAnalyzer:
                 - tool_results: Dict mapping tool names to results
                 - tools_called: List of tool names called
                 - context_injection: String to inject into AI context
+                - query_classification: Classification results
         """
+        logger.info(f"🔍 Analyzing query: {message[:100]}...")
+        
+        # STEP 1: Classify query intelligently
+        classification = QueryAnalyzer.classify_query_type(message)
+        logger.info(f"📊 Query type: {classification['query_type']} (confidence: {classification['confidence']:.2f})")
+        
+        # STEP 2: Early return for educational queries (no tools needed)
+        if classification["query_type"] == "educational" and classification["skip_ai_tools"]:
+            logger.info("✅ Educational query - no tools needed")
+            return {
+                "tool_results": {},
+                "tools_called": [],
+                "context_injection": "",
+                "query_classification": classification,
+            }
+
+        # STEP 3: Run analyses based on classification
         tool_results = {}
         tools_called = []
         context_parts = []
 
-        # Analyze query
+        # Analyze query intents in parallel
         aq_analysis = QueryAnalyzer.detect_air_quality_query(message)
         forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
         search_analysis = QueryAnalyzer.detect_search_query(message)
         data_analysis = QueryAnalyzer.detect_data_analysis_query(message)
 
-        # Call air quality tools
+        # Call air quality tools (optimized - only if location detected)
         if aq_analysis["is_air_quality"] and (aq_analysis["cities"] or aq_analysis["coordinates"]):
             # Call for African cities
             for city in aq_analysis["african_cities"]:
@@ -656,14 +689,27 @@ class QueryAnalyzer:
                 except Exception as e:
                     logger.error(f"Proactive forecast call failed for {city}: {e}")
 
-        # Call search tool
-        if search_analysis["requires_search"] and search_analysis["search_query"]:
+        # Call search tool intelligently (optimized to supplement, not overwhelm)
+        # CRITICAL FIX: Ensure research and data_analysis queries ALWAYS trigger search
+        should_search = (
+            search_analysis["requires_search"] 
+            or classification["query_type"] in ["data_analysis", "research"]
+        )
+        
+        # CRITICAL FIX: Generate search query if not provided but should_search is True
+        search_query = search_analysis["search_query"]
+        if should_search and not search_query:
+            # Fallback: use the original message as search query
+            search_query = message
+            logger.info(f"🔍 Generated fallback search query from message: '{search_query[:50]}...'")
+        
+        if should_search and search_query:
             try:
                 logger.info(
-                    f"🔧 PROACTIVE CALL: search_web for '{search_analysis['search_query'][:50]}...'"
+                    f"🔍 SMART SEARCH: '{search_query[:50]}...' (Type: {classification['query_type']}, requires_search: {search_analysis['requires_search']})"
                 )
                 result = await tool_executor.execute_async(
-                    "search_web", {"query": search_analysis["search_query"]}
+                    "search_web", {"query": search_query}
                 )
                 tool_results["search_web"] = result
                 tools_called.append("search_web")
@@ -672,8 +718,11 @@ class QueryAnalyzer:
                 context_parts.append(
                     f"\n**LATEST INFORMATION from web search:**\n{format_search_result(result)}\n"
                 )
+                logger.info(f"✅ Search web completed successfully for: '{search_query[:50]}...'")
             except Exception as e:
-                logger.error(f"Proactive search call failed: {e}")
+                logger.error(f"❌ Proactive search call failed for '{search_query[:50]}...': {e}")
+        elif should_search and not search_query:
+            logger.warning(f"⚠️ Search requested but no search query generated for: {message[:100]}...")
 
         # Call data analysis tools (search + visualization)
         if data_analysis["is_data_analysis"]:
@@ -790,6 +839,7 @@ class QueryAnalyzer:
             "tool_results": tool_results,
             "tools_called": list(set(tools_called)),  # Remove duplicates
             "context_injection": context_injection,
+            "query_classification": classification,
         }
 
     @staticmethod

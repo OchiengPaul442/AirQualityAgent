@@ -299,26 +299,25 @@ class GeminiProvider(BaseAIProvider):
                         )
                         return {
                             "response": (
-                                "I apologize, but I'm experiencing technical difficulties at the moment. "
-                                "This is likely a temporary issue. Please try again in a few moments, "
-                                "or rephrase your question about air quality information."
+                                "I'm experiencing technical difficulties at the moment. "
+                                "This is likely temporary. Please try again in a few moments or rephrase your question."
                             ),
                             "tools_used": [],
-                            "error_logged": True,  # Flag for internal tracking
+                            "error_logged": True,
                         }
 
         # Validate response before accessing
         if response is None:
             logger.error("Gemini response is None after retry loop - all attempts failed")
             return {
-                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "response": "I was unable to process your request. The AI service did not respond. Please try again.",
                 "tools_used": [],
             }
 
         if chat is None:
             logger.error("Gemini chat is None - cannot continue")
             return {
-                "response": "I apologize, but I encountered an error creating the chat session. Please try again.",
+                "response": "I was unable to create a chat session. Please try again.",
                 "tools_used": [],
             }
 

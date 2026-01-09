@@ -507,14 +507,14 @@ class OpenAIProvider(BaseAIProvider):
         if response is None:
             logger.error("Response is None after retry loop - all attempts failed")
             return {
-                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "response": "I was unable to process your request. Please try again.",
                 "tools_used": [],
             }
 
         if not hasattr(response, "choices") or not response.choices:
             logger.error("Response missing choices attribute or choices is empty")
             return {
-                "response": "I apologize, but I received an invalid response. Please try again.",
+                "response": "I received an invalid response. Please try again.",
                 "tools_used": [],
             }
 
@@ -662,7 +662,7 @@ class OpenAIProvider(BaseAIProvider):
 
         return {
             "response": response_text
-            or "I apologize, but I couldn't generate a response. Please try again.",
+            or "I was unable to generate a response. Please try again.",
             "tools_used": tools_used,
         }
 
@@ -1163,4 +1163,4 @@ Be professional, empathetic, and solution-oriented."""
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Fallback generation failed: {e}")
-            return "I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
+            return "I'm experiencing technical difficulties. Please try again in a moment."
