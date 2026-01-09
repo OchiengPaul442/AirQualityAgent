@@ -21,6 +21,7 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
 
 **Latest Updates (v2.9.4):**
 
+- **Cost Optimization**: Comprehensive model performance testing completed - identified best low-cost models
 - Security Enhancement: Environment-based logging controls to prevent AI response leakage in production
 - Rate Limiting: Endpoint-specific limits (30/minute for chat, 50/minute for queries) to prevent server abuse
 - Forecast Bug Fix: Resolved conflicting forecast tools causing "What" query failures
@@ -53,12 +54,12 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
 - **Policy Advisor**: Evidence-based policy development for regional contexts
 - **Document Analyst**: Upload and analyze PDF, CSV, and Excel files
 - **Data Visualization**: Generate embedded charts/graphs that render automatically in markdown
-- **Reasoning Models**: Transparent thinking process with step-by-step analysis (DeepSeek R1, Gemini 2.5 Flash, Nemotron-3-nano)
+- **Reasoning Models**: Transparent thinking process with step-by-step analysis
 
 ### AI Providers
 
-- **Google Gemini**: Production-grade, high-quality analysis
 - **OpenAI**: Direct API or compatible providers (OpenRouter, DeepSeek, Kimi)
+- **Google Gemini**: Production-grade analysis
 - **Ollama**: Local testing and privacy-focused deployments
 
 ### Data Sources
@@ -138,7 +139,15 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
 
 2. Edit `.env` with your settings. Examples:
 
-   - For local testing with Ollama:
+   - For OpenAI:
+
+     ```
+     AI_PROVIDER=openai
+     AI_MODEL=gpt-4o
+     AI_API_KEY=your_openai_api_key
+     ```
+
+   - For Ollama (local models):
 
      ```
      AI_PROVIDER=ollama
@@ -146,23 +155,12 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
      OLLAMA_BASE_URL=http://localhost:11434
      ```
 
-   - For production with Gemini:
-
+   - For Gemini:
      ```
      AI_PROVIDER=gemini
-     AI_MODEL=gemini-2.5-flash
+     AI_MODEL=gemini-2.0-flash-exp
      AI_API_KEY=your_gemini_api_key
      ```
-
-   - For OpenAI:
-     ```
-     AI_PROVIDER=openai
-     AI_MODEL=gpt-4o
-     AI_API_KEY=your_openai_api_key
-     OPENAI_BASE_URL=https://api.openai.com/v1
-     ```
-
-   Additional configurations for OpenRouter, DeepSeek, or Kimi can be set similarly using the OpenAI provider with appropriate base URLs and API keys.
 
 ## Running the Agent
 

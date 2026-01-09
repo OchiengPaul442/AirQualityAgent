@@ -141,7 +141,7 @@ class GeminiProvider(BaseAIProvider):
             "gemini-1.5-pro",
             "gemini-1.5-flash",
             "gemini-2.0-flash-exp",
-            "gemini-2.5-flash",
+            "gemini-2.5-pro",
         ]:
             tools = self.get_tool_definitions()
             if tools:
@@ -463,7 +463,7 @@ class GeminiProvider(BaseAIProvider):
         quality = "high" if has_data else "basic"
         reasoning.validate_response(quality, has_data)
 
-        # Extract thinking steps if available (Gemini 2.5 Flash thinking mode)
+        # Extract thinking steps if available
         thinking_steps = self._extract_thinking_steps(response)
 
         # Combine reasoning with thinking steps
@@ -493,8 +493,6 @@ class GeminiProvider(BaseAIProvider):
         """
         Extract thinking/reasoning steps from Gemini response.
 
-        Gemini 2.5 Flash with thinking mode exposes thoughts in parts[].thought
-
         Args:
             response: Gemini response object
 
@@ -515,7 +513,7 @@ class GeminiProvider(BaseAIProvider):
 
             # Extract thoughts from parts
             for part in candidate.content.parts:
-                # Check for thought attribute (Gemini 2.5 Flash thinking mode)
+                # Check for thought attribute
                 if hasattr(part, "thought") and part.thought:
                     thinking_steps.append(str(part.text if part.text else part.thought))
                     logger.info("Extracted thinking step from Gemini thought part")

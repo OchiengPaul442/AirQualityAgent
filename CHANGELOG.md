@@ -6,6 +6,12 @@ All notable changes to the Air Quality AI Agent project.
 
 ## [Unreleased] - 2026-01-10
 
+### Changed
+
+- **Model Support**: Updated Gemini provider to remove incompatible models
+- **Documentation**: Simplified configuration examples and provider guidance
+  - Added cost optimization strategy section
+
 ### Fixed
 
 - **File Upload Analysis**: Fixed empty response issue when uploading documents (PDF, CSV, Excel) for all providers (Ollama, Gemini, OpenAI)
