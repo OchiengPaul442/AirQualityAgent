@@ -155,6 +155,27 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
+    def allowed_hosts_list(self) -> list[str]:
+        """Extract hostnames from CORS_ORIGINS for TrustedHostMiddleware."""
+        if self.CORS_ORIGINS == "*":
+            return ["*"]
+        hosts = []
+        for origin in self.CORS_ORIGINS.split(","):
+            origin = origin.strip()
+            if origin == "*":
+                return ["*"]
+            # Remove protocol and port to get just the hostname
+            if "://" in origin:
+                origin = origin.split("://", 1)[1]
+            if "/" in origin:
+                origin = origin.split("/", 1)[0]
+            if ":" in origin:
+                origin = origin.split(":", 1)[0]
+            if origin and origin not in hosts:
+                hosts.append(origin)
+        return hosts
+
+    @property
     def vision_capable_models_list(self) -> list[tuple[str, str]]:
         """Parse VISION_CAPABLE_MODELS into list of (provider, model) tuples."""
         models = []

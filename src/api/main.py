@@ -132,7 +132,7 @@ logger.info(f"CORS enabled for origins: {settings.cors_origins_list}")
 # Security middleware
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"] if settings.ENVIRONMENT == "development" else settings.cors_origins_list,
+    allowed_hosts=["*"] if settings.ENVIRONMENT == "development" else settings.allowed_hosts_list,
 )
 
 
