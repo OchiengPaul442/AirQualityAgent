@@ -314,20 +314,30 @@ Pass environment variables to MCP servers:
 
 ### Problem
 
-Chart requests caused infinite loading due to Ollama 500 errors when processing large visualizations.
+Chart requests caused infinite loading due to AI provider errors when processing large visualizations.
 
-### Solutions
+### Solutions (All Providers ✅)
+
+**Works consistently across Gemini, OpenAI, and Ollama**
 
 **1. Data Sampling**: Max 1000 rows (was 5000), prioritizing recent data  
 **2. Font Fix**: DejaVu Sans for Unicode support (PM₂.₅)  
-**3. Error Handling**: Graceful fallback when Ollama fails  
-**4. Response Optimization**: AI keeps chart descriptions brief
+**3. Error Handling**: Graceful fallback for all 3 providers  
+**4. Response Optimization**: AI keeps chart descriptions brief  
+**5. Chart Capture**: All providers extract chart_result
+
+| Provider | Error Handling         | Chart Capture |
+| -------- | ---------------------- | ------------- |
+| Ollama   | ✅ 500 errors          | ✅ Yes        |
+| OpenAI   | ✅ Exceptions          | ✅ Yes        |
+| Gemini   | ✅ Generation failures | ✅ Yes        |
 
 ### Results
 
 - ✅ <2 second chart generation (was timing out)
 - ✅ User notified when data sampled
 - ✅ Helpful alternatives on errors
+- ✅ **Consistent across all 3 providers**
 - ✅ No more infinite loading
 
-**Test**: `python test_chart_fix.py`
+**Test**: `python test_cross_provider_charts.py`

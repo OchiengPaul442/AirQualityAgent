@@ -535,6 +535,14 @@ class OpenAIProvider(BaseAIProvider):
 
             # Execute tools
             tool_results = await self._execute_tools(tool_calls, tools_used)
+            
+            # Extract chart data if generate_chart was called
+            chart_result = None
+            for tool_result in tool_results:
+                if tool_result["tool_call"].function.name == "generate_chart":
+                    chart_result = tool_result["result"]
+                    logger.info("📊 Chart generation detected in tool results")
+                    break
 
             # Add assistant message with tool calls
             assistant_msg = response.choices[0].message
@@ -616,7 +624,25 @@ class OpenAIProvider(BaseAIProvider):
                             "tools_used": tools_used,
                         }
                 except Exception as e:
+                    error_msg = str(e).lower()
                     logger.error(f"Final API call failed: {e}")
+                    
+                    # If error occurs and chart was generated, provide helpful response
+                    if "generate_chart" in tools_used:
+                        return {
+                            "response": (
+                                "📊 Chart generated successfully! The visualization shows your data trends.\n\n"
+                                "**Note**: Due to processing limits, I've kept the description brief. "
+                                "The chart displays the key patterns in your data.\n\n"
+                                "Need more details? Try:\n"
+                                "• Ask about specific data points\n"
+                                "• Request a smaller date range\n"
+                                "• Ask for summary statistics"
+                            ),
+                            "tools_used": tools_used,
+                            "chart_result": chart_result if chart_result else None,
+                        }
+                    
                     return {
                         "response": f"I executed the tools successfully but encountered an error generating the final response: {str(e)}",
                         "tools_used": tools_used,
@@ -667,11 +693,18 @@ class OpenAIProvider(BaseAIProvider):
             else:
                 response_text = await self._generate_fallback(message)
 
-        return {
+        # Add chart_result to response if available
+        result = {
             "response": response_text
             or "I was unable to generate a response. Please try again.",
             "tools_used": tools_used,
         }
+        
+        if "chart_result" in locals() and chart_result:
+            result["chart_result"] = chart_result
+            logger.info("📊 Chart data added to OpenAI response")
+        
+        return result
 
     def _should_force_search_tool(self, message: str) -> bool:
         """Check if the message requires forcing search_web tool usage."""
