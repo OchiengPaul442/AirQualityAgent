@@ -641,10 +641,34 @@ class ToolExecutor:
 
             # Search and scraping tools
             elif function_name == "search_web":
-                return self.search.search(args.get("query"))
+                query = args.get("query")
+                if not query:
+                    return {"success": False, "error": "No query provided"}
+                try:
+                    results = self.search.search(query)
+                    return {
+                        "success": True,
+                        "results": results,
+                        "count": len(results),
+                        "query": query
+                    }
+                except Exception as e:
+                    logger.error(f"Web search error: {e}")
+                    return {"success": False, "error": str(e)}
 
             elif function_name == "scrape_website":
-                return self.scraper.scrape(args.get("url"))
+                url = args.get("url")
+                if not url:
+                    return {"success": False, "error": "No URL provided"}
+                try:
+                    result = self.scraper.scrape(url)
+                    # If scraper returns error dict, wrap it properly
+                    if "error" in result:
+                        return {"success": False, "error": result["error"], "url": url}
+                    return {"success": True, **result}
+                except Exception as e:
+                    logger.error(f"Web scraping error: {e}")
+                    return {"success": False, "error": str(e), "url": url}
 
             # Document tools
             elif function_name == "scan_document":

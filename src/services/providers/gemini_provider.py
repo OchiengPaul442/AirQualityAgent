@@ -114,6 +114,17 @@ class GeminiProvider(BaseAIProvider):
         # Sanitize all text inputs to prevent UTF-8 encoding errors
         system_instruction = self._sanitize_text(system_instruction)
         message = self._sanitize_text(message)
+        
+        # Initialize simple reasoning tracker (optional feature)
+        class SimpleReasoning:
+            def __init__(self):
+                self.steps = []
+            def add_step(self, title, description, step_type):
+                self.steps.append({"title": title, "description": description, "type": step_type})
+            def get_all_steps(self):
+                return self.steps
+        
+        reasoning = SimpleReasoning()
 
         # Convert history to Gemini format
         chat_history = []

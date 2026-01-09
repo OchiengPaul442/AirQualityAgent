@@ -763,6 +763,39 @@ class QueryAnalyzer:
             except Exception as e:
                 logger.error(f"Proactive data analysis call failed: {e}")
 
+        # CRITICAL FIX: Detect URLs and proactively call scrape_website for WHO/EPA content
+        import re
+        url_pattern = r'https?://[^\s]+'
+        urls = re.findall(url_pattern, message)
+        
+        if urls:
+            # Filter for relevant domains (WHO, EPA, government, research sites)
+            relevant_domains = ['who.int', 'epa.gov', 'gov.', 'edu', 'org']
+            relevant_urls = []
+            
+            for url in urls:
+                if any(domain in url.lower() for domain in relevant_domains):
+                    relevant_urls.append(url)
+            
+            if relevant_urls:
+                logger.info(f"🔗 Detected {len(relevant_urls)} relevant URLs for scraping: {relevant_urls}")
+                
+                for url in relevant_urls[:2]:  # Limit to 2 URLs to avoid overload
+                    try:
+                        logger.info(f"🔧 PROACTIVE CALL: scrape_website for {url}")
+                        result = await tool_executor.execute_async(
+                            "scrape_website", {"url": url}
+                        )
+                        tool_results[f"scrape_website_{url}"] = result
+                        tools_called.append("scrape_website")
+
+                        # Format result for context
+                        context_parts.append(
+                            f"\n**SCRAPED CONTENT from {url}:**\n{format_scrape_result(result)}\n"
+                        )
+                    except Exception as e:
+                        logger.error(f"Proactive scrape call failed for {url}: {e}")
+
         # CRITICAL FIX: Generate charts if user explicitly requests visualization AND we have location data
         viz_keywords = ["chart", "graph", "plot", "visualize", "trend", "show me"]
         if any(keyword in message.lower() for keyword in viz_keywords):

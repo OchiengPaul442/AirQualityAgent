@@ -461,41 +461,28 @@ class OllamaProvider(BaseAIProvider):
 
                 tool_results.append(tool_result)
 
-                # Add tool result to messages
-                messages.append(
-                    {
-                        "role": "tool",
-                        "content": json.dumps(tool_result),
-                    }
-                )
-
-                # Also append a short summary to help the model
+                # CRITICAL FIX: Only send summary to avoid token overflow
+                # Don't send full tool_result (which may contain large CSV data)
                 summary = self._summarize_tool_result(tool_result)
                 if summary:
+                    # Send only the summary as tool response
                     messages.append(
                         {
                             "role": "tool",
-                            "content": json.dumps({"summary": summary}),
+                            "content": summary,
                         }
                     )
-
-            # Get final response with tool results
-            # Add explicit assistant summary messages
-            try:
-                combined = []
-                for tr in tool_results:
-                    s = self._summarize_tool_result(tr)
-                    if s:
-                        combined.append(s)
-                if combined:
-                    assistant_summary = (
-                        "TOOL RESULTS SUMMARY:\n\n"
-                        + "\n\n".join(combined)
-                        + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."
+                else:
+                    # Fallback: truncate tool result if no summary available
+                    result_str = json.dumps(tool_result)
+                    if len(result_str) > 2000:
+                        result_str = result_str[:2000] + "... [truncated]"
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": result_str,
+                        }
                     )
-                    messages.append({"role": "assistant", "content": assistant_summary})
-            except Exception:
-                pass
 
             # Get final response with tool results
             try:
@@ -525,7 +512,39 @@ class OllamaProvider(BaseAIProvider):
                 error_msg = str(e).lower()
                 logger.error(f"Ollama final response error: {e}")
                 
-                # CRITICAL FIX: If error is 500 and chart was generated successfully, return chart result
+                # CRITICAL FIX: Handle common errors and return tool results if available
+                # 1. Handle token limit errors (prompt too long)
+                if "too long" in error_msg or "limit" in error_msg:
+                    logger.warning("⚠️ Token limit exceeded - returning tool results directly")
+                    
+                    # Build response from tool summaries
+                    response_parts = []
+                    for tool_result in tool_results:
+                        summary = self._summarize_tool_result(tool_result)
+                        if summary:
+                            response_parts.append(summary)
+                    
+                    if response_parts:
+                        response_text = "\n\n".join(response_parts)
+                    else:
+                        response_text = "I've processed your request, but the response was too large. Please try a more specific query or smaller dataset."
+                    
+                    result = {
+                        "response": response_text,
+                        "tools_used": tools_used,
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                    }
+                    
+                    # Include chart_result if it was captured
+                    if chart_result:
+                        result["chart_result"] = chart_result
+                        result["chart_generated"] = True
+                        logger.info("📊 Chart data included in token limit error recovery")
+                    
+                    return result
+                
+                # 2. Handle 500 errors but preserve chart results
                 if ("500" in error_msg or "internal server" in error_msg) and "generate_chart" in tools_used:
                     logger.warning("⚠️ Ollama 500 error but chart was generated - returning chart result")
                     
