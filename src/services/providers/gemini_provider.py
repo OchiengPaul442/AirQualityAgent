@@ -14,7 +14,6 @@ from google.genai import types
 
 from src.utils.markdown_formatter import MarkdownFormatter
 
-from ..agent.reasoning_engine import ReasoningEngine
 from ..tool_definitions import gemini_tools
 from .base_provider import BaseAIProvider
 
@@ -83,17 +82,6 @@ class GeminiProvider(BaseAIProvider):
                 "tools_used": [],
             }
 
-        # Initialize reasoning engine for transparent thinking
-        reasoning = ReasoningEngine()
-        reasoning.add_step(
-            "Received Query",
-            f"User asked: '{message[:100]}{'...' if len(message) > 100 else ''}'",
-            "thinking"
-        )
-
-        # Analyze query
-        query_analysis = reasoning.analyze_query(message)
-        
         # Convert history to Gemini format
         chat_history = []
         for msg in history:

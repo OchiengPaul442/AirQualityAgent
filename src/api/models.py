@@ -48,14 +48,6 @@ class ChatResponse(BaseModel):
         False, description="Whether a document was uploaded and processed"
     )
     document_filename: str | None = Field(None, description="Name of the uploaded document if any")
-    thinking_steps: list[str] | None = Field(
-        None, 
-        description="AI reasoning/thinking steps (for display ONLY during streaming, hidden in final response)"
-    )
-    reasoning_content: str | None = Field(
-        None, 
-        description="Full reasoning content as string (for internal use, not displayed to user)"
-    )
     chart_data: str | None = Field(
         None,
         description="Base64-encoded chart/graph image (data:image/png;base64,...) if visualization was generated"

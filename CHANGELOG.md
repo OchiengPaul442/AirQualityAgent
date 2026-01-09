@@ -4,6 +4,41 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.2.0] - 2026-01-09
+
+### 🧹 CLEANUP: Removed Streaming & Thinking Process Features
+
+**Removed all streaming and thinking process implementations due to incorrect approach**
+
+#### What Was Removed
+
+- ❌ **Streaming Endpoint**: Deleted `/agent/chat/stream` endpoint and SSE implementation
+- ❌ **Thinking Process Display**: Removed `thinking_steps` and `reasoning_content` fields from responses
+- ❌ **Reasoning Engine**: Deleted `reasoning_engine.py` and all related logic
+- ❌ **Test Cases**: Removed tests for thinking process and reasoning engine
+- ❌ **Documentation**: Cleaned up all references to streaming and thinking process from API docs
+
+#### Files Changed
+
+**Backend:**
+
+- `src/api/routes.py` - Removed streaming endpoint
+- `src/api/models.py` - Removed thinking_steps and reasoning_content fields
+- `src/services/agent_service.py` - Removed reasoning engine imports and logic
+- `src/services/agent/reasoning_engine.py` - **DELETED**
+- `tests/test_agent.py` - Removed reasoning engine tests
+
+**Documentation:**
+
+- `docs/API_REFERENCE.md` - Removed streaming and thinking process sections
+- `docs/API_FRONTEND_GUIDE.md` - Removed thinking steps examples
+
+#### Reason for Removal
+
+The streaming and thinking process implementation was based on an incorrect approach and didn't align with the project's architecture. A proper implementation will be designed from scratch when needed in the future.
+
+---
+
 ## [2.1.0] - 2026-01-09
 
 ### 🎨 MAJOR FEATURE: Professional Chart Generation & Enhanced Streaming

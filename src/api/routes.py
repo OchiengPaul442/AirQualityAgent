@@ -609,17 +609,6 @@ async def chat(
         # Extract chart data if present in result
         chart_data = result.get("chart_data")
         chart_metadata = result.get("chart_metadata")
-        
-        # Get reasoning content but DON'T include it in final response (only for streaming)
-        # This follows ChatGPT/DeepSeek pattern where reasoning is hidden after completion
-        reasoning_content = result.get("reasoning_content")
-        if reasoning_content and isinstance(reasoning_content, dict):
-            # Convert dict to string representation
-            reasoning_content = str(reasoning_content)
-        
-        # IMPORTANT: thinking_steps and reasoning_content are set to None
-        # These are ONLY shown during streaming, not in final response
-        # This matches behavior of ChatGPT, DeepSeek, and Kimi K2
 
         return ChatResponse(
             response=final_response,
@@ -630,8 +619,6 @@ async def chat(
             message_count=message_count,
             document_processed=bool(document_filenames or document_filename),
             document_filename=document_filenames[0] if document_filenames else document_filename,
-            thinking_steps=None,  # Hidden in final response, only shown during streaming
-            reasoning_content=None,  # Hidden in final response, only shown during streaming
             chart_data=chart_data,
             chart_metadata=chart_metadata,
         )
@@ -675,181 +662,6 @@ async def chat(
                 del file_content
         except Exception:
             pass
-
-
-@router.post("/agent/chat/stream")
-async def chat_stream(
-    request: Request,
-    message: str = Form(..., description="User message text"),
-    session_id: str | None = Form(
-        None, description="Optional session ID for conversation continuity"
-    ),
-    file: UploadFile | None = File(None, description="Optional file upload (PDF, CSV, Excel)"),
-    latitude: float | None = Form(None, description="Optional GPS latitude"),
-    longitude: float | None = Form(None, description="Optional GPS longitude"),
-    role: str | None = Form(None, description="Optional agent role/style"),
-    db: Session = Depends(get_db),
-):
-    """
-    Stream chat responses with real-time thinking steps (Server-Sent Events).
-    
-    This endpoint streams AI responses in real-time, showing the thinking process
-    for reasoning models like DeepSeek R1, Nemotron-3-nano, and Gemini 2.5 Flash.
-    
-    **Event Types:**
-    - `start`: Stream started
-    - `thinking`: AI reasoning/thinking step
-    - `content`: Final response content (chunked)
-    - `tools`: Tool execution notification
-    - `done`: Stream completed
-    - `error`: Error occurred
-    
-    **Response Format:**
-    Server-Sent Events (SSE) with each event containing JSON data:
-    ```
-    event: thinking
-    data: {"type": "thinking", "content": "Step 1: Analyzing PM2.5 levels..."}
-    
-    event: content
-    data: {"type": "content", "content": "The air quality in..."}
-    
-    event: done
-    data: {"status": "completed", "session_id": "...", "tools_used": [...]}
-    ```
-    
-    **Usage:**
-    Use @microsoft/fetch-event-source for POST SSE in frontend:
-    ```typescript
-    import { fetchEventSource } from '@microsoft/fetch-event-source';
-    
-    await fetchEventSource('/agent/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'multipart/form-data' },
-      body: formData,
-      onmessage(ev) {
-        const data = JSON.parse(ev.data);
-        if (ev.event === 'thinking') {
-          // Display thinking step
-        } else if (ev.event === 'content') {
-          // Display response content
-        }
-      }
-    });
-    ```
-    """
-    import json
-
-    from fastapi.responses import StreamingResponse
-    
-    async def generate_stream():
-        """
-        Generate SSE stream with thinking and content events.
-        
-        This follows the Kimi K2 / ChatGPT approach:
-        - Thinking steps are streamed during processing
-        - Final content is streamed after thinking is complete
-        - Thinking is NOT included in the final message
-        """
-        try:
-            # Generate or use provided session ID
-            current_session_id = session_id if session_id and session_id.strip() else str(uuid.uuid4())
-            
-            # Send start event
-            yield f"event: start\ndata: {json.dumps({'status': 'started', 'session_id': current_session_id})}\n\n"
-            
-            # Get conversation history
-            try:
-                history = get_recent_session_history(db, current_session_id, max_messages=20)
-            except Exception as db_error:
-                logger.warning(f"Failed to load history for streaming: {db_error}")
-                history = []
-            
-            # Handle document upload (same as regular chat endpoint)
-            document_data = None
-            if file and file.filename:
-                # (Document processing code - simplified for brevity)
-                # In production, you'd replicate the document processing from chat endpoint
-                pass
-            
-            # Prepare location data
-            location_data = None
-            if latitude is not None and longitude is not None and -90 <= latitude <= 90 and -180 <= longitude <= 180:
-                location_data = {"source": "gps", "latitude": latitude, "longitude": longitude}
-            elif request.client:
-                location_data = {"source": "ip", "ip_address": request.client.host}
-            
-            # Get agent instance
-            agent = get_agent()
-            
-            # Stream thinking steps as they're generated
-            # Note: This would require modifying the agent to yield thinking steps
-            # For now, we'll simulate the pattern
-            
-            yield f"event: thinking\ndata: {json.dumps({'type': 'thinking', 'content': 'Analyzing your question about air quality...'})}\n\n"
-            
-            # Process message (in production, this should be made streaming)
-            result = await agent.process_message(
-                message,
-                history,
-                document_data=document_data,
-                style=role or settings.AI_RESPONSE_STYLE,
-                temperature=settings.AI_RESPONSE_TEMPERATURE,
-                top_p=settings.AI_RESPONSE_TOP_P,
-                client_ip=request.client.host if request.client else None,
-                location_data=location_data,
-                session_id=current_session_id
-            )
-            
-            # Stream thinking steps if available (but not included in final message)
-            thinking_steps = result.get("thinking_steps", [])
-            if thinking_steps:
-                for step in thinking_steps:
-                    yield f"event: thinking\ndata: {json.dumps({'type': 'thinking', 'content': step})}\n\n"
-            
-            # Stream tool usage notifications
-            tools_used = result.get("tools_used", [])
-            if tools_used:
-                yield f"event: tools\ndata: {json.dumps({'type': 'tools', 'tools': tools_used})}\n\n"
-            
-            # Stream final response content (chunked for large responses)
-            response_text = result.get("response", "")
-            response_text = ResponseFilter.clean_response(response_text)
-            response_text = MarkdownFormatter.format_response(response_text)
-            
-            # Stream content in chunks (simulate typing effect)
-            chunk_size = 50  # Characters per chunk
-            for i in range(0, len(response_text), chunk_size):
-                chunk = response_text[i:i+chunk_size]
-                yield f"event: content\ndata: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-            
-            # Stream chart data if available
-            chart_data = result.get("chart_data")
-            if chart_data:
-                yield f"event: chart\ndata: {json.dumps({'type': 'chart', 'data': chart_data, 'metadata': result.get('chart_metadata')})}\n\n"
-            
-            # Save messages to database
-            try:
-                add_message(db, current_session_id, "user", message)
-                add_message(db, current_session_id, "assistant", response_text)
-            except Exception as db_error:
-                logger.error(f"Failed to save streaming messages to database: {db_error}")
-            
-            # Send completion event
-            yield f"event: done\ndata: {json.dumps({'status': 'completed', 'session_id': current_session_id, 'tools_used': tools_used, 'tokens_used': result.get('tokens_used', 0)})}\n\n"
-            
-        except Exception as e:
-            logger.error(f"Stream error: {e}", exc_info=True)
-            yield f"event: error\ndata: {json.dumps({'error': str(e), 'message': 'Failed to process your request. Please try again.'})}\n\n"
-    
-    return StreamingResponse(
-        generate_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
 
 
 @router.post("/air-quality/query")

@@ -105,7 +105,6 @@ Check if the current AI model supports specific features like vision (image inpu
 | `provider`                  | string  | AI provider (gemini, openai, ollama) |
 | `model`                     | string  | AI model name                        |
 | `supports_vision`           | boolean | Whether model can process images     |
-| `supports_reasoning`        | boolean | Whether model shows thinking steps   |
 | `max_image_size_mb`         | integer | Maximum image size in megabytes      |
 | `allowed_image_formats`     | array   | Supported image file formats         |
 | `cost_optimization_enabled` | boolean | Whether cost optimization is active  |
@@ -210,8 +209,6 @@ curl -X POST "http://localhost:8000/api/v1/agent/chat" \
 | `document_filename`  | string  | Name of uploaded file (if any)                                     |
 | `image_processed`    | boolean | Whether an image was uploaded and analyzed                         |
 | `vision_capable`     | boolean | Whether current model supports image input                         |
-| `thinking_steps`     | array   | **HIDDEN in final response** - Only shown during streaming         |
-| `reasoning_content`  | object  | **HIDDEN in final response** - Only shown during streaming         |
 | `chart_data`         | string  | **NEW**: Base64-encoded chart image (data:image/png;base64,...)    |
 | `chart_metadata`     | object  | **NEW**: Chart metadata (type, data rows, columns used, etc.)      |
 | `cost_info`          | object  | Cost optimization stats (tokens, cache hits, session usage)        |
@@ -270,69 +267,8 @@ AERIS-AQ uses **QueryAnalyzer** - an intelligent pre-processing system that proa
   | `message_count` | integer | Total messages in this session |
   | `document_processed` | boolean | Whether a document was uploaded and processed |
   | `document_filename` | string | Name of uploaded file (if any) |
-  | `thinking_steps` | array | **NEW**: AI reasoning steps showing how the answer was derived |
-  | `reasoning_content` | object | **NEW**: Full reasoning data with metadata and timing |
 
-### Reasoning & Thinking Process 🧠
-
-**AERIS-AQ displays its thinking process during streaming** for complete transparency, similar to ChatGPT, DeepSeek R1, Claude, and Kimi K2.
-
-**IMPORTANT CHANGE**: Following industry best practices (ChatGPT, DeepSeek, Kimi K2):
-
-- ✅ **Thinking steps are shown DURING streaming** - Users see the AI's reasoning process in real-time
-- ❌ **Thinking steps are HIDDEN in final response** - The final `/agent/chat` response excludes thinking_steps and reasoning_content
-- 📊 **Use `/agent/chat/stream` endpoint** to see real-time thinking process
-
-This is especially important for health-critical air quality recommendations where transparency builds trust.
-
-**How It Works:**
-
-1. **Query Analysis**: AI analyzes your question and determines what information is needed
-2. **Tool Selection**: Identifies which data sources to use (WAQI, AirQo, research papers, etc.)
-3. **Data Retrieval**: Fetches real-time data from selected sources
-4. **Analysis & Synthesis**: Processes data and formulates recommendations
-5. **Response Generation**: Delivers final answer (thinking hidden in final response)
-
-**Example: Streaming Response with Thinking (recommended):**
-
-```typescript
-await fetchEventSource("/api/v1/agent/chat/stream", {
-  method: "POST",
-  body: formData,
-  onmessage(ev) {
-    if (ev.event === "thinking") {
-      // Show thinking step in UI (collapsible)
-      console.log("Thinking:", JSON.parse(ev.data).content);
-    } else if (ev.event === "content") {
-      // Show final response content
-      console.log("Content:", JSON.parse(ev.data).content);
-    }
-  },
-});
-```
-
-**Example: Final Response (thinking hidden):**
-
-```json
-{
-  "response": "The air quality in Kampala currently shows PM2.5 at 45 µg/m³ (Moderate)...",
-  "session_id": "abc123",
-  "tools_used": ["get_african_city_air_quality"],
-  "tokens_used": 1247,
-  "cached": false,
-  "thinking_steps": null, // Hidden in final response
-  "reasoning_content": null, // Hidden in final response
-  "chart_data": "data:image/png;base64,iVBORw0...", // NEW: Chart if requested
-  "chart_metadata": {
-    // NEW: Chart metadata
-    "chart_type": "line",
-    "data_rows": 30,
-    "columns_used": { "x": "date", "y": "pm25" },
-    "format": "png",
-    "engine": "matplotlib"
-  }
-}
-```
+### Cost Info Object
 
 ---
 
@@ -463,53 +399,6 @@ if data.get('chart_data'):
 - **Date Parsing**: Automatic parsing of date/time columns
 
 ---
-
-## Streaming Chat with Thinking Steps
-
-Stream AI responses in real-time with visible thinking process.
-
-**Endpoint:** `POST /api/v1/agent/chat/stream`
-
-**Content-Type:** `multipart/form-data`
-
-**Event Types:**
-
-- `start` - Stream started
-- `thinking` - AI reasoning step (for reasoning models)
-- `content` - Response content chunk
-- `tools` - Tool execution notification
-- `done` - Stream completed
-- `error` - Error occurred
-
-**Example (JavaScript):**
-
-```javascript
-import { fetchEventSource } from "@microsoft/fetch-event-source";
-
-const formData = new FormData();
-formData.append("message", "What is the air quality in Kampala?");
-
-await fetchEventSource("/api/v1/agent/chat/stream", {
-  method: "POST",
-  body: formData,
-
-  onmessage(ev) {
-    const data = JSON.parse(ev.data);
-
-    if (ev.event === "thinking") {
-      console.log("Thinking:", data.content);
-      // Display thinking step in UI
-    } else if (ev.event === "content") {
-      console.log("Content:", data.content);
-      // Append to response display
-    } else if (ev.event === "done") {
-      console.log("Complete!", data);
-    }
-  },
-});
-```
-
-**Response Fields:**
 
 ### Key Features
 

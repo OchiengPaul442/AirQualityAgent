@@ -23,46 +23,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import get_settings
 from src.services.agent.cost_optimizer import CostOptimizer, get_cost_optimizer
-from src.services.agent.reasoning_engine import ReasoningEngine, create_human_reasoning_engine
 
 # ============================================================================
 # CORE FEATURES TESTS
 # ============================================================================
-
-class TestReasoningEngine:
-    """Test human-like reasoning engine."""
-    
-    def test_create_reasoning_engine(self):
-        """Test creating human-like reasoning engine."""
-        engine = create_human_reasoning_engine()
-        assert engine is not None
-        assert engine.human_like is True
-        assert engine.enabled is True
-    
-    def test_natural_thinking_steps(self):
-        """Test natural language reasoning steps."""
-        engine = ReasoningEngine(human_like=True)
-        
-        engine.think("the air quality situation")
-        engine.search("current PM2.5 levels")
-        engine.analyze("the pollution data")
-        engine.process("calculating health recommendations")
-        engine.conclude("the air quality is moderate")
-        
-        steps = engine.get_all_steps()
-        assert len(steps) == 5
-        assert "Let me think about" in steps[0].content
-        assert "I'll need to look up" in steps[1].content
-    
-    def test_reasoning_json_output(self):
-        """Test JSON output for API responses."""
-        engine = ReasoningEngine(human_like=True)
-        engine.think("testing")
-        
-        json_data = engine.to_json()
-        assert "steps" in json_data
-        assert "total_steps" in json_data
-        assert json_data["total_steps"] == 1
 
 
 class TestCostOptimization:
@@ -220,15 +184,6 @@ def test_full_system_integration():
     # Configuration
     settings = get_settings()
     assert settings is not None
-    
-    # Reasoning engine
-    reasoning = create_human_reasoning_engine()
-    reasoning.think("air quality query")
-    reasoning.search("current data")
-    reasoning.analyze("air quality levels")
-    
-    json_output = reasoning.to_json()
-    assert len(json_output["steps"]) == 3
     
     # Cost optimizer
     optimizer = get_cost_optimizer()
