@@ -391,9 +391,17 @@ class GeminiProvider(BaseAIProvider):
             logger.info(f"Gemini response finish reason: {finish_reason}")
 
             if finish_reason == "MAX_TOKENS":
-                logger.warning(
-                    "Gemini response reached max tokens, but response should still be useful"
+                logger.warning("Gemini response reached max tokens - adding truncation notification")
+                truncation_note = (
+                    "\n\n---\n"
+                    "**📝 Note**: This response was truncated due to length limits. To continue:\n"
+                    "• Ask for specific sections\n"
+                    "• Break your question into smaller parts\n"
+                    "• Request a focused summary"
                 )
+                # Only add if not already present
+                if "truncated due to length" not in final_response.lower():
+                    final_response = final_response + truncation_note
 
         # Handle empty or very short responses
         if not final_response or not final_response.strip() or len(final_response.strip()) < 20:

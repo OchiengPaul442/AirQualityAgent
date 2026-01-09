@@ -193,6 +193,22 @@ class AgentService:
                     f"AI response loop detected: same response {recent_ai_responses.count(last_ai)} times"
                 )
                 return True
+        
+        # Check for phrase-level repetition (detecting "The user wants..." loops)
+        if len(recent_ai_responses) >= 2:
+            last_response = recent_ai_responses[-1] if recent_ai_responses else ""
+            # Extract first 50 chars as signature
+            signature = last_response[:50].lower().strip()
+            
+            # Count how many recent responses start with similar signature
+            similar_starts = sum(
+                1 for resp in recent_ai_responses[-5:] 
+                if resp[:50].lower().strip() == signature and len(signature) > 10
+            )
+            
+            if similar_starts >= 3:
+                logger.warning(f"Phrase-level loop detected: similar response start {similar_starts} times")
+                return True
 
         return False
 
@@ -987,11 +1003,25 @@ class AgentService:
 
         # Check for conversation loops before processing
         if self._check_for_loops(message):
-            logger.warning("Conversation loop detected, providing safe response")
+            logger.warning("Conversation loop detected, providing helpful capabilities reminder")
             return {
                 "response": (
-                    "I notice we're going in circles. Let me help you with a fresh perspective. "
-                    "Could you please rephrase your question or tell me what specific air quality information you're looking for?"
+                    "I notice we're having trouble with this request. Let me help you differently.\n\n"
+                    "**I'm Aeris-AQ, your air quality expert. I can help you with:**\n\n"
+                    "📊 **Real-time Air Quality Data**\n"
+                    "• Current AQI for any city worldwide\n"
+                    "• PM2.5, PM10, and pollutant levels\n"
+                    "• Location-based air quality monitoring\n\n"
+                    "🌍 **Global Coverage**\n"
+                    "• Data from WAQI, AirQo, OpenMeteo, and more\n"
+                    "• Multi-source verification for accuracy\n\n"
+                    "💡 **Health & Insights**\n"
+                    "• Health recommendations based on AQI\n"
+                    "• Pollution source analysis\n\n"
+                    "📈 **Analysis & Trends**\n"
+                    "• Historical air quality trends\n"
+                    "• Data visualization and charts\n\n"
+                    "**What would you like to know about air quality?**"
                 ),
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
@@ -1176,11 +1206,22 @@ class AgentService:
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")
             if len(ai_response) > self.max_response_length:
+                # Add user-friendly truncation message
+                truncation_message = (
+                    "\n\n---\n"
+                    "**📝 Note**: This response was truncated due to length limits. To get complete information:\n"
+                    "• Ask for specific sections (e.g., 'Tell me about health effects')\n"
+                    "• Break your question into smaller parts\n"
+                    "• Request a summary instead of detailed analysis\n\n"
+                    "**Aeris can help you with**: Real-time AQI data • Health recommendations • "
+                    "Trends & analysis • Data visualization • Scientific explanations"
+                )
                 ai_response = (
-                    ai_response[: self.max_response_length] + "... [Response truncated for length]"
+                    ai_response[: self.max_response_length - len(truncation_message)] + truncation_message
                 )
                 response_data["response"] = ai_response
                 response_data["truncated"] = True
+                logger.info(f"Response truncated from {len(response_data.get('response', ''))} to {len(ai_response)} chars")
 
             self._add_to_memory(message, ai_response)
 

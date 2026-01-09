@@ -592,8 +592,15 @@ class OpenAIProvider(BaseAIProvider):
 
                     # Check if response was truncated due to length limit
                     if finish_reason == "length":
-                        logger.warning("Response was truncated due to max_tokens limit")
-                        response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
+                        logger.warning("Response was truncated due to max_tokens limit - adding user-friendly notification")
+                        truncation_note = (
+                            "\n\n---\n"
+                            "**📝 Note**: This response was truncated due to length limits. To continue:\n"
+                            "• Ask for specific sections\n"
+                            "• Break your question into smaller parts\n"
+                            "• Request a focused summary"
+                        )
+                        response_text += truncation_note
 
                     response_text = self._clean_response(response_text)
                     break  # Success, exit retry loop

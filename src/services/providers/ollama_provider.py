@@ -184,6 +184,9 @@ class OllamaProvider(BaseAIProvider):
         messages.append({"role": "user", "content": message})
 
         tools_used = []
+        
+        # Track truncation status
+        was_truncated = False
 
         # Retry configuration for network resilience
         max_retries = 3
@@ -237,6 +240,14 @@ class OllamaProvider(BaseAIProvider):
                 logger.info(
                     f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}"
                 )
+                
+                # Check if response was truncated
+                if isinstance(response, dict):
+                    done_reason = response.get("done_reason")
+                    if done_reason == "length":
+                        logger.warning("Response was truncated due to max_tokens limit - will add notification")
+                        was_truncated = True
+                
                 break  # Success, exit retry loop
 
             except ConnectionError as e:
@@ -526,6 +537,17 @@ class OllamaProvider(BaseAIProvider):
 
         # Clean response
         response_text = self._clean_response(response_text)
+        
+        # Add truncation notification if response was truncated
+        if was_truncated:
+            truncation_note = (
+                "\n\n---\n"
+                "**📝 Note**: This response was truncated due to length limits. To continue:\n"
+                "• Ask for specific sections\n"
+                "• Break your question into smaller parts\n"
+                "• Request a focused summary"
+            )
+            response_text += truncation_note
 
         # Debug: Log raw response for reasoning extraction debugging
         logger.info(f"Raw response text length: {len(response_text) if response_text else 0}")
