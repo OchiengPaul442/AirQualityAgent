@@ -212,6 +212,31 @@ class AgentService:
 
         return False
 
+    def _check_response_for_reasoning_exposure(self, response: str) -> bool:
+        """
+        Check if AI response exposes internal reasoning that should be hidden.
+        Returns True if reasoning exposure detected.
+        """
+        # Patterns that indicate internal reasoning exposure
+        exposure_patterns = [
+            "the user wants",
+            "the user might",
+            "the user is asking",
+            "the assistant should",
+            "i should respond",
+            "i need to",
+            "the response should",
+            "let me think",
+        ]
+        
+        response_lower = response.lower()
+        for pattern in exposure_patterns:
+            if pattern in response_lower:
+                logger.warning(f"Reasoning exposure detected: '{pattern}' found in response")
+                return True
+        
+        return False
+
     def _manage_memory(self):
         """Manage conversation memory to prevent bloat and loops."""
         if len(self.conversation_memory) > self.max_conversation_length:
@@ -1006,22 +1031,12 @@ class AgentService:
             logger.warning("Conversation loop detected, providing helpful capabilities reminder")
             return {
                 "response": (
-                    "I notice we're having trouble with this request. Let me help you differently.\n\n"
-                    "**I'm Aeris-AQ, your air quality expert. I can help you with:**\n\n"
-                    "📊 **Real-time Air Quality Data**\n"
-                    "• Current AQI for any city worldwide\n"
-                    "• PM2.5, PM10, and pollutant levels\n"
-                    "• Location-based air quality monitoring\n\n"
-                    "🌍 **Global Coverage**\n"
-                    "• Data from WAQI, AirQo, OpenMeteo, and more\n"
-                    "• Multi-source verification for accuracy\n\n"
-                    "💡 **Health & Insights**\n"
-                    "• Health recommendations based on AQI\n"
-                    "• Pollution source analysis\n\n"
-                    "📈 **Analysis & Trends**\n"
-                    "• Historical air quality trends\n"
-                    "• Data visualization and charts\n\n"
-                    "**What would you like to know about air quality?**"
+                    "Let me help you differently. I can assist with:\n\n"
+                    "🌍 **Real-time Data** - Current AQI, PM2.5, pollutants for any city\n"
+                    "📊 **Health Advice** - Safe activity levels, vulnerable group guidance\n"
+                    "📈 **Trends** - Historical patterns, forecasts, comparisons\n"
+                    "💡 **Education** - Pollutant explanations, AQI scale, research\n\n"
+                    "What interests you?"
                 ),
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
@@ -1034,7 +1049,13 @@ class AgentService:
         if security_violation:
             logger.warning(f"Security violation detected: {message[:100]}...")
             return {
-                "response": "I'm Aeris-AQ, here to help with air quality questions. What would you like to know?",
+                "response": (
+                    "I specialize in air quality. I can help with:\n"
+                    "• Real-time AQI and pollutant data\n"
+                    "• Health recommendations\n"
+                    "• Air quality trends and forecasts\n\n"
+                    "What would you like to know?"
+                ),
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
                 "cached": False,
@@ -1164,6 +1185,22 @@ class AgentService:
 
             # SECURITY: Filter out any sensitive information from response
             response_data = self._filter_sensitive_info(response_data)
+
+            # CHECK FOR REASONING EXPOSURE: If AI exposed internal thinking, replace with helpful response
+            ai_response = response_data.get("response", "").strip()
+            if self._check_response_for_reasoning_exposure(ai_response):
+                logger.warning("Reasoning exposure detected - replacing with helpful options response")
+                response_data["response"] = (
+                    "I can help you with air quality data! Here are your options:\n\n"
+                    "• **Share your location** - City name, ZIP code, or coordinates for local data\n"
+                    "• **Ask about specific places** - e.g., 'London air quality' or 'Beijing PM2.5'\n"
+                    "• **Get general info** - Learn about AQI, pollutants, health impacts\n"
+                    "• **Compare locations** - See air quality differences between cities\n"
+                    "• **View trends** - Historical data and forecasts\n\n"
+                    "What interests you most?"
+                )
+                response_data["reasoning_filtered"] = True
+                ai_response = response_data["response"]
 
             # FALLBACK RESPONSE IMPROVEMENT: If response is too short and tools were used,
             # it likely indicates a data retrieval failure - provide helpful fallback

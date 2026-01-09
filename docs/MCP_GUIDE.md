@@ -256,3 +256,54 @@ Pass environment variables to MCP servers:
 3. **Limit Scope**: Only connect to necessary data sources
 4. **Regular Audits**: Review connected MCP servers periodically
 5. **Documentation**: Document all MCP connections and their purposes
+
+---
+
+## AI Response Optimization (Jan 2026 Update)
+
+### Problem Solved
+
+**Issue**: AI exposed internal reasoning ("The user wants...") and wasn't helpful when tools failed.
+
+**Solution**: Enhanced system instructions + runtime detection for helpful, option-oriented responses.
+
+### Critical Rules
+
+**1. NO internal reasoning exposure**
+
+- ❌ BAD: "The user wants...", "The assistant should..."
+- ✅ GOOD: Jump straight to helpful response
+
+**2. Be solution-oriented** - Always show OPTIONS:
+
+```
+❌ "I couldn't get location. Please provide it."
+✅ "I can help! Options:
+   • Share city/ZIP for local data
+   • Ask about specific location
+   • Get general air quality info"
+```
+
+**3. Prevent loops** - Say once, then alternatives.
+
+### Response Patterns
+
+| Scenario         | Action                  |
+| ---------------- | ----------------------- |
+| Educational      | Answer directly         |
+| Location query   | Real-time data + health |
+| Data unavailable | 3 alternatives          |
+| Error            | Show capabilities       |
+
+### Implementation
+
+- **System**: [`system_instructions.py`](../src/services/prompts/system_instructions.py) - Rules + examples
+- **Runtime**: [`agent_service.py`](../src/services/agent_service.py) - Detection + filtering
+- **Tests**: `pytest tests/test_agent.py -v`
+
+### Key Principles
+
+1. Answer first, explain later
+2. Options > Apologies
+3. No reasoning exposure
+4. Cite sources always
