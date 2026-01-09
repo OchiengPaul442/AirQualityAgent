@@ -268,9 +268,9 @@ class QueryAnalyzer:
 
         # Keywords that indicate need for current/supplemental information
         temporal_keywords = ["latest", "recent", "new", "current", "update", "2024", "2025", "2026", "this year", "last year"]
-        policy_keywords = ["policy", "regulation", "legislation", "law", "government"]
+        policy_keywords = ["policy", "regulation", "legislation", "law", "government", "standard", "standards"]
         research_keywords = ["research", "study", "studies", "report", "findings", "evidence"]
-        data_keywords = ["statistics", "stats", "data", "trends", "analysis", "deaths", "mortality"]
+        data_keywords = ["statistics", "stats", "data", "trends", "analysis", "deaths", "mortality", "how many", "list"]
         
         # Exclude simple definitional questions
         basic_definition = any(q in message_lower for q in ["what is", "what are", "define", "explain"]) and len(message.split()) < 12
@@ -278,12 +278,19 @@ class QueryAnalyzer:
         # Search if: temporal, policy, research, data keywords present OR not a basic definition
         has_search_keyword = any(k in message_lower for k in temporal_keywords + policy_keywords + research_keywords + data_keywords)
         
+        # Log detection for debugging
+        if has_search_keyword:
+            matched_keywords = [k for k in temporal_keywords + policy_keywords + research_keywords + data_keywords if k in message_lower]
+            logger.info(f"🔍 Search keywords detected: {matched_keywords}")
+        
         requires_search = has_search_keyword or not basic_definition
         
         # Generate focused search query
         search_query = message
         if any(k in message_lower for k in data_keywords):
             search_query += " WHO EPA statistics"
+        
+        logger.info(f"🔍 Search detection result: requires_search={requires_search}, query='{search_query[:50]}...'")
         
         return {
             "requires_search": requires_search,

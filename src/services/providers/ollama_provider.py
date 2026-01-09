@@ -337,6 +337,17 @@ class OllamaProvider(BaseAIProvider):
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                     }
+                
+                # Check for 500 Internal Server Error from Ollama
+                if "500" in error_msg or "Internal Server Error" in error_msg:
+                    logger.error(f"Ollama returned 500 error: {e}")
+                    return {
+                        "response": "I was unable to process your request due to a temporary service issue. Please try again in a moment or rephrase your question.",
+                        "tools_used": [],
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                        "error_type": "ollama_500",
+                    }
 
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
@@ -533,10 +544,19 @@ class OllamaProvider(BaseAIProvider):
             # Generate a basic response from tool results
             fallback_parts = []
             for i, tool_result in enumerate(tool_results):
-                if tool_result.get("success"):
-                    summary = self._summarize_tool_result(tool_result)
-                    if summary:
-                        fallback_parts.append(summary)
+                # Handle cases where tool_result might be a list or dict
+                if isinstance(tool_result, dict):
+                    if tool_result.get("success"):
+                        summary = self._summarize_tool_result(tool_result)
+                        if summary:
+                            fallback_parts.append(summary)
+                elif isinstance(tool_result, list):
+                    # Handle list of results
+                    for sub_result in tool_result:
+                        if isinstance(sub_result, dict) and sub_result.get("success"):
+                            summary = self._summarize_tool_result(sub_result)
+                            if summary:
+                                fallback_parts.append(summary)
             
             if fallback_parts:
                 cleaned_response = "Here's the information I found:\n\n" + "\n\n".join(fallback_parts)
@@ -687,7 +707,7 @@ class OllamaProvider(BaseAIProvider):
 
         # Ensure proper spacing after markdown elements
         lines = content.split("\n")
-        cleaned_lines = []
+        cleaned_lines: list[str] = []
         prev_was_header = False
         prev_was_list = False
         in_table = False
@@ -750,9 +770,31 @@ class OllamaProvider(BaseAIProvider):
         return content.strip()
 
     def _summarize_tool_result(self, result: Any) -> str:
-        """Create a short human-readable summary for common tool results (AirQo)."""
+        """Create a short human-readable summary for common tool results."""
         try:
             if not isinstance(result, dict):
+                return ""
+            
+            # Handle search_web results
+            if result.get("results") and isinstance(result["results"], list):
+                results = result["results"][:3]  # Top 3 results
+                summary_parts = ["Web search results:"]
+                for idx, r in enumerate(results, 1):
+                    title = r.get("title", "No title")
+                    snippet = r.get("snippet", "")[:150]
+                    summary_parts.append(f"{idx}. {title}: {snippet}...")
+                return "\n".join(summary_parts)
+            
+            # Handle failed tool calls with suggestions
+            if not result.get("success"):
+                message = result.get("message", "")
+                suggestion = result.get("suggestion", "")
+                if message:
+                    summary = f"Note: {message}"
+                    if suggestion == "search_web":
+                        query = result.get("search_query", "")
+                        summary += f" Suggested: search for '{query}'"
+                    return summary
                 return ""
 
             if result.get("success") and result.get("measurements"):

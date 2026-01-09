@@ -8,6 +8,7 @@ Charts can be returned as base64 encoded images or saved to files.
 import base64
 import io
 import logging
+import warnings
 from datetime import datetime
 from typing import Any, Literal
 
@@ -20,6 +21,9 @@ import seaborn as sns
 
 # Use non-interactive backend for server environments
 matplotlib.use("Agg")
+
+# Suppress font warnings for missing Unicode characters (subscripts/superscripts)
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +95,18 @@ class VisualizationService:
                 df = pd.DataFrame(data)
             else:
                 df = data.copy()
+            
+            # OPTIMIZATION: Limit data size to prevent timeout
+            # Sample data if too large (keep first, last, and sample middle)
+            MAX_ROWS = 5000
+            if len(df) > MAX_ROWS:
+                logger.warning(f"Large dataset ({len(df)} rows) detected. Sampling to {MAX_ROWS} rows for visualization.")
+                # Keep first 1000, last 1000, and sample 3000 from middle
+                first_part = df.head(1000)
+                last_part = df.tail(1000)
+                middle_part = df.iloc[1000:-1000].sample(min(3000, len(df) - 2000), random_state=42)
+                df = pd.concat([first_part, middle_part, last_part]).sort_index()
+                logger.info(f"Sampled dataset to {len(df)} rows for faster visualization.")
 
             # Auto-detect columns if not provided
             if x_column is None and len(df.columns) > 0:

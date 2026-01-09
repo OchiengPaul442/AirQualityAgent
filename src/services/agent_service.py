@@ -1168,33 +1168,10 @@ class AgentService:
                 )  # Tools used but no actual air quality data in response
             )
 
+            # REMOVED: Static fallback messages that override AI responses
+            # AI should generate dynamic responses based on actual tool results
             if is_inadequate and len(tools_used) > 0:
-                # Response is inadequate and tools were used - provide helpful fallback
-                if "mwanza" in message.lower():
-                    response_data["response"] = (
-                        "I couldn't find air quality monitoring stations for Mwanza, Tanzania. "
-                        "Mwanza is a remote location without dedicated air quality monitoring. "
-                        "For comparison, you might check nearby major cities like Dar es Salaam or Nairobi, "
-                        "or contact local environmental agencies for any available data."
-                    )
-                    response_data["fallback_provided"] = True
-                    logger.info("Provided fallback response for Mwanza query")
-                else:
-                    # Generic fallback for other locations
-                    location_match = None
-                    for word in message.split():
-                        if len(word) > 3 and word[0].isupper():  # Likely a city name
-                            location_match = word
-                            break
-
-                    if location_match:
-                        response_data["response"] = (
-                            f"I couldn't find air quality monitoring data for {location_match}. "
-                            "This location may not have dedicated monitoring stations. "
-                            "Try checking nearby major cities or contact local environmental agencies for data."
-                        )
-                        response_data["fallback_provided"] = True
-                        logger.info(f"Provided fallback response for {location_match}")
+                logger.info(f"Response is inadequate but tools were used. AI will handle with available context.")
 
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")

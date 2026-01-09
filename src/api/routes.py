@@ -318,6 +318,10 @@ async def chat(
     - Upload PDF, CSV, or Excel files along with your message
     - Supported formats: .pdf, .csv, .xlsx, .xls
     - Max file size: 8MB
+    
+    **Timeout Protection:**
+    - Requests are limited to 120 seconds to prevent indefinite waiting
+    - If visualization takes too long, data is automatically sampled
     - Files processed in memory (not saved to disk)
     - Agent analyzes document and responds to your query
     
