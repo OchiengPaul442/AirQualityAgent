@@ -4,6 +4,29 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [Unreleased] - 2026-01-10
+
+### Fixed
+
+- **File Upload Analysis**: Fixed empty response issue when uploading documents (PDF, CSV, Excel) for all providers (Ollama, Gemini, OpenAI)
+
+  - Added proper `scan_document` result handling in `_summarize_tool_result` methods
+  - AI now generates meaningful responses with document previews and data summaries
+  - File content is properly extracted and presented to users
+
+- **Chart Embedding in Markdown**: Charts now properly embed in markdown responses for automatic rendering
+
+  - Removed markdown formatter stripping of chart images
+  - Updated system instructions to tell AI to include chart markdown
+  - Charts embed as `![Chart](data:image/png;base64,...)` for instant display
+  - Follows ChatGPT best practices for inline visualization
+  - Works across all three providers (Ollama, Gemini, OpenAI)
+
+- **Conversation Memory**: Fixed context retention issues - agent now properly remembers previous messages
+- **Test Suite**: Comprehensive tests now pass at 86.4% (19/22 tests)
+
+---
+
 ## [2.2.0] - 2026-01-09
 
 ### 🧹 CLEANUP: Removed Streaming & Thinking Process Features

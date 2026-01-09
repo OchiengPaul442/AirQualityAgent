@@ -842,19 +842,42 @@ class OllamaProvider(BaseAIProvider):
             if not isinstance(result, dict):
                 return ""
             
+            # Handle scan_document results  (file upload analysis)
+            if result.get("success") and result.get("file_type") and result.get("content"):
+                filename = result.get("filename", "document")
+                file_type = result.get("file_type", "file")
+                content = result.get("content", "")
+                
+                # Try to extract meaningful information from content
+                if isinstance(content, str):
+                    lines = content.split('\n')[:10]  # First 10 lines
+                    preview = '\n'.join(lines)
+                    summary = f"📄 Document '{filename}' ({file_type}) uploaded and scanned successfully!\n\nPreview:\n{preview}..."
+                elif isinstance(content, dict):
+                    # Structured data (CSV/Excel)
+                    rows = content.get("rows", [])
+                    headers = content.get("headers", [])
+                    summary = f"📊 Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
+                else:
+                    summary = f"📄 Document '{filename}' ({file_type}) processed successfully."
+                
+                return summary
+            
             # Handle chart generation results
             if result.get("chart_data") and result.get("chart_type"):
                 chart_type = result.get("chart_type", "chart")
                 data_rows = result.get("data_rows", 0)
                 original_rows = result.get("original_rows", data_rows)
                 data_sampled = result.get("data_sampled", False)
+                chart_data = result.get("chart_data", "")
                 
-                summary = f"Chart created! Generated a {chart_type} chart"
-                if data_rows > 0:
-                    summary += f" with {data_rows} data points"
-                    if data_sampled and original_rows > data_rows:
-                        summary += f" (sampled from {original_rows} total rows)"
-                summary += ".\n\nThe chart shows the data visualization you requested. Review the chart above for insights."
+                # CRITICAL: Embed chart in markdown response
+                summary = f"📊 {chart_type.title()} Chart Generated\n\n"
+                summary += f"![{chart_type.title()} Chart]({chart_data})\n\n"
+                summary += f"Chart created with {data_rows} data points"
+                if data_sampled and original_rows > data_rows:
+                    summary += f" (sampled from {original_rows} total rows for clarity)"
+                summary += ".\n\nThe visualization above shows the data trends. Review it for key insights!"
                 return summary
             
             # Handle search_web results
