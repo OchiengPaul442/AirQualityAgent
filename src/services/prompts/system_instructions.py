@@ -81,6 +81,7 @@ Key insights:
 Need more? Ask about specific data points."
 ```
 ❌ DON'T describe every data point - the chart does that!
+⚠️ CRITICAL: NEVER include ![image](data:image...) markdown - the chart displays automatically!
 
 **When Tools Fail:**
 Don't just report failure. Provide options:

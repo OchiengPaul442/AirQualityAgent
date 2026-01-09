@@ -52,6 +52,7 @@ class MarkdownFormatter:
 
         # Apply formatting in specific order
         text = MarkdownFormatter._normalize_line_breaks(text)
+        text = MarkdownFormatter._remove_chart_markdown(text)  # Remove any chart images first
         text = MarkdownFormatter._fix_broken_parentheses(text)
         text = MarkdownFormatter._convert_emoji_numbering(text)
         text = MarkdownFormatter._format_headers(text)
@@ -73,6 +74,26 @@ class MarkdownFormatter:
         # Remove trailing spaces from each line
         lines = [line.rstrip() for line in text.split("\n")]
         return "\n".join(lines)
+
+    @staticmethod
+    def _remove_chart_markdown(text: str) -> str:
+        """
+        Remove chart/image markdown with data URIs from the text.
+        
+        Charts are sent separately via the API response (chart_data field),
+        so we don't want the AI to include them in the markdown response.
+        This also fixes cases where the AI incorrectly adds https:// prefix.
+        
+        Examples of what this removes:
+        - ![Chart](data:image/png;base64,...)
+        - ![Chart](https://data:image/png;base64,...)  <- incorrect but happens
+        - ![](data:image/jpeg;base64,...)
+        """
+        # Remove any image markdown containing data URIs (with or without https:// prefix)
+        text = re.sub(r'!\[([^\]]*)\]\((https?://)?data:image/[^)]+\)', '', text)
+        # Also remove any standalone data URI links that might have been generated
+        text = re.sub(r'\((https?://)?data:image/[^)]+\)', '', text)
+        return text
 
     @staticmethod
     def _fix_broken_parentheses(text: str) -> str:
