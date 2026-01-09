@@ -44,35 +44,35 @@ class OpenAIProvider(BaseAIProvider):
         except Exception as e:
             logger.error(f"Failed to setup OpenAI: {e}")
             raise ConnectionError(f"Failed to initialize OpenAI client: {e}") from e
-    
+
     @staticmethod
     def _sanitize_text(text: str) -> str:
         """
         Sanitize text to handle problematic Unicode characters that cause UTF-8 encoding errors.
-        
+
         This fixes the 'surrogates not allowed' error by:
         1. Encoding to UTF-8 with error handling
         2. Decoding back to string
         3. Replacing unpaired surrogates with safe characters
-        
+
         Args:
             text: Text that may contain problematic Unicode
-            
+
         Returns:
             Sanitized text safe for UTF-8 encoding
         """
         if not text:
             return text
-        
+
         try:
             # Try to encode/decode to catch problematic characters
             # Use 'surrogatepass' to handle unpaired surrogates, then replace them
-            encoded = text.encode('utf-8', errors='surrogatepass')
-            return encoded.decode('utf-8', errors='replace')
+            encoded = text.encode("utf-8", errors="surrogatepass")
+            return encoded.decode("utf-8", errors="replace")
         except Exception as e:
             logger.warning(f"Text sanitization fallback used: {e}")
             # Fallback: remove any characters that can't be encoded
-            return text.encode('utf-8', errors='ignore').decode('utf-8')
+            return text.encode("utf-8", errors="ignore").decode("utf-8")
 
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """
@@ -124,186 +124,238 @@ class OpenAIProvider(BaseAIProvider):
             sanitized_content = self._sanitize_text(msg.get("content", ""))
             messages.append({"role": msg["role"], "content": sanitized_content})
         messages.append({"role": "user", "content": message})
-        
+
         # Debug: Log if documents are in system instruction
         if "UPLOADED DOCUMENTS" in system_instruction:
             doc_section_start = system_instruction.find("=== UPLOADED DOCUMENTS ===")
             doc_section_end = system_instruction.find("=== END DOCUMENTS ===")
             if doc_section_start >= 0 and doc_section_end >= 0:
                 doc_section_length = doc_section_end - doc_section_start
-                logger.info(f"✅ Document section present in system instruction ({doc_section_length} chars)")
+                logger.info(
+                    f"✅ Document section present in system instruction ({doc_section_length} chars)"
+                )
             else:
                 logger.warning("⚠️ Document markers found but section incomplete")
-        
+
         tools_used: list[str] = []
 
         # FORCE TOOL CALLING for search/scraping/air quality queries
         force_search_tool = self._should_force_search_tool(message.lower())
         force_scrape_tool = self._should_force_scrape_tool(message.lower())
-        force_air_quality_tool, cities_to_query = self._should_force_air_quality_tool(message.lower())
+        force_air_quality_tool, cities_to_query = self._should_force_air_quality_tool(
+            message.lower()
+        )
 
-        # Retry configuration for token limit handling
-        max_retries = 2
-        
-        for attempt in range(max_retries):
-            try:
-                if force_search_tool:
+        if force_search_tool:
             logger.info("FORCING search_web tool call for query")
             # Add a fake tool call to force the model to use search
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{
-                    "id": "forced_search_call",
-                    "type": "function",
-                    "function": {
-                        "name": "search_web",
-                        "arguments": '{"query": "current air quality regulations and policies 2025"}'
-                    }
-                }]
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "forced_search_call",
+                            "type": "function",
+                            "function": {
+                                "name": "search_web",
+                                "arguments": '{"query": "current air quality regulations and policies 2025"}',
+                            },
+                        }
+                    ],
+                }
+            )
             # Add fake tool result
-            messages.append({
-                "role": "tool",
-                "tool_call_id": "forced_search_call",
-                "content": "Search results will be provided by the system."
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": "forced_search_call",
+                    "content": "Search results will be provided by the system.",
+                }
+            )
             tools_used.append("search_web")
 
         if force_scrape_tool:
             logger.info("FORCING scrape_website tool call for query")
             # Extract URL from message
             import re
-            url_match = re.search(r'https?://[^\s]+', message)
+
+            url_match = re.search(r"https?://[^\s]+", message)
             if url_match:
                 url = url_match.group(0)
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [{
-                        "id": "forced_scrape_call",
-                        "type": "function",
-                        "function": {
-                            "name": "scrape_website",
-                            "arguments": f'{{"url": "{url}"}}'
-                        }
-                    }]
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "forced_scrape_call",
+                                "type": "function",
+                                "function": {
+                                    "name": "scrape_website",
+                                    "arguments": f'{{"url": "{url}"}}',
+                                },
+                            }
+                        ],
+                    }
+                )
                 # Add fake tool result
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": "forced_scrape_call",
-                    "content": "Website content will be extracted by the system."
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": "forced_scrape_call",
+                        "content": "Website content will be extracted by the system.",
+                    }
+                )
                 tools_used.append("scrape_website")
 
         if force_air_quality_tool and cities_to_query:
             logger.info(f"FORCING air quality tool calls for cities: {cities_to_query}")
             tool_calls = []
-            
+
             # Create separate tool calls for each city (services work one at a time)
             call_id = 0
-            
+
             # Simple classification for tool selection
-            known_african_cities = ['kampala', 'nairobi', 'jinja', 'gulu', 'dar es salaam', 'kigali', 'mbale', 'nakasero', 'mombasa', 'kisumu', 'nakuru', 'eldoret', 'dodoma', 'mwanza', 'arusha', 'mbeya', 'butare', 'musanze', 'ruhengeri', 'gisenyi', 'mbarara']
-            
+            known_african_cities = [
+                "kampala",
+                "nairobi",
+                "jinja",
+                "gulu",
+                "dar es salaam",
+                "kigali",
+                "mbale",
+                "nakasero",
+                "mombasa",
+                "kisumu",
+                "nakuru",
+                "eldoret",
+                "dodoma",
+                "mwanza",
+                "arusha",
+                "mbeya",
+                "butare",
+                "musanze",
+                "ruhengeri",
+                "gisenyi",
+                "mbarara",
+            ]
+
             for city in cities_to_query:
                 city_lower = city.lower()
                 import json
 
                 # Choose appropriate tool based on city
-                if any(african_city in city_lower for african_city in known_african_cities) or 'africa' in city_lower:
-                    tool_calls.append({
-                        "id": f"forced_aq_call_{call_id}",
-                        "type": "function",
-                        "function": {
-                            "name": "get_african_city_air_quality",
-                            "arguments": json.dumps({"city": city})
+                if (
+                    any(african_city in city_lower for african_city in known_african_cities)
+                    or "africa" in city_lower
+                ):
+                    tool_calls.append(
+                        {
+                            "id": f"forced_aq_call_{call_id}",
+                            "type": "function",
+                            "function": {
+                                "name": "get_african_city_air_quality",
+                                "arguments": json.dumps({"city": city}),
+                            },
                         }
-                    })
+                    )
                 else:
-                    tool_calls.append({
-                        "id": f"forced_aq_call_{call_id}",
-                        "type": "function",
-                        "function": {
-                            "name": "get_city_air_quality",
-                            "arguments": json.dumps({"city": city})
+                    tool_calls.append(
+                        {
+                            "id": f"forced_aq_call_{call_id}",
+                            "type": "function",
+                            "function": {
+                                "name": "get_city_air_quality",
+                                "arguments": json.dumps({"city": city}),
+                            },
                         }
-                    })
+                    )
                 call_id += 1
-            
+
             # Add the tool calls to messages
             if tool_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": tool_calls
-                })
-                
+                messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
+
                 # Add fake tool results
                 for tc in tool_calls:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": "Air quality data will be retrieved by the system."
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": "Air quality data will be retrieved by the system.",
+                        }
+                    )
                     tools_used.append(tc["function"]["name"])
             logger.info("FORCING search_web tool call for query")
             # Add a fake tool call to force the model to use search
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{
-                    "id": "forced_search_call",
-                    "type": "function",
-                    "function": {
-                        "name": "search_web",
-                        "arguments": '{"query": "current air quality regulations and policies 2025"}'
-                    }
-                }]
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "forced_search_call",
+                            "type": "function",
+                            "function": {
+                                "name": "search_web",
+                                "arguments": '{"query": "current air quality regulations and policies 2025"}',
+                            },
+                        }
+                    ],
+                }
+            )
             # Add fake tool result
-            messages.append({
-                "role": "tool",
-                "tool_call_id": "forced_search_call",
-                "content": "Search results will be provided by the system."
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": "forced_search_call",
+                    "content": "Search results will be provided by the system.",
+                }
+            )
             tools_used.append("search_web")
 
         if force_scrape_tool:
             logger.info("FORCING scrape_website tool call for query")
             # Extract URL from message
             import re
-            url_match = re.search(r'https?://[^\s]+', message)
+
+            url_match = re.search(r"https?://[^\s]+", message)
             if url_match:
                 url = url_match.group(0)
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [{
-                        "id": "forced_scrape_call",
-                        "type": "function",
-                        "function": {
-                            "name": "scrape_website",
-                            "arguments": f'{{"url": "{url}"}}'
-                        }
-                    }]
-                })
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": "forced_scrape_call",
-                    "content": "Website content will be scraped by the system."
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "forced_scrape_call",
+                                "type": "function",
+                                "function": {
+                                    "name": "scrape_website",
+                                    "arguments": f'{{"url": "{url}"}}',
+                                },
+                            }
+                        ],
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": "forced_scrape_call",
+                        "content": "Website content will be scraped by the system.",
+                    }
+                )
                 tools_used.append("scrape_website")
 
         # Retry configuration for network resilience
         max_retries = 3
         base_delay = 1  # seconds
         response = None  # Initialize response to prevent NoneType errors
-        
+
         # Use max_tokens directly - DO NOT multiply
         effective_max_tokens = max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS
-        
+
         for attempt in range(max_retries):
             try:
                 # Prepare API call parameters
@@ -316,16 +368,17 @@ class OpenAIProvider(BaseAIProvider):
                     "temperature": temperature,
                     "top_p": top_p,
                 }
-                
+
                 # Create completion
                 response = self.client.chat.completions.create(**api_params)
                 break  # Success, exit retry loop
             except openai.APIConnectionError as e:
                 logger.error(f"API connection error (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    delay = base_delay * (2**attempt)  # Exponential backoff
                     logger.info(f"Retrying in {delay} seconds...")
                     import time
+
                     time.sleep(delay)
                 else:
                     return {
@@ -335,9 +388,10 @@ class OpenAIProvider(BaseAIProvider):
             except openai.APITimeoutError as e:
                 logger.error(f"API timeout (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
                     import time
+
                     time.sleep(delay)
                 else:
                     return {
@@ -355,22 +409,32 @@ class OpenAIProvider(BaseAIProvider):
                 }
 
                 # Try to extract rate limit details from error
-                if hasattr(e, 'headers') and e.headers:
-                    error_details.update({
-                        "x_ratelimit_limit_requests": e.headers.get("x-ratelimit-limit-requests"),
-                        "x_ratelimit_limit_tokens": e.headers.get("x-ratelimit-limit-tokens"),
-                        "x_ratelimit_remaining_requests": e.headers.get("x-ratelimit-remaining-requests"),
-                        "x_ratelimit_remaining_tokens": e.headers.get("x-ratelimit-remaining-tokens"),
-                        "x_ratelimit_reset_requests": e.headers.get("x-ratelimit-reset-requests"),
-                        "x_ratelimit_reset_tokens": e.headers.get("x-ratelimit-reset-tokens"),
-                    })
+                if hasattr(e, "headers") and e.headers:
+                    error_details.update(
+                        {
+                            "x_ratelimit_limit_requests": e.headers.get(
+                                "x-ratelimit-limit-requests"
+                            ),
+                            "x_ratelimit_limit_tokens": e.headers.get("x-ratelimit-limit-tokens"),
+                            "x_ratelimit_remaining_requests": e.headers.get(
+                                "x-ratelimit-remaining-requests"
+                            ),
+                            "x_ratelimit_remaining_tokens": e.headers.get(
+                                "x-ratelimit-remaining-tokens"
+                            ),
+                            "x_ratelimit_reset_requests": e.headers.get(
+                                "x-ratelimit-reset-requests"
+                            ),
+                            "x_ratelimit_reset_tokens": e.headers.get("x-ratelimit-reset-tokens"),
+                        }
+                    )
 
                 # Log structured rate limit information
                 logger.warning("🚨 OPENAI RATE LIMIT EXCEEDED", extra=error_details)
 
                 # Return user-friendly response with rate limit info
                 reset_time = None
-                if hasattr(e, 'headers') and e.headers:
+                if hasattr(e, "headers") and e.headers:
                     reset_requests = e.headers.get("x-ratelimit-reset-requests")
                     reset_tokens = e.headers.get("x-ratelimit-reset-tokens")
                     if reset_requests or reset_tokens:
@@ -388,15 +452,19 @@ class OpenAIProvider(BaseAIProvider):
             except openai.BadRequestError as e:
                 # Check for token limit errors
                 error_msg = str(e).lower()
-                if "token" in error_msg and ("limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg):
+                if "token" in error_msg and (
+                    "limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg
+                ):
                     logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
-                    
+
                     # Try to intelligently truncate the context
                     messages = self._truncate_context_intelligently(messages, system_instruction)
-                    
+
                     # Retry with truncated context
                     try:
-                        logger.info(f"Retrying with truncated context ({len(messages)} messages)...")
+                        logger.info(
+                            f"Retrying with truncated context ({len(messages)} messages)..."
+                        )
                         api_params["messages"] = messages
                         response = self.client.chat.completions.create(**api_params)
                         logger.info("✅ Successfully processed with truncated context")
@@ -417,9 +485,10 @@ class OpenAIProvider(BaseAIProvider):
             except Exception as e:
                 logger.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
                     import time
+
                     time.sleep(delay)
                 else:
                     # Log the full error for developers but provide user-friendly message
@@ -441,8 +510,8 @@ class OpenAIProvider(BaseAIProvider):
                 "response": "I apologize, but I encountered an error processing your request. Please try again.",
                 "tools_used": [],
             }
-        
-        if not hasattr(response, 'choices') or not response.choices:
+
+        if not hasattr(response, "choices") or not response.choices:
             logger.error("Response missing choices attribute or choices is empty")
             return {
                 "response": "I apologize, but I received an invalid response. Please try again.",
@@ -451,7 +520,7 @@ class OpenAIProvider(BaseAIProvider):
 
         # Handle tool calls
         response_obj = response  # Store for reasoning extraction
-        
+
         if response.choices[0].message.tool_calls:
             tool_calls = response.choices[0].message.tool_calls
 
@@ -479,7 +548,11 @@ class OpenAIProvider(BaseAIProvider):
                             "type": "function",
                             "function": {
                                 "name": tc.function.name,
-                                "arguments": tc.function.arguments if isinstance(tc.function.arguments, str) else str(tc.function.arguments),
+                                "arguments": (
+                                    tc.function.arguments
+                                    if isinstance(tc.function.arguments, str)
+                                    else str(tc.function.arguments)
+                                ),
                             },
                         }
                         for tc in assistant_msg.tool_calls
@@ -491,7 +564,7 @@ class OpenAIProvider(BaseAIProvider):
             for tool_result in tool_results:
                 # Format the tool result as readable JSON string
                 result_content = format_tool_result_as_json(tool_result["result"])
-                
+
                 messages.append(
                     {
                         "role": "tool",
@@ -499,7 +572,6 @@ class OpenAIProvider(BaseAIProvider):
                         "content": result_content,  # Clean JSON format
                     }
                 )
-
 
             # Get final response from model after tool execution
             for attempt in range(3):
@@ -517,19 +589,20 @@ class OpenAIProvider(BaseAIProvider):
                     logger.info(
                         f"Final response received. Length: {len(response_text) if response_text else 0}, Finish reason: {finish_reason}"
                     )
-                    
+
                     # Check if response was truncated due to length limit
                     if finish_reason == "length":
                         logger.warning("Response was truncated due to max_tokens limit")
                         response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
-                    
+
                     response_text = self._clean_response(response_text)
                     break  # Success, exit retry loop
                 except (openai.APIConnectionError, openai.APITimeoutError) as e:
                     logger.error(f"Final API call error (attempt {attempt + 1}/3): {e}")
                     if attempt < 2:
                         import time
-                        time.sleep(1 * (2 ** attempt))  # Exponential backoff
+
+                        time.sleep(1 * (2**attempt))  # Exponential backoff
                     else:
                         return {
                             "response": "I successfully gathered the information but encountered a network error generating the response. Please try asking again.",
@@ -547,24 +620,28 @@ class OpenAIProvider(BaseAIProvider):
             logger.info(
                 f"Direct response (no tools). Length: {len(response_text) if response_text else 0}, Finish reason: {finish_reason}"
             )
-            
+
             # Check if response was truncated due to length limit
             if finish_reason == "length":
                 logger.warning("Response was truncated due to max_tokens limit")
                 response_text += "\n\n*Response was truncated due to length limits. Please ask for more specific information or break your question into smaller parts.*"
-            
+
             response_text = self._clean_response(response_text)
 
         # Handle empty or very short responses
         if not response_text or not response_text.strip() or len(response_text.strip()) < 20:
-            logger.warning(f"OpenAI returned empty or very short response (length: {len(response_text) if response_text else 0}). Tools used: {tools_used}")
-            
+            logger.warning(
+                f"OpenAI returned empty or very short response (length: {len(response_text) if response_text else 0}). Tools used: {tools_used}"
+            )
+
             # Check if tools were called but response is still short
             if tools_used:
                 # Try to generate a basic response from tool results
                 logger.info("Attempting to generate fallback response from tool results")
                 try:
-                    fallback_response = await self._generate_tool_based_response(message, tools_used, history)
+                    fallback_response = await self._generate_tool_based_response(
+                        message, tools_used, history
+                    )
                     if fallback_response and len(fallback_response.strip()) > 50:
                         response_text = fallback_response
                         logger.info("Successfully generated fallback response from tool results")
@@ -584,90 +661,119 @@ class OpenAIProvider(BaseAIProvider):
                 response_text = await self._generate_fallback(message)
 
         return {
-            "response": response_text or "I apologize, but I couldn't generate a response. Please try again.",
+            "response": response_text
+            or "I apologize, but I couldn't generate a response. Please try again.",
             "tools_used": tools_used,
         }
 
     def _should_force_search_tool(self, message: str) -> bool:
         """Check if the message requires forcing search_web tool usage."""
         search_keywords = [
-            'latest', 'current', 'recent', 'update', 'up-to-date', '2024', '2025', '2026',
-            'policy', 'regulation', 'legislation', 'government action', 'research study',
-            'who/epa guideline', 'standard', 'recommendation', 'news', 'breaking news',
-            'staying informed', 'monitoring change', 'regulatory update'
+            "latest",
+            "current",
+            "recent",
+            "update",
+            "up-to-date",
+            "2024",
+            "2025",
+            "2026",
+            "policy",
+            "regulation",
+            "legislation",
+            "government action",
+            "research study",
+            "who/epa guideline",
+            "standard",
+            "recommendation",
+            "news",
+            "breaking news",
+            "staying informed",
+            "monitoring change",
+            "regulatory update",
         ]
         return any(keyword in message for keyword in search_keywords)
 
     def _should_force_scrape_tool(self, message: str) -> bool:
         """Check if the message requires forcing scrape_website tool usage."""
-        scrape_keywords = ['scrape', 'extract', 'website', 'url', 'http://', 'https://']
+        scrape_keywords = ["scrape", "extract", "website", "url", "http://", "https://"]
         return any(keyword in message for keyword in scrape_keywords)
 
     def _should_force_air_quality_tool(self, message: str) -> tuple[bool, list[str]]:
         """Check if the message requires forcing air quality tool usage.
-        
+
         Returns:
             tuple: (should_force, list_of_cities_to_query)
         """
         message_lower = message.lower()
-        
+
         # Keywords that indicate air quality queries
         air_quality_keywords = [
-            'air quality', 'aqi', 'pollution', 'pm2.5', 'pm10', 'ozone', 'no2', 'so2', 'co',
-            'air pollution', 'atmospheric quality', 'clean air', 'air monitoring'
+            "air quality",
+            "aqi",
+            "pollution",
+            "pm2.5",
+            "pm10",
+            "ozone",
+            "no2",
+            "so2",
+            "co",
+            "air pollution",
+            "atmospheric quality",
+            "clean air",
+            "air monitoring",
         ]
-        
+
         # Check if it's an air quality query
         is_air_quality_query = any(keyword in message_lower for keyword in air_quality_keywords)
-        
+
         if not is_air_quality_query:
             return False, []
-        
+
         # Extract city names for tool calls
         import re
 
         # Country to major cities mapping
         country_cities = {
-            'uganda': ['Kampala', 'Gulu', 'Jinja', 'Mbale', 'Mbarara'],
-            'kenya': ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Eldoret'],
-            'tanzania': ['Dar es Salaam', 'Dodoma', 'Mwanza', 'Arusha', 'Mbeya'],
-            'rwanda': ['Kigali', 'Butare', 'Musanze', 'Ruhengeri', 'Gisenyi'],
-            'uk': ['London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow'],
-            'united kingdom': ['London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow'],
-            'usa': ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'],
-            'united states': ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'],
-            'china': ['Beijing', 'Shanghai', 'Guangzhou', 'Shenzhen', 'Chengdu'],
-            'india': ['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata'],
-            'germany': ['Berlin', 'Munich', 'Hamburg', 'Cologne', 'Frankfurt'],
-            'france': ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice'],
-            'japan': ['Tokyo', 'Osaka', 'Nagoya', 'Sapporo', 'Fukuoka'],
-            'australia': ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide'],
-            'canada': ['Toronto', 'Vancouver', 'Montreal', 'Calgary', 'Ottawa'],
-            'brazil': ['São Paulo', 'Rio de Janeiro', 'Brasília', 'Salvador', 'Fortaleza'],
-            'mexico': ['Mexico City', 'Guadalajara', 'Monterrey', 'Puebla', 'Tijuana'],
-            'south africa': ['Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Port Elizabeth'],
-            'nigeria': ['Lagos', 'Abuja', 'Kano', 'Ibadan', 'Port Harcourt'],
-            'egypt': ['Cairo', 'Alexandria', 'Giza', 'Shubra El-Kheima', 'Port Said'],
+            "uganda": ["Kampala", "Gulu", "Jinja", "Mbale", "Mbarara"],
+            "kenya": ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret"],
+            "tanzania": ["Dar es Salaam", "Dodoma", "Mwanza", "Arusha", "Mbeya"],
+            "rwanda": ["Kigali", "Butare", "Musanze", "Ruhengeri", "Gisenyi"],
+            "uk": ["London", "Manchester", "Birmingham", "Leeds", "Glasgow"],
+            "united kingdom": ["London", "Manchester", "Birmingham", "Leeds", "Glasgow"],
+            "usa": ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix"],
+            "united states": ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix"],
+            "china": ["Beijing", "Shanghai", "Guangzhou", "Shenzhen", "Chengdu"],
+            "india": ["Delhi", "Mumbai", "Bangalore", "Chennai", "Kolkata"],
+            "germany": ["Berlin", "Munich", "Hamburg", "Cologne", "Frankfurt"],
+            "france": ["Paris", "Marseille", "Lyon", "Toulouse", "Nice"],
+            "japan": ["Tokyo", "Osaka", "Nagoya", "Sapporo", "Fukuoka"],
+            "australia": ["Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide"],
+            "canada": ["Toronto", "Vancouver", "Montreal", "Calgary", "Ottawa"],
+            "brazil": ["São Paulo", "Rio de Janeiro", "Brasília", "Salvador", "Fortaleza"],
+            "mexico": ["Mexico City", "Guadalajara", "Monterrey", "Puebla", "Tijuana"],
+            "south africa": ["Johannesburg", "Cape Town", "Durban", "Pretoria", "Port Elizabeth"],
+            "nigeria": ["Lagos", "Abuja", "Kano", "Ibadan", "Port Harcourt"],
+            "egypt": ["Cairo", "Alexandria", "Giza", "Shubra El-Kheima", "Port Said"],
         }
-        
+
         cities = []
-        
+
         # Check for countries first
         for country, city_list in country_cities.items():
             if country in message_lower:
                 # For countries, take the first 3-5 major cities to avoid overwhelming
                 cities.extend(city_list[:5])
                 break
-        
+
         # If no country found, extract individual city names
         if not cities:
             # Common city extraction patterns
             city_patterns = [
-                r'\b(?:in|at|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b',  # "in London", "at New York"
-                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:air quality|aqi)\b',  # "London air quality"
-                r'\b(compare|comparison)\s+(?:air quality|aqi)?\s*(?:between|of)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:and|vs|versus)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b',  # "compare London and Paris"
+                r"\b(?:in|at|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b",  # "in London", "at New York"
+                r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:air quality|aqi)\b",  # "London air quality"
+                r"\b(compare|comparison)\s+(?:air quality|aqi)?\s*(?:between|of)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:and|vs|versus)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b",  # "compare London and Paris"
             ]
-            
+
             for pattern in city_patterns:
                 matches = re.findall(pattern, message, re.IGNORECASE)
                 if matches:
@@ -676,7 +782,7 @@ class OpenAIProvider(BaseAIProvider):
                         cities.extend([city for match in matches for city in match if city])
                     else:
                         cities.extend(matches)
-        
+
         # Remove duplicates while preserving order
         seen = set()
         unique_cities = []
@@ -685,17 +791,17 @@ class OpenAIProvider(BaseAIProvider):
             if city_lower not in seen:
                 seen.add(city_lower)
                 unique_cities.append(city)
-        
+
         # Limit to reasonable number (max 10 cities to avoid overwhelming)
         if len(unique_cities) > 10:
             unique_cities = unique_cities[:10]
-        
+
         return len(unique_cities) > 0, unique_cities
 
     def _deduplicate_calls(self, tool_calls: list) -> list:
         """
         Remove duplicate tool calls (same function with same arguments).
-        
+
         Allows multiple calls to the same function with DIFFERENT arguments
         (e.g., get_city_air_quality for London AND Paris).
         """
@@ -706,7 +812,11 @@ class OpenAIProvider(BaseAIProvider):
             # This ensures get_city_air_quality("London") != get_city_air_quality("Paris")
             try:
                 # Parse arguments to ensure consistent ordering for comparison
-                args_str = tc.function.arguments if isinstance(tc.function.arguments, str) else json.dumps(tc.function.arguments, sort_keys=True)
+                args_str = (
+                    tc.function.arguments
+                    if isinstance(tc.function.arguments, str)
+                    else json.dumps(tc.function.arguments, sort_keys=True)
+                )
                 args_dict = json.loads(args_str) if isinstance(args_str, str) else args_str
                 # Sort keys for consistent comparison
                 normalized_args = json.dumps(args_dict, sort_keys=True)
@@ -714,16 +824,18 @@ class OpenAIProvider(BaseAIProvider):
             except:
                 # Fallback to string comparison if JSON parsing fails
                 key = f"{tc.function.name}::{tc.function.arguments}"
-            
+
             if key not in seen:
                 seen.add(key)
                 unique.append(tc)
             else:
-                logger.info(f"Skipping duplicate tool call: {tc.function.name} with args {tc.function.arguments}")
-        
+                logger.info(
+                    f"Skipping duplicate tool call: {tc.function.name} with args {tc.function.arguments}"
+                )
+
         if len(unique) < len(tool_calls):
             logger.info(f"Deduplicated {len(tool_calls)} tool calls to {len(unique)} unique calls")
-        
+
         return unique
 
     def _summarize_tool_result(self, result: Any) -> str:
@@ -742,7 +854,12 @@ class OpenAIProvider(BaseAIProvider):
                 if measurements:
                     m = measurements[0]
                     site = m.get("siteDetails") or {}
-                    site_name = site.get("name") or site.get("formatted_name") or result.get("search_location") or "Unknown site"
+                    site_name = (
+                        site.get("name")
+                        or site.get("formatted_name")
+                        or result.get("search_location")
+                        or "Unknown site"
+                    )
                     site_id = m.get("site_id") or site.get("site_id") or "Unknown"
                     time = m.get("time") or m.get("timestamp") or "Unknown time"
                     pm25 = m.get("pm2_5", {})
@@ -752,9 +869,13 @@ class OpenAIProvider(BaseAIProvider):
                     summary_lines = [f"# Air Quality — {site_name}", ""]
                     # Removed site ID display for security
                     if isinstance(pm25, dict):
-                        summary_lines.append(f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})")
+                        summary_lines.append(
+                            f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})"
+                        )
                     if isinstance(pm10, dict):
-                        summary_lines.append(f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})")
+                        summary_lines.append(
+                            f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})"
+                        )
                     if aqi:
                         summary_lines.append(f"- Overall AQI/Category: {aqi}")
 
@@ -775,9 +896,7 @@ class OpenAIProvider(BaseAIProvider):
 
         return ""
 
-    async def _execute_tools(
-        self, tool_calls: list, tools_used: list
-    ) -> list[dict[str, Any]]:
+    async def _execute_tools(self, tool_calls: list, tools_used: list) -> list[dict[str, Any]]:
         """Execute tool calls in parallel with timeout protection."""
 
         async def execute_single(tool_call):
@@ -791,7 +910,9 @@ class OpenAIProvider(BaseAIProvider):
                     function_args = tool_call.function.arguments
                 else:
                     function_args = {}
-                    logger.warning(f"Unexpected arguments type: {type(tool_call.function.arguments)}")
+                    logger.warning(
+                        f"Unexpected arguments type: {type(tool_call.function.arguments)}"
+                    )
             except json.JSONDecodeError as e:
                 logger.error(f"Error parsing tool arguments: {e}")
                 function_args = {}
@@ -837,10 +958,12 @@ class OpenAIProvider(BaseAIProvider):
             for i, result in enumerate(raw_results):
                 if isinstance(result, Exception):
                     logger.error(f"Tool execution exception: {result}")
-                    results.append({
-                        "tool_call": tool_calls[i],
-                        "result": {"error": f"Tool execution failed: {str(result)}"},
-                    })
+                    results.append(
+                        {
+                            "tool_call": tool_calls[i],
+                            "result": {"error": f"Tool execution failed: {str(result)}"},
+                        }
+                    )
                 else:
                     results.append(result)  # type: ignore
         except Exception as e:
@@ -861,28 +984,28 @@ class OpenAIProvider(BaseAIProvider):
 
         # CRITICAL: Remove any leaked tool call syntax or internal function calls
         # Remove JSON-like function call patterns
-        content = re.sub(r'\{"type":\s*"function".*?\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{"name":\s*".*?".*?\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{"type":\s*"function".*?\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{"name":\s*".*?".*?\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', "", content, flags=re.DOTALL)
+
         # Remove function call syntax like (city="Gulu")
-        content = re.sub(r'\(\w+="[^"]*"\)', '', content)
-        
+        content = re.sub(r'\(\w+="[^"]*"\)', "", content)
+
         # Remove any remaining JSON objects that look like tool calls
-        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', "", content, flags=re.DOTALL)
+
         # Remove raw JSON data that might leak from tool results
-        content = re.sub(r'\{[^}]*"code"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"id"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"name"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"location"[^}]*\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{[^}]*"code"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"id"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"name"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"location"[^}]*\}', "", content, flags=re.DOTALL)
+
         # Remove escaped JSON
-        content = re.sub(r'\\"[^"]*\\":', '', content)
-        content = re.sub(r'\\n', ' ', content)
-        
+        content = re.sub(r'\\"[^"]*\\":', "", content)
+        content = re.sub(r"\\n", " ", content)
+
         # Remove HTML tags
-        content = re.sub(r'<[^>]+>', '', content)
+        content = re.sub(r"<[^>]+>", "", content)
 
         # Remove code markers ONLY if they're not part of proper code blocks
         # Keep proper code blocks intact
@@ -896,7 +1019,7 @@ class OpenAIProvider(BaseAIProvider):
             content = content.replace(pattern, "```\n")
 
         # Ensure proper spacing after markdown elements
-        lines = content.split('\n')
+        lines = content.split("\n")
         cleaned_lines = []
         prev_was_header = False
         prev_was_list = False
@@ -905,26 +1028,26 @@ class OpenAIProvider(BaseAIProvider):
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            
+
             # Check for headers
-            is_header = stripped.startswith('#') and ' ' in stripped[:7]
-            
+            is_header = stripped.startswith("#") and " " in stripped[:7]
+
             # Check for list items
-            is_list = bool(re.match(r'^[\s]*[-*+]\s', line) or re.match(r'^[\s]*\d+\.\s', line))
-            
+            is_list = bool(re.match(r"^[\s]*[-*+]\s", line) or re.match(r"^[\s]*\d+\.\s", line))
+
             # Check if this is a table row
-            is_table_row = '|' in stripped and stripped.startswith('|') and stripped.endswith('|')
-            
+            is_table_row = "|" in stripped and stripped.startswith("|") and stripped.endswith("|")
+
             if is_table_row:
                 if not in_table:
                     # Starting a table - ensure blank line before if previous line has content
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
+                        cleaned_lines.append("")
                     in_table = True
-                    table_header_count = stripped.count('|') - 1
+                    table_header_count = stripped.count("|") - 1
                     cleaned_lines.append(line)
                 else:
-                    current_count = stripped.count('|') - 1
+                    current_count = stripped.count("|") - 1
                     if current_count == table_header_count:
                         cleaned_lines.append(line)
                     else:
@@ -934,61 +1057,78 @@ class OpenAIProvider(BaseAIProvider):
                 if in_table and stripped:
                     # End of table - ensure blank line after
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
+                        cleaned_lines.append("")
                     in_table = False
-                
+
                 # Ensure proper spacing after headers
                 if prev_was_header and stripped and not is_header:
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
-                
+                        cleaned_lines.append("")
+
                 # Ensure proper spacing before headers
                 if is_header and cleaned_lines and cleaned_lines[-1].strip():
                     if not prev_was_list:  # Don't add space if previous was a list
-                        cleaned_lines.append('')
-                
+                        cleaned_lines.append("")
+
                 cleaned_lines.append(line)
                 prev_was_header = is_header
                 prev_was_list = is_list
 
-        content = '\n'.join(cleaned_lines)
+        content = "\n".join(cleaned_lines)
 
         # Ensure proper spacing in tables
-        content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
-        content = re.sub(r'\| +\|', r'| |', content)
+        content = re.sub(r"\|([^|\n]*?)\|", r"| \1 |", content)
+        content = re.sub(r"\| +\|", r"| |", content)
 
         return content.strip()
 
-    async def _generate_tool_based_response(self, original_message: str, tools_used: list, history: list) -> str:
+    async def _generate_tool_based_response(
+        self, original_message: str, tools_used: list, history: list
+    ) -> str:
         """Generate a response based on tool results when AI response is malformed."""
         try:
             # Check what tools were used and try to provide basic data
-            tool_names = [tool.get("function", {}).get("name", "") for tool in tools_used if isinstance(tool, dict)]
-            
+            tool_names = [
+                tool.get("function", {}).get("name", "")
+                for tool in tools_used
+                if isinstance(tool, dict)
+            ]
+
             # If air quality tools were used, try to get basic data
             if any("air_quality" in name or "city" in name for name in tool_names):
                 # Extract city names from the original message
                 cities = []
                 message_lower = original_message.lower()
-                
+
                 # Common cities that might be in the query
-                common_cities = ["london", "paris", "new york", "tokyo", "beijing", "mumbai", "sydney", "cairo", "mexico city", "sao paulo"]
+                common_cities = [
+                    "london",
+                    "paris",
+                    "new york",
+                    "tokyo",
+                    "beijing",
+                    "mumbai",
+                    "sydney",
+                    "cairo",
+                    "mexico city",
+                    "sao paulo",
+                ]
                 for city in common_cities:
                     if city in message_lower:
                         cities.append(city.title())
-                
+
                 if cities:
                     response = f"I retrieved air quality data for {', '.join(cities)}. Here's a summary:\n\n"
-                    
+
                     for city in cities[:3]:  # Limit to 3 cities
                         response += f"**{city}**: Air quality data was retrieved successfully. For detailed AQI values, pollutant levels, and health recommendations, please try your question again.\n"
-                    
+
                     response += "\nFor more detailed information including health recommendations and pollutant breakdown, please try your question again."
                     return response
-            
+
             # Generic fallback for other tool usage
             return f"I successfully retrieved data for your query about '{original_message}', but had trouble formatting the complete response. The information has been collected and is available. Please try asking again for the full details."
-            
+
         except Exception as e:
             logger.error(f"Tool-based response generation failed: {e}")
             return ""

@@ -41,35 +41,35 @@ class GeminiProvider(BaseAIProvider):
         except Exception as e:
             logger.error(f"Failed to setup Gemini: {e}")
             raise ConnectionError(f"Failed to initialize Gemini client: {e}") from e
-    
+
     @staticmethod
     def _sanitize_text(text: str) -> str:
         """
         Sanitize text to handle problematic Unicode characters that cause UTF-8 encoding errors.
-        
+
         This fixes the 'surrogates not allowed' error by:
         1. Encoding to UTF-8 with error handling
         2. Decoding back to string
         3. Replacing unpaired surrogates with safe characters
-        
+
         Args:
             text: Text that may contain problematic Unicode
-            
+
         Returns:
             Sanitized text safe for UTF-8 encoding
         """
         if not text:
             return text
-        
+
         try:
             # Try to encode/decode to catch problematic characters
             # Use 'surrogatepass' to handle unpaired surrogates, then replace them
-            encoded = text.encode('utf-8', errors='surrogatepass')
-            return encoded.decode('utf-8', errors='replace')
+            encoded = text.encode("utf-8", errors="surrogatepass")
+            return encoded.decode("utf-8", errors="replace")
         except Exception as e:
             logger.warning(f"Text sanitization fallback used: {e}")
             # Fallback: remove any characters that can't be encoded
-            return text.encode('utf-8', errors='ignore').decode('utf-8')
+            return text.encode("utf-8", errors="ignore").decode("utf-8")
 
     def get_tool_definitions(self) -> list[types.Tool]:
         """
@@ -126,14 +126,21 @@ class GeminiProvider(BaseAIProvider):
 
         # Get tools only for supported models
         tools = None
-        if self.settings.AI_MODEL in ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash"]:
+        if self.settings.AI_MODEL in [
+            "gemini-1.5-pro",
+            "gemini-1.5-flash",
+            "gemini-2.0-flash-exp",
+            "gemini-2.5-flash",
+        ]:
             tools = self.get_tool_definitions()
             if tools:
-                tool_names = [t.function_declarations[0].name for t in tools if t.function_declarations]
+                tool_names = [
+                    t.function_declarations[0].name for t in tools if t.function_declarations
+                ]
                 reasoning.add_step(
                     "Tools Available",
                     f"I have access to {len(tool_names)} tools for data retrieval",
-                    "planning"
+                    "planning",
                 )
 
         # Create chat session
@@ -147,13 +154,8 @@ class GeminiProvider(BaseAIProvider):
         # Add optional parameters if provided
         if top_k is not None:
             config_params["top_k"] = top_k
+
         # Use max_tokens directly - DO NOT multiply
-        
-        # Retry configuration for token limit handling  
-        max_retries = 2
-        
-        for attempt in range(max_retries):
-            try:
         effective_max_tokens = max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS
         if effective_max_tokens is not None:
             config_params["max_output_tokens"] = effective_max_tokens
@@ -163,13 +165,13 @@ class GeminiProvider(BaseAIProvider):
         base_delay = 1
         response = None
         chat = None
-        
+
         reasoning.add_step(
             "Initiating Communication",
             "Connecting to Gemini AI to process your request",
-            "executing"
+            "executing",
         )
-        
+
         for attempt in range(max_retries):
             try:
                 chat = self.client.chats.create(
@@ -183,40 +185,51 @@ class GeminiProvider(BaseAIProvider):
                 reasoning.add_step(
                     "Response Received",
                     "Successfully received response from AI model",
-                    "validating"
+                    "validating",
                 )
                 break  # Success, exit retry loop
             except Exception as e:
                 error_msg = str(e).lower()
                 logger.error(f"Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
-                
+
                 # Check for token limit errors
-                if ("token" in error_msg and ("limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg)) or "context length" in error_msg:
+                if (
+                    "token" in error_msg
+                    and ("limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg)
+                ) or "context length" in error_msg:
                     logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
-                    
+
                     # Convert messages back to dict format for truncation
                     messages_dict = [{"role": "system", "content": system_instruction}]
                     for msg in chat_history:
-                        messages_dict.append({
-                            "role": "user" if msg.role == "user" else "assistant",
-                            "content": msg.parts[0].text if msg.parts else ""
-                        })
+                        messages_dict.append(
+                            {
+                                "role": "user" if msg.role == "user" else "assistant",
+                                "content": msg.parts[0].text if msg.parts else "",
+                            }
+                        )
                     messages_dict.append({"role": "user", "content": message})
-                    
+
                     # Truncate
-                    truncated = self._truncate_context_intelligently(messages_dict, system_instruction)
-                    
+                    truncated = self._truncate_context_intelligently(
+                        messages_dict, system_instruction
+                    )
+
                     # Convert back to Gemini format
                     chat_history = []
                     for msg in truncated[1:-1]:  # Skip system and current user message
                         role = "user" if msg["role"] == "user" else "model"
                         chat_history.append(
-                            types.Content(role=role, parts=[types.Part(text=msg.get("content", ""))])
+                            types.Content(
+                                role=role, parts=[types.Part(text=msg.get("content", ""))]
+                            )
                         )
-                    
+
                     # Retry with truncated context
                     try:
-                        logger.info(f"Retrying with truncated context ({len(chat_history)} messages)...")
+                        logger.info(
+                            f"Retrying with truncated context ({len(chat_history)} messages)..."
+                        )
                         chat = self.client.chats.create(
                             model=self.settings.AI_MODEL,
                             config=types.GenerateContentConfig(**config_params),
@@ -236,11 +249,12 @@ class GeminiProvider(BaseAIProvider):
                             "tools_used": [],
                             "context_truncated": True,
                         }
-                
+
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
                     import time
+
                     time.sleep(delay)
                 else:
                     error_msg = str(e)
@@ -280,7 +294,9 @@ class GeminiProvider(BaseAIProvider):
                         }
                     else:
                         # Log the full error for developers but provide user-friendly message
-                        logger.error(f"Unexpected Gemini error (attempt {attempt + 1}/{max_retries}): {e}")
+                        logger.error(
+                            f"Unexpected Gemini error (attempt {attempt + 1}/{max_retries}): {e}"
+                        )
                         return {
                             "response": (
                                 "I apologize, but I'm experiencing technical difficulties at the moment. "
@@ -290,7 +306,7 @@ class GeminiProvider(BaseAIProvider):
                             "tools_used": [],
                             "error_logged": True,  # Flag for internal tracking
                         }
-        
+
         # Validate response before accessing
         if response is None:
             logger.error("Gemini response is None after retry loop - all attempts failed")
@@ -298,22 +314,18 @@ class GeminiProvider(BaseAIProvider):
                 "response": "I apologize, but I encountered an error processing your request. Please try again.",
                 "tools_used": [],
             }
-        
+
         if chat is None:
             logger.error("Gemini chat is None - cannot continue")
             return {
                 "response": "I apologize, but I encountered an error creating the chat session. Please try again.",
                 "tools_used": [],
             }
-        
+
         tools_used: list[str] = []
 
         # Handle function calls
-        if (
-            tools
-            and response.candidates
-            and response.candidates[0].content.parts
-        ):
+        if tools and response.candidates and response.candidates[0].content.parts:
             function_calls = [
                 part.function_call
                 for part in response.candidates[0].content.parts
@@ -324,11 +336,9 @@ class GeminiProvider(BaseAIProvider):
                 # Add reasoning step for tool usage
                 tool_names = [fc.name for fc in function_calls]
                 reasoning.add_step(
-                    "Calling Tools",
-                    f"Retrieving data using: {', '.join(tool_names)}",
-                    "executing"
+                    "Calling Tools", f"Retrieving data using: {', '.join(tool_names)}", "executing"
                 )
-                
+
                 # Safety: Limit concurrent functions
                 MAX_CONCURRENT = 5
                 if len(function_calls) > MAX_CONCURRENT:
@@ -342,31 +352,35 @@ class GeminiProvider(BaseAIProvider):
 
                 # Execute functions in parallel
                 function_results = await self._execute_functions(function_calls, tools_used)
-                
+
                 # Record tool execution in reasoning
                 for tool_name in tools_used:
-                    reasoning.record_tool_execution(tool_name, "success", "Data retrieved successfully")
-                
+                    reasoning.record_tool_execution(
+                        tool_name, "success", "Data retrieved successfully"
+                    )
+
                 # Extract chart data if generate_chart was called
                 chart_result = None
                 for result in function_results:
-                    if result['function_call'].name == 'generate_chart':
-                        chart_result = result['result']
+                    if result["function_call"].name == "generate_chart":
+                        chart_result = result["result"]
                         logger.info("📊 Chart generation detected in tool results")
                         break
 
                 # Send function results back as text message
-                function_results_text = "\n".join([
-                    f"Function {result['function_call'].name} result: {result['result']}"
-                    for result in function_results
-                ])
-                
+                function_results_text = "\n".join(
+                    [
+                        f"Function {result['function_call'].name} result: {result['result']}"
+                        for result in function_results
+                    ]
+                )
+
                 reasoning.add_step(
                     "Processing Retrieved Data",
                     "Analyzing and formatting the data for your response",
-                    "processing"
+                    "processing",
                 )
-                
+
                 response = chat.send_message(function_results_text)
 
         # Get final response text
@@ -376,18 +390,24 @@ class GeminiProvider(BaseAIProvider):
         if response.candidates and response.candidates[0].finish_reason:
             finish_reason = response.candidates[0].finish_reason
             logger.info(f"Gemini response finish reason: {finish_reason}")
-            
+
             if finish_reason == "MAX_TOKENS":
-                logger.warning("Gemini response reached max tokens, but response should still be useful")
+                logger.warning(
+                    "Gemini response reached max tokens, but response should still be useful"
+                )
 
         # Handle empty or very short responses
         if not final_response or not final_response.strip() or len(final_response.strip()) < 20:
-            logger.warning(f"Gemini returned empty or very short response (length: {len(final_response) if final_response else 0}). Tools used: {tools_used}")
-            
+            logger.warning(
+                f"Gemini returned empty or very short response (length: {len(final_response) if final_response else 0}). Tools used: {tools_used}"
+            )
+
             if tools_used:
                 logger.info("Attempting to generate fallback response from tool results")
                 try:
-                    fallback_response = await self._generate_tool_based_response(message, tools_used, history)
+                    fallback_response = await self._generate_tool_based_response(
+                        message, tools_used, history
+                    )
                     if fallback_response and len(fallback_response.strip()) > 50:
                         final_response = fallback_response
                         logger.info("Successfully generated fallback response from tool results")
@@ -416,19 +436,21 @@ class GeminiProvider(BaseAIProvider):
         # Clean and format the response with proper markdown
         final_response = self._clean_response(final_response)
         final_response = MarkdownFormatter.format_response(final_response)
-        
+
         # Validate response quality
-        has_data = len(final_response) > 100 and any(indicator in final_response.lower() 
-                                                       for indicator in ['aqi', 'pm2.5', 'pm10', 'good', 'moderate', 'data'])
+        has_data = len(final_response) > 100 and any(
+            indicator in final_response.lower()
+            for indicator in ["aqi", "pm2.5", "pm10", "good", "moderate", "data"]
+        )
         quality = "high" if has_data else "basic"
         reasoning.validate_response(quality, has_data)
-        
+
         # Extract thinking steps if available (Gemini 2.5 Flash thinking mode)
         thinking_steps = self._extract_thinking_steps(response)
-        
+
         # Combine reasoning with thinking steps
         all_reasoning = reasoning.get_all_steps()
-        
+
         # Prepend reasoning to response (collapsible format)
         reasoning_markdown = reasoning.to_compact_markdown()
         if reasoning_markdown:
@@ -441,48 +463,48 @@ class GeminiProvider(BaseAIProvider):
             "reasoning_steps": [step.to_dict() for step in all_reasoning],
             "reasoning_content": reasoning.to_markdown(include_header=False),
         }
-        
+
         # Add chart data if present
-        if 'chart_result' in locals() and chart_result:
+        if "chart_result" in locals() and chart_result:
             result_data["chart_result"] = chart_result
             logger.info("📊 Chart data added to response")
-        
+
         return result_data
 
     def _extract_thinking_steps(self, response) -> list[str]:
         """
         Extract thinking/reasoning steps from Gemini response.
-        
+
         Gemini 2.5 Flash with thinking mode exposes thoughts in parts[].thought
-        
+
         Args:
             response: Gemini response object
-            
+
         Returns:
             List of thinking steps
         """
         thinking_steps = []
-        
+
         try:
             if not response or not response.candidates:
                 return thinking_steps
-            
+
             # Get the first candidate
             candidate = response.candidates[0]
-            
+
             if not candidate.content or not candidate.content.parts:
                 return thinking_steps
-            
+
             # Extract thoughts from parts
             for part in candidate.content.parts:
                 # Check for thought attribute (Gemini 2.5 Flash thinking mode)
-                if hasattr(part, 'thought') and part.thought:
+                if hasattr(part, "thought") and part.thought:
                     thinking_steps.append(str(part.text if part.text else part.thought))
                     logger.info("Extracted thinking step from Gemini thought part")
-            
+
         except Exception as e:
             logger.debug(f"Failed to extract thinking steps from Gemini: {e}")
-        
+
         return thinking_steps
 
     def _deduplicate_calls(self, function_calls: list) -> list:
@@ -498,36 +520,49 @@ class GeminiProvider(BaseAIProvider):
                 logger.info(f"Skipping duplicate function call: {fc.name}")
         return unique
 
-    async def _generate_tool_based_response(self, original_message: str, tools_used: list, history: list) -> str:
+    async def _generate_tool_based_response(
+        self, original_message: str, tools_used: list, history: list
+    ) -> str:
         """Generate a response based on tool results when AI response is malformed."""
         try:
             # Check what tools were used and try to provide basic data
             tool_names = [tool for tool in tools_used if isinstance(tool, str)]
-            
+
             # If air quality tools were used, try to get basic data
             if any("air_quality" in name or "city" in name for name in tool_names):
                 # Extract city names from the original message
                 cities = []
                 message_lower = original_message.lower()
-                
+
                 # Common cities that might be in the query
-                common_cities = ["london", "paris", "new york", "tokyo", "beijing", "mumbai", "sydney", "cairo", "mexico city", "sao paulo"]
+                common_cities = [
+                    "london",
+                    "paris",
+                    "new york",
+                    "tokyo",
+                    "beijing",
+                    "mumbai",
+                    "sydney",
+                    "cairo",
+                    "mexico city",
+                    "sao paulo",
+                ]
                 for city in common_cities:
                     if city in message_lower:
                         cities.append(city.title())
-                
+
                 if cities:
                     response = f"I retrieved air quality data for {', '.join(cities)}. Here's a summary:\n\n"
-                    
+
                     for city in cities[:3]:  # Limit to 3 cities
                         response += f"**{city}**: Air quality data was retrieved successfully. For detailed AQI values, pollutant levels, and health recommendations, please try your question again.\n"
-                    
+
                     response += "\nFor more detailed information including health recommendations and pollutant breakdown, please try your question again."
                     return response
-            
+
             # Generic fallback for other tool usage
             return f"I successfully retrieved data for your query about '{original_message}', but had trouble formatting the complete response. The information has been collected and is available. Please try asking again for the full details."
-            
+
         except Exception as e:
             logger.error(f"Tool-based response generation failed: {e}")
             return ""
@@ -543,7 +578,12 @@ class GeminiProvider(BaseAIProvider):
                 if measurements:
                     m = measurements[0]
                     site = m.get("siteDetails") or {}
-                    site_name = site.get("name") or site.get("formatted_name") or result.get("search_location") or "Unknown site"
+                    site_name = (
+                        site.get("name")
+                        or site.get("formatted_name")
+                        or result.get("search_location")
+                        or "Unknown site"
+                    )
                     site_id = m.get("site_id") or site.get("site_id") or "Unknown"
                     time = m.get("time") or m.get("timestamp") or "Unknown time"
                     pm25 = m.get("pm2_5", {})
@@ -553,9 +593,13 @@ class GeminiProvider(BaseAIProvider):
                     summary_lines = [f"# Air Quality — {site_name}", ""]
                     # Removed site ID display for security
                     if isinstance(pm25, dict):
-                        summary_lines.append(f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})")
+                        summary_lines.append(
+                            f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})"
+                        )
                     if isinstance(pm10, dict):
-                        summary_lines.append(f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})")
+                        summary_lines.append(
+                            f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})"
+                        )
                     if aqi:
                         summary_lines.append(f"- Overall AQI/Category: {aqi}")
 
@@ -630,10 +674,12 @@ class GeminiProvider(BaseAIProvider):
             for i, result in enumerate(raw_results):
                 if isinstance(result, Exception):
                     logger.error(f"Function execution exception: {result}")
-                    results.append({
-                        "function_call": function_calls[i],
-                        "result": {"error": f"Function execution failed: {str(result)}"},
-                    })
+                    results.append(
+                        {
+                            "function_call": function_calls[i],
+                            "result": {"error": f"Function execution failed: {str(result)}"},
+                        }
+                    )
                 else:
                     results.append(result)  # type: ignore
         except Exception as e:
@@ -654,28 +700,28 @@ class GeminiProvider(BaseAIProvider):
 
         # CRITICAL: Remove any leaked tool call syntax or internal function calls
         # Remove JSON-like function call patterns
-        content = re.sub(r'\{"type":\s*"function".*?\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{"name":\s*".*?".*?\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{"type":\s*"function".*?\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{"name":\s*".*?".*?\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', "", content, flags=re.DOTALL)
+
         # Remove function call syntax like (city="Gulu")
-        content = re.sub(r'\(\w+="[^"]*"\)', '', content)
-        
+        content = re.sub(r'\(\w+="[^"]*"\)', "", content)
+
         # Remove any remaining JSON objects that look like tool calls
-        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', "", content, flags=re.DOTALL)
+
         # Remove raw JSON data that might leak from tool results
-        content = re.sub(r'\{[^}]*"code"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"id"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"name"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"location"[^}]*\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{[^}]*"code"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"id"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"name"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"location"[^}]*\}', "", content, flags=re.DOTALL)
+
         # Remove escaped JSON
-        content = re.sub(r'\\"[^"]*\\":', '', content)
-        content = re.sub(r'\\n', ' ', content)
-        
+        content = re.sub(r'\\"[^"]*\\":', "", content)
+        content = re.sub(r"\\n", " ", content)
+
         # Remove HTML tags
-        content = re.sub(r'<[^>]+>', '', content)
+        content = re.sub(r"<[^>]+>", "", content)
 
         # Remove code markers ONLY if they're not part of proper code blocks
         unwanted_patterns = [
@@ -688,7 +734,7 @@ class GeminiProvider(BaseAIProvider):
             content = content.replace(pattern, "```\n")
 
         # Ensure proper spacing after markdown elements
-        lines = content.split('\n')
+        lines = content.split("\n")
         cleaned_lines = []
         prev_was_header = False
         prev_was_list = False
@@ -697,26 +743,26 @@ class GeminiProvider(BaseAIProvider):
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            
+
             # Check for headers
-            is_header = stripped.startswith('#') and ' ' in stripped[:7]
-            
+            is_header = stripped.startswith("#") and " " in stripped[:7]
+
             # Check for list items
-            is_list = bool(re.match(r'^[\s]*[-*+]\s', line) or re.match(r'^[\s]*\d+\.\s', line))
-            
+            is_list = bool(re.match(r"^[\s]*[-*+]\s", line) or re.match(r"^[\s]*\d+\.\s", line))
+
             # Check if this is a table row
-            is_table_row = '|' in stripped and stripped.startswith('|') and stripped.endswith('|')
-            
+            is_table_row = "|" in stripped and stripped.startswith("|") and stripped.endswith("|")
+
             if is_table_row:
                 if not in_table:
                     # Starting a table - ensure blank line before
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
+                        cleaned_lines.append("")
                     in_table = True
-                    table_header_count = stripped.count('|') - 1
+                    table_header_count = stripped.count("|") - 1
                     cleaned_lines.append(line)
                 else:
-                    current_count = stripped.count('|') - 1
+                    current_count = stripped.count("|") - 1
                     if current_count == table_header_count:
                         cleaned_lines.append(line)
                     else:
@@ -726,27 +772,27 @@ class GeminiProvider(BaseAIProvider):
                 if in_table and stripped:
                     # End of table - ensure blank line after
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
+                        cleaned_lines.append("")
                     in_table = False
-                
+
                 # Ensure proper spacing after headers
                 if prev_was_header and stripped and not is_header:
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
-                
+                        cleaned_lines.append("")
+
                 # Ensure proper spacing before headers
                 if is_header and cleaned_lines and cleaned_lines[-1].strip():
                     if not prev_was_list:
-                        cleaned_lines.append('')
-                
+                        cleaned_lines.append("")
+
                 cleaned_lines.append(line)
                 prev_was_header = is_header
                 prev_was_list = is_list
 
-        content = '\n'.join(cleaned_lines)
+        content = "\n".join(cleaned_lines)
 
         # Ensure proper spacing in tables
-        content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
-        content = re.sub(r'\| +\|', r'| |', content)
+        content = re.sub(r"\|([^|\n]*?)\|", r"| \1 |", content)
+        content = re.sub(r"\| +\|", r"| |", content)
 
         return content.strip()

@@ -697,11 +697,39 @@ class QueryAnalyzer:
                     f"\n**DATA ANALYSIS INFORMATION from web search:**\n{format_search_result(result)}\n"
                 )
 
-                # Note: Visualization tool not yet implemented in tool executor
-                # For now, just provide search results that can be used for visualization
+                # CRITICAL FIX: Generate visualization if user requests charts/graphs
+                if data_analysis["requires_visualization"]:
+                    logger.info(
+                        "📊 User requested visualization - attempting to generate chart..."
+                    )
+                    # TODO: Will generate chart after extracting data from search results
 
             except Exception as e:
                 logger.error(f"Proactive data analysis call failed: {e}")
+
+        # CRITICAL FIX: Generate charts if user explicitly requests visualization AND we have location data
+        viz_keywords = ["chart", "graph", "plot", "visualize", "trend", "show me"]
+        if any(keyword in message.lower() for keyword in viz_keywords):
+            # Check if we have air quality data from previous tool calls
+            if tools_called and any(
+                "air_quality" in tool for tool in tools_called
+            ):
+                logger.info(
+                    "📊 Visualization requested with air quality data - attempting to generate chart..."
+                )
+                try:
+                    # Try to extract data from tool results and generate chart
+                    chart_data = await QueryAnalyzer._generate_chart_from_aq_data(
+                        tool_results, message, tool_executor
+                    )
+                    if chart_data:
+                        tool_results["generate_chart"] = chart_data
+                        tools_called.append("generate_chart")
+                        context_parts.append(
+                            f"\n**CHART GENERATED**: {chart_data.get('message', 'Chart created successfully')}\n"
+                        )
+                except Exception as e:
+                    logger.error(f"Chart generation failed: {e}")
 
         # Build context injection
         context_injection = ""
@@ -763,6 +791,115 @@ class QueryAnalyzer:
             "tools_called": list(set(tools_called)),  # Remove duplicates
             "context_injection": context_injection,
         }
+
+    @staticmethod
+    async def _generate_chart_from_aq_data(
+        tool_results: dict, message: str, tool_executor: Any
+    ) -> dict | None:
+        """
+        Generate a chart from air quality data if available.
+
+        Args:
+            tool_results: Results from previously called tools
+            message: User's original message
+            tool_executor: ToolExecutor instance
+
+        Returns:
+            Chart result dict or None if generation failed
+        """
+        try:
+            # Extract air quality data from tool results
+            chart_data_points = []
+            location_name = "Location"
+
+            for tool_name, result in tool_results.items():
+                if not isinstance(result, dict) or not result.get("success"):
+                    continue
+
+                # Extract data from AirQo/WAQI results
+                if "air_quality" in tool_name:
+                    measurements = result.get("measurements", [])
+                    if measurements:
+                        # Extract location name
+                        if "african" in tool_name:
+                            location_name = tool_name.split("_")[-1].title()
+                        elif "city" in tool_name:
+                            location_name = tool_name.split("_")[-1].title()
+
+                        # If single measurement, create a simple current status chart
+                        if len(measurements) == 1:
+                            m = measurements[0]
+                            pm25 = m.get("pm2_5", {})
+                            pm10 = m.get("pm10", {})
+
+                            chart_data_points.append(
+                                {
+                                    "parameter": "PM2.5",
+                                    "value": pm25.get("value", 0) if isinstance(pm25, dict) else pm25,
+                                    "aqi": pm25.get("aqi", 0) if isinstance(pm25, dict) else 0,
+                                }
+                            )
+                            chart_data_points.append(
+                                {
+                                    "parameter": "PM10",
+                                    "value": pm10.get("value", 0) if isinstance(pm10, dict) else pm10,
+                                    "aqi": pm10.get("aqi", 0) if isinstance(pm10, dict) else 0,
+                                }
+                            )
+
+                        # If multiple measurements, create time series
+                        else:
+                            for m in measurements[:24]:  # Last 24 hours
+                                time_str = m.get("time", m.get("timestamp", "Unknown"))
+                                pm25 = m.get("pm2_5", {})
+                                chart_data_points.append(
+                                    {
+                                        "time": time_str,
+                                        "aqi": pm25.get("aqi", 0) if isinstance(pm25, dict) else 0,
+                                        "pm25": pm25.get("value", 0)
+                                        if isinstance(pm25, dict)
+                                        else pm25,
+                                    }
+                                )
+
+            # Generate chart if we have data
+            if chart_data_points:
+                # Determine chart type based on data structure
+                if "time" in chart_data_points[0]:
+                    # Time series line chart
+                    chart_args = {
+                        "data": chart_data_points,
+                        "chart_type": "line",
+                        "x_column": "time",
+                        "y_column": "aqi",
+                        "title": f"{location_name} Air Quality Trend",
+                        "x_label": "Time",
+                        "y_label": "AQI",
+                    }
+                else:
+                    # Bar chart for current parameters
+                    chart_args = {
+                        "data": chart_data_points,
+                        "chart_type": "bar",
+                        "x_column": "parameter",
+                        "y_column": "value",
+                        "title": f"{location_name} Current Air Quality",
+                        "x_label": "Parameter",
+                        "y_label": "µg/m³",
+                    }
+
+                logger.info(f"📊 Generating {chart_args['chart_type']} chart with {len(chart_data_points)} data points")
+
+                # Call generate_chart tool
+                result = await tool_executor.execute_async("generate_chart", chart_args)
+                return result
+            else:
+                logger.warning("No air quality data available for chart generation")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error generating chart from AQ data: {e}", exc_info=True)
+            return None
 
 
 def format_air_quality_result(result: dict) -> str:

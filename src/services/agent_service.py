@@ -1079,7 +1079,15 @@ class AgentService:
             # Extract chart data from tool results if chart was generated
             # Check if generate_chart was called and capture the chart data
             if "generate_chart" in all_tools_used:
+                # First check if it's in provider response (direct AI call)
                 chart_result = response_data.get("chart_result")
+                
+                # If not found, check proactive tool results
+                if not chart_result:
+                    proactive_tool_results = proactive_results.get("tool_results", {})
+                    chart_result = proactive_tool_results.get("generate_chart")
+                    logger.info(f"Looking for chart in proactive results: {chart_result is not None}")
+                
                 if chart_result and isinstance(chart_result, dict):
                     response_data["chart_data"] = chart_result.get("chart_data")
                     response_data["chart_metadata"] = {
@@ -1092,6 +1100,8 @@ class AgentService:
                     logger.info(
                         f"📊 Chart generated: {chart_result.get('chart_type')} with {chart_result.get('data_rows')} rows"
                     )
+                else:
+                    logger.warning(f"⚠️ generate_chart was called but no chart_result found in response_data or proactive_results")
 
             # Track costs
             tokens_used = response_data.get("tokens_used", 0)

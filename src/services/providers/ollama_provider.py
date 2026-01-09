@@ -134,7 +134,6 @@ class OllamaProvider(BaseAIProvider):
                 messages[-1],
             ]
 
-    @staticmethod
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """
         Get Ollama tool definitions.
@@ -518,11 +517,32 @@ class OllamaProvider(BaseAIProvider):
         response_text = self._clean_response(response_text)
 
         # Debug: Log raw response for reasoning extraction debugging
-        if self.settings.ENVIRONMENT == "development":
-            logger.debug(f"Raw response text before reasoning extraction: {response_text[:500]}...")
+        logger.info(f"Raw response text length: {len(response_text) if response_text else 0}")
+        if response_text and len(response_text) > 0:
+            logger.debug(f"Raw response preview: {response_text[:500]}...")
+        else:
+            logger.warning("⚠️ Ollama returned EMPTY response text after tool execution!")
 
         # Extract thinking/reasoning steps if present
         thinking_steps, cleaned_response = self._extract_thinking_steps(response_text)
+
+        # CRITICAL FIX: If response is empty but tools were used successfully, generate fallback response
+        if not cleaned_response and tools_used:
+            logger.warning("⚠️ AI returned empty response after tool calls - generating fallback from tool results")
+            
+            # Generate a basic response from tool results
+            fallback_parts = []
+            for i, tool_result in enumerate(tool_results):
+                if tool_result.get("success"):
+                    summary = self._summarize_tool_result(tool_result)
+                    if summary:
+                        fallback_parts.append(summary)
+            
+            if fallback_parts:
+                cleaned_response = "Here's the information I found:\n\n" + "\n\n".join(fallback_parts)
+                logger.info("✅ Generated fallback response from tool results")
+            else:
+                cleaned_response = "I apologize, but I couldn't generate a proper response from the data retrieved."
 
         return {
             "response": cleaned_response or "I apologize, but I couldn't generate a response.",
