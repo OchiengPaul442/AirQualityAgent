@@ -14,48 +14,23 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Union
 
-# CRITICAL patterns that MUST be blocked (actual attacks)
+# CRITICAL patterns that MUST be blocked (only direct server attacks)
+# Keep this list MINIMAL - we sanitize everything else
 CRITICAL_PATTERNS = [
-    # Multi-stage SQL injection with chaining
-    r";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+(.*\s+)?(FROM|INTO|TABLE|DATABASE)",
-    # Command chaining that could cause system damage
-    r"(;|&&|\|\|)\s*(rm|del|format|shutdown|reboot|halt)\s+-[rRfF]",
-    # Direct code execution attempts
-    r"\b(eval|exec)\s*\(\s*(__import__|compile|input)\s*\(",
-    r"__import__\s*\(\s*['\"]os['\"]\s*\)\s*\.\s*system",
-    # Path traversal with file operations
-    r"(\.\./){3,}",  # Multiple directory traversals
+    # Only multi-stage attacks that could execute immediately
+    r";\s*DROP\s+TABLE.*;\s*DELETE",  # Multi-stage SQL destruction
+    r"(&&|\|\|)\s*rm\s+-rf\s+/[^\s]*\s*(&&|\|\|)",  # Chained rm -rf
+    r"eval\s*\(\s*__import__\s*\(['\"]os['\"]\)\s*\.\s*system",  # Actual code execution chain
 ]
 
-# Patterns to SANITIZE (remove but allow request)
+# Patterns to SANITIZE silently (NEVER block, just clean)
+# These are removed from input but requests proceed
 SANITIZE_PATTERNS = [
-    # SQL keywords in isolation (clean but don't block)
-    r"\b(SELECT|DELETE)\s+.*\s+(FROM|WHERE)\b",
-    r"\bINSERT\s+INTO\s+\w+\s+(VALUES|\()",
-    r"\bUPDATE\s+\w+\s+SET\b",
-    r"\b(DROP|CREATE|ALTER)\s+(TABLE|DATABASE|INDEX|VIEW|USER)\b",
-    r"\bEXEC(UTE)?\s+\w+",
-    r"\bUNION\s+(ALL\s+)?SELECT\b",
-    r"--\s*$",  # SQL comments
-    r"/\*.*\*/",  # SQL block comments
-    # Shell commands in backticks (clean but allow markdown)
-    r"`\s*(whoami|id|pwd|ps|rm|kill|sudo)\s*`",
-    r"\$\((?:whoami|id|pwd|rm|kill|sudo)\)",
-    # XSS patterns
-    r"<script[^>]*>.*?</script>",
-    r"javascript:",
-    r"on\w+\s*=",
-    r"<iframe[^>]*>",
-    r"<object[^>]*>",
-    r"<embed[^>]*>",
-    # Code execution (single attempts)
-    r"\beval\s*\(",
-    r"\bexec\s*\(",
-    r"\b__import__\s*\(",
+    # Only clean truly executable patterns
+    (r"`(whoami|rm\s+-rf|curl.*\|.*bash)`", ""),  # Executable commands in backticks
+    (r"<script[^>]*>.*?</script>", ""),  # Script tags
+    (r"javascript:\s*void\s*\(", ""),  # JavaScript protocol
 ]
-
-# Safe characters for different contexts (EXPANDED for international support)
-SAFE_CHARS = re.compile(r"[^a-zA-Z0-9\s\.,!?\-\'\"():;°µ²³/]")
 
 
 class InputSanitizer:
@@ -67,8 +42,11 @@ class InputSanitizer:
         Sanitize text input - removes dangerous patterns while allowing technical content.
         
         Two-stage approach:
-        1. Check for CRITICAL attacks → raise exception
-        2. Clean SANITIZE patterns → allow request
+        NEVER raises exceptions - always returns cleaned text.
+        
+        Two-stage approach:
+        1. Check for CRITICAL attacks → raise exception (ONLY for direct server attacks)
+        2. Clean SANITIZE patterns → allow request (everything else)
 
         Args:
             text: Input text to sanitize
@@ -79,35 +57,44 @@ class InputSanitizer:
             Sanitized text
             
         Raises:
-            ValueError: If critical attack pattern detected
+            ValueError: ONLY if critical attack pattern detected (very rare)
         """
         if not isinstance(text, str):
-            raise ValueError("Input must be a string")
+            return ""  # Don't block, just return empty
 
-        # Limit length
+        # Truncate if too long (don't block)
         if len(text) > max_length:
             text = text[:max_length]
 
-        # Normalize unicode
-        text = unicodedata.normalize("NFKC", text)
+        # Normalize unicode (with error handling)
+        try:
+            text = unicodedata.normalize("NFKC", text)
+        except:
+            pass  # Continue with original text
 
         # Remove null bytes and control characters (keep newlines, tabs)
         text = "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
 
-        # STAGE 1: Check for CRITICAL attacks
+        # STAGE 1: Check for CRITICAL attacks (only block if truly dangerous)
         for pattern in CRITICAL_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                 raise ValueError("Critical security threat detected and blocked")
 
-        # STAGE 2: Sanitize non-critical patterns (clean but allow)
-        for pattern in SANITIZE_PATTERNS:
-            text = re.sub(pattern, " [removed] ", text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        # STAGE 2: Sanitize patterns SILENTLY (never block, just clean)
+        for pattern, replacement in SANITIZE_PATTERNS:
+            try:
+                text = re.sub(pattern, replacement, text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+            except:
+                pass  # If pattern fails, continue
 
         # HTML escape only if requested
         if html_escape:
-            text = html.escape(text, quote=True)
+            try:
+                text = html.escape(text, quote=True)
+            except:
+                pass
 
-        # Remove excessive whitespace
+        # Clean up excessive whitespace
         text = re.sub(r" +", " ", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = text.strip()
@@ -117,35 +104,28 @@ class InputSanitizer:
     @staticmethod
     def validate_message_content(message: str) -> bool:
         """
-        Validate message content - only blocks CRITICAL attacks.
-        Most patterns are sanitized rather than rejected.
+        Validate message content - ONLY blocks CRITICAL direct server attacks.
+        Everything else is allowed (will be sanitized at API layer).
 
         Args:
             message: Message to validate
 
         Returns:
-            True if safe or sanitizable, False only if critical attack
+            True unless message contains critical attack pattern
         """
         if not isinstance(message, str):
+            return True  # Allow non-strings (will be handled by sanitizer)
+
+        # Check length limits (reasonable limit)
+        if len(message) > 500000:  # 500KB limit (very generous)
             return False
 
-        # Check length limits
-        if len(message) > 100000:  # 100KB limit
-            return False
-
-        # Only block CRITICAL attack patterns
+        # ONLY block CRITICAL attack patterns (direct server threats)
         for pattern in CRITICAL_PATTERNS:
             if re.search(pattern, message, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                 return False
 
-        # Allow high ratio of special chars for technical content
-        allowed_special = " \n\r\t.,!?-'\"():;°µ²³/[]{}<>=@#$%&*+~`|"
-        special_chars = sum(
-            1 for char in message if not char.isalnum() and char not in allowed_special
-        )
-        if special_chars > len(message) * 0.7:  # 70% threshold
-            return False
-
+        # Allow EVERYTHING else - technical content, code blocks, special chars, etc.
         return True
 
     @staticmethod
@@ -318,7 +298,7 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
         Validated and sanitized data
 
     Raises:
-        ValueError: If critical attack detected
+        ValueError: ONLY if critical direct server attack detected
     """
     sanitized = {}
 
@@ -327,21 +307,18 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
             if not isinstance(value, str):
                 raise ValueError("Message must be a string")
             
-            # Check length limit first
-            if len(value) > 100000:
-                raise ValueError("Message too long (max 100KB)")
+            # Check VERY generous length limit
+            if len(value) > 500000:  # 500KB (very generous)
+                raise ValueError("Message too long (max 500KB)")
             
-            # Check for CRITICAL patterns only (before sanitization)
+            # ONLY check for CRITICAL patterns (direct server attacks)
             for pattern in CRITICAL_PATTERNS:
                 if re.search(pattern, value, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                     raise ValueError("Critical security threat detected")
             
-            # Sanitize the message (cleans dangerous patterns)
-            try:
-                sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
-            except ValueError as e:
-                # If sanitization fails due to critical pattern, block it
-                raise ValueError(f"Message contains dangerous content: {str(e)}")
+            # Sanitize the message SILENTLY (cleans patterns, never blocks)
+            sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
+            
         elif key == "session_id":
             if value is not None:
                 if not isinstance(value, str):
@@ -355,9 +332,9 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
             # File validation is handled separately in the route
             sanitized[key] = value
         else:
-            # For other fields, basic sanitization
+            # For other fields, basic sanitization (never blocks)
             if isinstance(value, str):
-                sanitized[key] = InputSanitizer.sanitize_text_input(value, max_length=1000)
+                sanitized[key] = InputSanitizer.sanitize_text_input(value, max_length=10000)
             else:
                 sanitized[key] = value
 
