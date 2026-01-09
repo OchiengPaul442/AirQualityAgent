@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # - Kimi (Moonshot): https://api.moonshot.cn/v1
     # For these providers, set AI_PROVIDER=openai and update OPENAI_BASE_URL
 
+    # Search Service Configuration
+    DASHSCOPE_API_KEY: str = ""  # Alibaba Cloud DashScope API key for web search (optional backup)
+
     # Database Configuration
     # Default to SQLite in ./data directory (Docker-friendly)
     DATABASE_URL: str = "sqlite:///./data/chat_sessions.db"

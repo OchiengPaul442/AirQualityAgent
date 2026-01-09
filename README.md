@@ -70,8 +70,10 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
   - European and US AQI indices
   - Comprehensive pollutant data: PM2.5, PM10, NO2, O3, SO2, CO, dust, UV index
 - **Weather Service**: Current weather and up to 16-day forecasts
-- **Search Service**: Intelligent fallback - Web search with air quality focus
-  - Automatically triggered when all APIs fail
+- **Search Service**: Multi-provider web search with automatic fallback
+  - Primary: DuckDuckGo (no authentication required)
+  - Backup: DashScope (Alibaba Cloud API, requires DASHSCOPE_API_KEY)
+  - Automatically triggered for research queries
   - Prioritizes trusted sources (WHO, EPA, government agencies)
   - Specialized air quality info search
   - Environmental news and policy search

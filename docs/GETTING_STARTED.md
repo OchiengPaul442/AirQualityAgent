@@ -90,6 +90,7 @@ This guide will help you set up and run **AERIS-AQ (Artificial Environmental Rea
    ```env
    WAQI_API_KEY=your_waqi_api_key
    AIRQO_API_TOKEN=your_airqo_token
+   DASHSCOPE_API_KEY=your_dashscope_api_key
    ```
 
    To obtain API keys:
@@ -97,6 +98,7 @@ This guide will help you set up and run **AERIS-AQ (Artificial Environmental Rea
    - WAQI: Register at [aqicn.org](https://aqicn.org/data-platform/token/)
    - AirQo: Contact [AirQo](https://airqo.net) for access
    - **AirQo Analytics Dashboard**: [https://analytics.airqo.net](https://analytics.airqo.net) - Interactive dashboard for data visualization and downloads
+   - DashScope: Register at [Alibaba Cloud DashScope](https://dashscope.aliyun.com/) for web search API access (provides backup search capabilities)
 
 4. Configure Redis (optional, for production caching):
    ```env

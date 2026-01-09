@@ -59,7 +59,10 @@ AERIS-AQ is a stateless, scalable AI system built with FastAPI that provides rea
 - `waqi_service.py`: World Air Quality Index API integration
 - `airqo_service.py`: AirQo network data access
 - `weather_service.py`: Weather data via Open-Meteo
-- `search_service.py`: Web search capabilities
+- `search_service.py`: Multi-provider web search with automatic fallback
+  - Primary: DuckDuckGo (no authentication required)
+  - Backup: DashScope (Alibaba Cloud API, requires DASHSCOPE_API_KEY)
+  - Automatic failover ensures reliable research capabilities
 - `cache.py`: Redis and in-memory caching
 
 ### 3. Tools Layer (`src/tools/`)

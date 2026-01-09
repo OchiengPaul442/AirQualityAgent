@@ -20,6 +20,7 @@ openai==2.14.0                     # OpenAI GPT models (latest as of Dec 2024)
 anthropic==0.39.0                  # Claude models
 google-genai==1.56.0               # Gemini models (new Google AI SDK)
 ollama==0.6.1                      # Local LLM support (updated for httpx 0.28+)
+dashscope==1.25.7                  # Alibaba Cloud DashScope/Qwen models with web search
 
 # -----------------------------------------------------------------------------
 # Model Context Protocol (MCP)

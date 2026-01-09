@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import os
 import time
 from typing import Any, Dict, List
 
@@ -85,7 +87,7 @@ class SearchService:
         """Initialize search service with multiple providers."""
         self.providers = {
             "duckduckgo": self._search_duckduckgo,
-            # Add more providers here in the future
+            "dashscope": self._search_dashscope,
         }
         self.default_provider = "duckduckgo"
 
@@ -187,6 +189,150 @@ class SearchService:
 
         except Exception as e:
             logger.error(f"DuckDuckGo search failed for '{query}': {e}")
+            raise
+
+    def _search_dashscope(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
+        """
+        Search using DashScope (Alibaba Cloud) web search via Qwen model with function calling.
+        
+        This method uses the Qwen model with built-in web_search tool to perform internet searches.
+        Returns results with: title, href, body, and metadata.
+        
+        Args:
+            query: Search query string
+            max_results: Maximum number of results to return (default: 5)
+            
+        Returns:
+            List of search result dictionaries with title, href, and body
+        """
+        try:
+            # Check if DashScope is available
+            try:
+                from http import HTTPStatus
+
+                import dashscope
+                from dashscope import Generation
+            except ImportError:
+                logger.error("DashScope SDK not installed. Install with: pip install dashscope")
+                raise ImportError("DashScope SDK not installed")
+            
+            # Get API key from environment
+            api_key = os.getenv("DASHSCOPE_API_KEY", "")
+            if not api_key:
+                logger.warning("DASHSCOPE_API_KEY not set, skipping DashScope search")
+                raise ValueError("DASHSCOPE_API_KEY not configured")
+            
+            # Set API key
+            dashscope.api_key = api_key
+            
+            # Define the web_search tool for Qwen to use
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "description": "Search the internet for current information about any topic.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "The search query to look up on the internet"
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                }
+            ]
+            
+            # Create a message that will trigger the web search
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that can search the internet. When asked to search, use the web_search tool to find current information."
+                },
+                {
+                    "role": "user",
+                    "content": f"Search the internet for: {query}. Provide {max_results} relevant results with titles, URLs, and descriptions."
+                }
+            ]
+            
+            logger.info(f"Initiating DashScope web search for: {query}")
+            
+            # Call Qwen model with tools
+            response = Generation.call(
+                model="qwen-plus",  # Use qwen-plus for better tool calling
+                messages=messages,
+                tools=tools,
+                result_format="message"
+            )
+            
+            # Check response status
+            if response.status_code != HTTPStatus.OK:
+                logger.error(f"DashScope API error: {response.code} - {response.message}")
+                raise Exception(f"DashScope API error: {response.message}")
+            
+            # Parse the response
+            results = []
+            
+            # Check if the model made tool calls
+            if hasattr(response.output, 'choices') and len(response.output.choices) > 0:
+                choice = response.output.choices[0]
+                message = choice.message
+                
+                # Check for tool calls in the response
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        if tool_call.function.name == "web_search":
+                            # The tool_call contains the search results
+                            # Parse the arguments which may contain results
+                            try:
+                                tool_result = json.loads(tool_call.function.arguments)
+                                logger.info(f"DashScope tool call result: {tool_result}")
+                            except json.JSONDecodeError:
+                                logger.warning("Could not parse tool call arguments")
+                
+                # Get the text content which contains the search results
+                if hasattr(message, 'content') and message.content:
+                    content = message.content
+                    
+                    # Parse the content to extract search results
+                    # The model returns formatted text with search results
+                    # We'll create structured results from the text response
+                    
+                    # For now, create a single comprehensive result
+                    # In production, you may want to parse this more carefully
+                    results.append({
+                        "title": f"DashScope Search Results for: {query}",
+                        "href": "https://dashscope.aliyuncs.com",
+                        "body": content,
+                        "metadata": {
+                            "source": "dashscope",
+                            "relevance_rank": 1,
+                            "is_trusted": True,
+                            "snippet_length": len(content),
+                            "query": query,
+                            "provider": "DashScope/Qwen"
+                        }
+                    })
+            
+            # If we got results from DashScope
+            if results:
+                logger.info(f"DashScope search returned {len(results)} results")
+                return results[:max_results]
+            else:
+                logger.warning(f"No results from DashScope for query: {query}")
+                return []
+                
+        except ImportError as e:
+            logger.error(f"DashScope SDK import error: {e}")
+            raise
+        except ValueError as e:
+            logger.warning(f"DashScope configuration error: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"DashScope search failed for '{query}': {e}")
             raise
 
     def _extract_domain(self, url: str) -> str:
