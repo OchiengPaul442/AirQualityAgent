@@ -41,6 +41,35 @@ class GeminiProvider(BaseAIProvider):
         except Exception as e:
             logger.error(f"Failed to setup Gemini: {e}")
             raise ConnectionError(f"Failed to initialize Gemini client: {e}") from e
+    
+    @staticmethod
+    def _sanitize_text(text: str) -> str:
+        """
+        Sanitize text to handle problematic Unicode characters that cause UTF-8 encoding errors.
+        
+        This fixes the 'surrogates not allowed' error by:
+        1. Encoding to UTF-8 with error handling
+        2. Decoding back to string
+        3. Replacing unpaired surrogates with safe characters
+        
+        Args:
+            text: Text that may contain problematic Unicode
+            
+        Returns:
+            Sanitized text safe for UTF-8 encoding
+        """
+        if not text:
+            return text
+        
+        try:
+            # Try to encode/decode to catch problematic characters
+            # Use 'surrogatepass' to handle unpaired surrogates, then replace them
+            encoded = text.encode('utf-8', errors='surrogatepass')
+            return encoded.decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.warning(f"Text sanitization fallback used: {e}")
+            # Fallback: remove any characters that can't be encoded
+            return text.encode('utf-8', errors='ignore').decode('utf-8')
 
     def get_tool_definitions(self) -> list[types.Tool]:
         """
@@ -82,12 +111,17 @@ class GeminiProvider(BaseAIProvider):
                 "tools_used": [],
             }
 
+        # Sanitize all text inputs to prevent UTF-8 encoding errors
+        system_instruction = self._sanitize_text(system_instruction)
+        message = self._sanitize_text(message)
+
         # Convert history to Gemini format
         chat_history = []
         for msg in history:
             role = "user" if msg["role"] == "user" else "model"
+            sanitized_content = self._sanitize_text(msg.get("content", ""))
             chat_history.append(
-                types.Content(role=role, parts=[types.Part(text=msg["content"])])
+                types.Content(role=role, parts=[types.Part(text=sanitized_content)])
             )
 
         # Get tools only for supported models

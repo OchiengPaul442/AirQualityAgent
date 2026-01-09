@@ -44,6 +44,35 @@ class OpenAIProvider(BaseAIProvider):
         except Exception as e:
             logger.error(f"Failed to setup OpenAI: {e}")
             raise ConnectionError(f"Failed to initialize OpenAI client: {e}") from e
+    
+    @staticmethod
+    def _sanitize_text(text: str) -> str:
+        """
+        Sanitize text to handle problematic Unicode characters that cause UTF-8 encoding errors.
+        
+        This fixes the 'surrogates not allowed' error by:
+        1. Encoding to UTF-8 with error handling
+        2. Decoding back to string
+        3. Replacing unpaired surrogates with safe characters
+        
+        Args:
+            text: Text that may contain problematic Unicode
+            
+        Returns:
+            Sanitized text safe for UTF-8 encoding
+        """
+        if not text:
+            return text
+        
+        try:
+            # Try to encode/decode to catch problematic characters
+            # Use 'surrogatepass' to handle unpaired surrogates, then replace them
+            encoded = text.encode('utf-8', errors='surrogatepass')
+            return encoded.decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.warning(f"Text sanitization fallback used: {e}")
+            # Fallback: remove any characters that can't be encoded
+            return text.encode('utf-8', errors='ignore').decode('utf-8')
 
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """
@@ -85,10 +114,15 @@ class OpenAIProvider(BaseAIProvider):
                 "tools_used": [],
             }
 
+        # Sanitize all text inputs to prevent UTF-8 encoding errors
+        system_instruction = self._sanitize_text(system_instruction)
+        message = self._sanitize_text(message)
+
         # Build messages
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_instruction}]
         for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+            sanitized_content = self._sanitize_text(msg.get("content", ""))
+            messages.append({"role": msg["role"], "content": sanitized_content})
         messages.append({"role": "user", "content": message})
         
         # Debug: Log if documents are in system instruction
