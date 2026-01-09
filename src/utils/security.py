@@ -14,20 +14,33 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Union
 
-# Dangerous patterns that should be blocked
-DANGEROUS_PATTERNS = [
-    # SQL injection patterns
-    r"\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|JOIN)\b",
-    r";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)",
+# CRITICAL patterns that MUST be blocked (actual attacks)
+CRITICAL_PATTERNS = [
+    # Multi-stage SQL injection with chaining
+    r";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+(.*\s+)?(FROM|INTO|TABLE|DATABASE)",
+    # Command chaining that could cause system damage
+    r"(;|&&|\|\|)\s*(rm|del|format|shutdown|reboot|halt)\s+-[rRfF]",
+    # Direct code execution attempts
+    r"\b(eval|exec)\s*\(\s*(__import__|compile|input)\s*\(",
+    r"__import__\s*\(\s*['\"]os['\"]\s*\)\s*\.\s*system",
+    # Path traversal with file operations
+    r"(\.\./){3,}",  # Multiple directory traversals
+]
+
+# Patterns to SANITIZE (remove but allow request)
+SANITIZE_PATTERNS = [
+    # SQL keywords in isolation (clean but don't block)
+    r"\b(SELECT|DELETE)\s+.*\s+(FROM|WHERE)\b",
+    r"\bINSERT\s+INTO\s+\w+\s+(VALUES|\()",
+    r"\bUPDATE\s+\w+\s+SET\b",
+    r"\b(DROP|CREATE|ALTER)\s+(TABLE|DATABASE|INDEX|VIEW|USER)\b",
+    r"\bEXEC(UTE)?\s+\w+",
+    r"\bUNION\s+(ALL\s+)?SELECT\b",
     r"--\s*$",  # SQL comments
     r"/\*.*\*/",  # SQL block comments
-    # Command injection patterns (REFINED - allow safe punctuation)
-    r"[;&|`$]\s",  # Shell metacharacters with space (avoid false positives)
-    r"\b(rm|del|format|shutdown|reboot|halt|poweroff)\s",  # Dangerous commands
-    r"\b(cmd|bash|sh|powershell)\.exe\b",  # Executable shells
-    # Path traversal
-    r"\.\./",  # Directory traversal
-    r"\\\.\\\.\\",  # Windows path traversal
+    # Shell commands in backticks (clean but allow markdown)
+    r"`\s*(whoami|id|pwd|ps|rm|kill|sudo)\s*`",
+    r"\$\((?:whoami|id|pwd|rm|kill|sudo)\)",
     # XSS patterns
     r"<script[^>]*>.*?</script>",
     r"javascript:",
@@ -35,9 +48,10 @@ DANGEROUS_PATTERNS = [
     r"<iframe[^>]*>",
     r"<object[^>]*>",
     r"<embed[^>]*>",
-    # Code execution patterns
-    r"\b(eval|exec|compile|__import__|importlib|subprocess|os\.system|os\.popen)\b",
-    r"\b(open|file|input)\s*\(",
+    # Code execution (single attempts)
+    r"\beval\s*\(",
+    r"\bexec\s*\(",
+    r"\b__import__\s*\(",
 ]
 
 # Safe characters for different contexts (EXPANDED for international support)
@@ -48,16 +62,24 @@ class InputSanitizer:
     """Comprehensive input sanitization and validation."""
 
     @staticmethod
-    def sanitize_text_input(text: str, max_length: int = 10000) -> str:
+    def sanitize_text_input(text: str, max_length: int = 50000, html_escape: bool = False) -> str:
         """
-        Sanitize text input for general use.
+        Sanitize text input - removes dangerous patterns while allowing technical content.
+        
+        Two-stage approach:
+        1. Check for CRITICAL attacks → raise exception
+        2. Clean SANITIZE patterns → allow request
 
         Args:
             text: Input text to sanitize
-            max_length: Maximum allowed length
+            max_length: Maximum allowed length (default 50KB)
+            html_escape: Whether to HTML escape (default False)
 
         Returns:
             Sanitized text
+            
+        Raises:
+            ValueError: If critical attack pattern detected
         """
         if not isinstance(text, str):
             raise ValueError("Input must be a string")
@@ -69,49 +91,59 @@ class InputSanitizer:
         # Normalize unicode
         text = unicodedata.normalize("NFKC", text)
 
-        # Remove null bytes and other control characters
+        # Remove null bytes and control characters (keep newlines, tabs)
         text = "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
 
-        # Remove dangerous patterns
-        for pattern in DANGEROUS_PATTERNS:
-            text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        # STAGE 1: Check for CRITICAL attacks
+        for pattern in CRITICAL_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL):
+                raise ValueError("Critical security threat detected and blocked")
 
-        # HTML escape
-        text = html.escape(text, quote=True)
+        # STAGE 2: Sanitize non-critical patterns (clean but allow)
+        for pattern in SANITIZE_PATTERNS:
+            text = re.sub(pattern, " [removed] ", text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+
+        # HTML escape only if requested
+        if html_escape:
+            text = html.escape(text, quote=True)
 
         # Remove excessive whitespace
-        text = re.sub(r"\s+", " ", text).strip()
+        text = re.sub(r" +", " ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = text.strip()
 
         return text
 
     @staticmethod
     def validate_message_content(message: str) -> bool:
         """
-        Validate message content for potential security issues.
+        Validate message content - only blocks CRITICAL attacks.
+        Most patterns are sanitized rather than rejected.
 
         Args:
             message: Message to validate
 
         Returns:
-            True if message appears safe, False if potentially dangerous
+            True if safe or sanitizable, False only if critical attack
         """
         if not isinstance(message, str):
             return False
 
         # Check length limits
-        if len(message) > 50000:  # 50KB limit
+        if len(message) > 100000:  # 100KB limit
             return False
 
-        # Check for dangerous patterns
-        for pattern in DANGEROUS_PATTERNS:
+        # Only block CRITICAL attack patterns
+        for pattern in CRITICAL_PATTERNS:
             if re.search(pattern, message, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                 return False
 
-        # Check for excessive special characters
+        # Allow high ratio of special chars for technical content
+        allowed_special = " \n\r\t.,!?-'\"():;°µ²³/[]{}<>=@#$%&*+~`|"
         special_chars = sum(
-            1 for char in message if not char.isalnum() and char not in " \n\r\t.,!?-"
+            1 for char in message if not char.isalnum() and char not in allowed_special
         )
-        if special_chars > len(message) * 0.3:  # More than 30% special chars
+        if special_chars > len(message) * 0.7:  # 70% threshold
             return False
 
         return True
@@ -293,7 +325,8 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
                 raise ValueError("Message must be a string")
             if not InputSanitizer.validate_message_content(value):
                 raise ValueError("Message contains potentially dangerous content")
-            sanitized[key] = InputSanitizer.sanitize_text_input(value)
+            # Don't HTML escape chat messages - preserve original formatting
+            sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
         elif key == "session_id":
             if value is not None:
                 if not isinstance(value, str):
