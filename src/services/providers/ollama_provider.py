@@ -431,6 +431,7 @@ class OllamaProvider(BaseAIProvider):
         )
 
         # Handle tool calls
+        chart_result = None  # Track chart generation
         if getattr(message_obj, "tool_calls", None):
             tool_calls = message_obj.tool_calls
             logger.info(f"Ollama requested {len(tool_calls)} tool calls")
@@ -448,6 +449,12 @@ class OllamaProvider(BaseAIProvider):
                 # Execute tool
                 try:
                     tool_result = self.tool_executor.execute(function_name, function_args)
+                    
+                    # CRITICAL: Capture chart result if generate_chart was called
+                    if function_name == "generate_chart" and isinstance(tool_result, dict):
+                        chart_result = tool_result
+                        logger.info("📊 Chart generation detected - captured result")
+                        
                 except Exception as e:
                     logger.error(f"Tool execution failed: {e}")
                     tool_result = {"error": str(e)}
@@ -518,9 +525,12 @@ class OllamaProvider(BaseAIProvider):
                 error_msg = str(e).lower()
                 logger.error(f"Ollama final response error: {e}")
                 
-                # If error is 500 and chart was generated, provide helpful response
+                # CRITICAL FIX: If error is 500 and chart was generated successfully, return chart result
                 if ("500" in error_msg or "internal server" in error_msg) and "generate_chart" in tools_used:
-                    return {
+                    logger.warning("⚠️ Ollama 500 error but chart was generated - returning chart result")
+                    
+                    # Build result dict with chart_result
+                    result = {
                         "response": (
                             "📊 Chart generated successfully! The visualization shows your data trends.\n\n"
                             "**Note**: Due to processing limits, I've kept the description brief. "
@@ -535,6 +545,13 @@ class OllamaProvider(BaseAIProvider):
                         "cost_estimate": 0.0,
                         "chart_generated": True,
                     }
+                    
+                    # Include chart_result if it was captured
+                    if chart_result:
+                        result["chart_result"] = chart_result
+                        logger.info("📊 Chart data included in 500 error recovery response")
+                    
+                    return result
                 
                 return {
                     "response": "I was unable to process the data retrieved. Please try again with a different question.",
@@ -612,7 +629,8 @@ class OllamaProvider(BaseAIProvider):
             if not cleaned_response:
                 cleaned_response = "I was unable to find the specific data needed to answer your question. Please try rephrasing or providing more details."
 
-        return {
+        # Build final result dict
+        result = {
             "response": cleaned_response or "I was unable to generate a response. Please try again with a different question.",
             "tools_used": tools_used,
             "thinking_steps": thinking_steps,
@@ -620,6 +638,13 @@ class OllamaProvider(BaseAIProvider):
             "tokens_used": 0,  # Ollama doesn't provide token counts
             "cost_estimate": 0.0,  # Local model, no cost
         }
+        
+        # Add chart_result if chart was generated
+        if chart_result:
+            result["chart_result"] = chart_result
+            logger.info("📊 Chart data included in Ollama response")
+        
+        return result
 
     def _extract_thinking_steps(self, content: str) -> tuple[list[str], str]:
         """

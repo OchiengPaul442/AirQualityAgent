@@ -773,6 +773,7 @@ def get_visualization_tools() -> list[dict]:
 - User asks for comparison visualizations
 - User uploads CSV/Excel data and requests visual analysis
 - User mentions "chart", "graph", "plot", "visualize", "show visually"
+- **IMPORTANT**: When user uploads CSV/Excel and asks to "understand the trend", ALWAYS use this tool
 
 📊 SUPPORTED CHART TYPES:
 - line: Trends over time (PM2.5 over days, temperature changes)
@@ -786,11 +787,15 @@ def get_visualization_tools() -> list[dict]:
 
 🔄 RETURNS: Base64-encoded PNG image ready for display in UI
 
-💡 IMPORTANT: You must provide the data array. This tool doesn't fetch data - it only visualizes what you give it.
+💡 WORKFLOW FOR CSV/EXCEL FILES:
+1. User uploads file → scan_document to read it
+2. User asks for visualization → generate_chart with the parsed data
+3. Choose appropriate chart_type based on data structure
 
 Example usage:
 User: "Plot PM2.5 levels from the uploaded data"
-→ Call generate_chart with data from scan_document""",
+→ Step 1: scan_document(file)
+→ Step 2: generate_chart with data from scan_document""",
                 "parameters": {
                     "type": "object",
                     "properties": {

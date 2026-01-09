@@ -1366,7 +1366,11 @@ class AgentService:
             "\n⚠️⚠️⚠️ CRITICAL: Documents have been uploaded and their content is provided below.",
             "\n🚫 DO NOT call scan_document tool - the data is ALREADY HERE",
             "🚫 DO NOT say 'I don't have access' - YOU DO HAVE ACCESS (see below)",
-            "✅ ANALYZE the document content directly - it is ready for you\n",
+            "✅ ANALYZE the document content directly - it is ready for you",
+            "\n📊 IMPORTANT: If user asks for charts/graphs/visualization, USE generate_chart tool with this data",
+            "   - Parse the data from the document content below",
+            "   - Call generate_chart with appropriate parameters",
+            "   - Example: extract columns like 'Date', 'PM2.5', then call generate_chart\n",
         ]
 
         if len(unique_documents) > 1:
