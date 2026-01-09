@@ -43,14 +43,15 @@ class VisualizationService:
         sns.set_style("whitegrid")
         plt.rcParams.update(
             {
-                "figure.figsize": (12, 6),
-                "figure.dpi": 100,
+                "figure.figsize": (10, 6),  # Slightly smaller for faster rendering
+                "figure.dpi": 90,  # Reduced DPI for faster generation
+                "font.family": "DejaVu Sans",  # Font that supports Unicode subscripts
                 "font.size": 10,
-                "axes.labelsize": 12,
-                "axes.titlesize": 14,
-                "legend.fontsize": 10,
-                "xtick.labelsize": 10,
-                "ytick.labelsize": 10,
+                "axes.labelsize": 11,
+                "axes.titlesize": 13,
+                "legend.fontsize": 9,
+                "xtick.labelsize": 9,
+                "ytick.labelsize": 9,
             }
         )
 
@@ -96,17 +97,35 @@ class VisualizationService:
             else:
                 df = data.copy()
             
-            # OPTIMIZATION: Limit data size to prevent timeout
-            # Sample data if too large (keep first, last, and sample middle)
-            MAX_ROWS = 5000
+            # OPTIMIZATION: Limit data size to prevent timeout and memory issues
+            # For chart visualization, prioritize recent/relevant data
+            MAX_ROWS = 1000  # Reduced from 5000 for faster processing
+            original_row_count = len(df)
+            data_was_sampled = False
+            
             if len(df) > MAX_ROWS:
                 logger.warning(f"Large dataset ({len(df)} rows) detected. Sampling to {MAX_ROWS} rows for visualization.")
-                # Keep first 1000, last 1000, and sample 3000 from middle
-                first_part = df.head(1000)
-                last_part = df.tail(1000)
-                middle_part = df.iloc[1000:-1000].sample(min(3000, len(df) - 2000), random_state=42)
-                df = pd.concat([first_part, middle_part, last_part]).sort_index()
-                logger.info(f"Sampled dataset to {len(df)} rows for faster visualization.")
+                data_was_sampled = True
+                
+                # Intelligent sampling: prioritize recent data for time-series
+                # Keep last 70%, first 20%, sample middle 10%
+                last_count = int(MAX_ROWS * 0.7)
+                first_count = int(MAX_ROWS * 0.2)
+                middle_count = MAX_ROWS - last_count - first_count
+                
+                last_part = df.tail(last_count)
+                first_part = df.head(first_count)
+                
+                if len(df) > (first_count + last_count + 10):
+                    middle_part = df.iloc[first_count:-last_count].sample(
+                        min(middle_count, len(df) - first_count - last_count), 
+                        random_state=42
+                    )
+                    df = pd.concat([first_part, middle_part, last_part]).sort_index()
+                else:
+                    df = pd.concat([first_part, last_part]).sort_index()
+                
+                logger.info(f"Sampled dataset: {original_row_count} → {len(df)} rows (prioritizing recent data)")
 
             # Auto-detect columns if not provided
             if x_column is None and len(df.columns) > 0:
@@ -148,13 +167,19 @@ class VisualizationService:
                     **kwargs,
                 )
 
-            # Add metadata
+            # Add metadata with sampling info
             result.update(
                 {
                     "chart_type": chart_type,
                     "timestamp": datetime.now().isoformat(),
                     "data_rows": len(df),
+                    "original_rows": original_row_count,
+                    "data_sampled": data_was_sampled,
                     "columns_used": {"x": x_column, "y": y_column, "color": color_column},
+                    "sampling_notice": (
+                        f"📊 Data sampled: Showing {len(df)} of {original_row_count} data points "
+                        f"(prioritizing recent data for clarity)"
+                    ) if data_was_sampled else None,
                 }
             )
 

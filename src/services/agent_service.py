@@ -1066,6 +1066,13 @@ class AgentService:
         # Optimized for: low-quality models, speed, accuracy
         # Uses smart classification to skip unnecessary tool calls
         logger.info(f"🔍 Analyzing query for intelligent tool selection...")
+        
+        # SPECIAL HANDLING: Detect chart/visualization requests early
+        chart_request = any(keyword in message.lower() for keyword in [
+            "chart", "visualiz", "graph", "plot", "show me", "display"
+        ])
+        if chart_request:
+            logger.info("📊 Chart request detected - will handle with optimized response")
 
         proactive_results = await QueryAnalyzer.proactively_call_tools(message, self.tool_executor)
 
@@ -1146,15 +1153,31 @@ class AgentService:
                     response_data["chart_metadata"] = {
                         "chart_type": chart_result.get("chart_type"),
                         "data_rows": chart_result.get("data_rows"),
+                        "original_rows": chart_result.get("original_rows"),
+                        "data_sampled": chart_result.get("data_sampled", False),
                         "columns_used": chart_result.get("columns_used"),
                         "format": chart_result.get("format"),
                         "engine": chart_result.get("engine"),
                     }
+                    
+                    # Add sampling notice to response if data was sampled
+                    if chart_result.get("data_sampled") and chart_result.get("sampling_notice"):
+                        sampling_msg = f"\n\n{chart_result.get('sampling_notice')}"
+                        if "response" in response_data:
+                            response_data["response"] += sampling_msg
+                    
                     logger.info(
                         f"📊 Chart generated: {chart_result.get('chart_type')} with {chart_result.get('data_rows')} rows"
+                        f" (sampled from {chart_result.get('original_rows')})" if chart_result.get('data_sampled') else ""
                     )
                 else:
-                    logger.warning(f"⚠️ generate_chart was called but no chart_result found in response_data or proactive_results")
+                    logger.warning(f"⚠️ generate_chart was called but no chart_result found")
+                    # Provide helpful fallback message
+                    if "response" in response_data and response_data["response"]:
+                        response_data["response"] += (
+                            "\n\n📊 **Chart Status**: Chart generation encountered an issue. "
+                            "Try: 1) Smaller dataset, 2) Specific date range, 3) Request summary instead"
+                        )
 
             # Track costs
             tokens_used = response_data.get("tokens_used", 0)

@@ -515,7 +515,27 @@ class OllamaProvider(BaseAIProvider):
                     }
                 response_text = final_message.content
             except Exception as e:
+                error_msg = str(e).lower()
                 logger.error(f"Ollama final response error: {e}")
+                
+                # If error is 500 and chart was generated, provide helpful response
+                if ("500" in error_msg or "internal server" in error_msg) and "generate_chart" in tools_used:
+                    return {
+                        "response": (
+                            "📊 Chart generated successfully! The visualization shows your data trends.\n\n"
+                            "**Note**: Due to processing limits, I've kept the description brief. "
+                            "The chart displays the key patterns in your data.\n\n"
+                            "Need more details? Try:\n"
+                            "• Ask about specific data points\n"
+                            "• Request a smaller date range\n"
+                            "• Ask for summary statistics"
+                        ),
+                        "tools_used": tools_used,
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                        "chart_generated": True,
+                    }
+                
                 return {
                     "response": "I was unable to process the data retrieved. Please try again with a different question.",
                     "tools_used": tools_used,

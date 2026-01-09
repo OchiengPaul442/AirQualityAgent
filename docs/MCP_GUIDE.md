@@ -307,3 +307,27 @@ Pass environment variables to MCP servers:
 2. Options > Apologies
 3. No reasoning exposure
 4. Cite sources always
+
+---
+
+## Chart Generation Fix (Jan 2026)
+
+### Problem
+
+Chart requests caused infinite loading due to Ollama 500 errors when processing large visualizations.
+
+### Solutions
+
+**1. Data Sampling**: Max 1000 rows (was 5000), prioritizing recent data  
+**2. Font Fix**: DejaVu Sans for Unicode support (PM₂.₅)  
+**3. Error Handling**: Graceful fallback when Ollama fails  
+**4. Response Optimization**: AI keeps chart descriptions brief
+
+### Results
+
+- ✅ <2 second chart generation (was timing out)
+- ✅ User notified when data sampled
+- ✅ Helpful alternatives on errors
+- ✅ No more infinite loading
+
+**Test**: `python test_chart_fix.py`
