@@ -243,7 +243,7 @@ def assess_health_impacts(pm25: float | None, o3: float | None) -> dict[str, Any
         "pm25_impact": "Unknown",
         "o3_impact": "Unknown",
         "overall_risk": "Low",
-        "recommendations": []
+        "recommendations": [],
     }
 
     if pm25 is not None:
@@ -254,7 +254,9 @@ def assess_health_impacts(pm25: float | None, o3: float | None) -> dict[str, Any
             impacts["recommendations"].append("Limit outdoor activities for sensitive groups")
         elif pm25 <= 50:
             impacts["pm25_impact"] = "High risk - Health effects possible"
-            impacts["recommendations"].extend(["Avoid prolonged outdoor exposure", "Use air purifiers"])
+            impacts["recommendations"].extend(
+                ["Avoid prolonged outdoor exposure", "Use air purifiers"]
+            )
         else:
             impacts["pm25_impact"] = "Very high risk - Serious health effects"
             impacts["recommendations"].extend(["Stay indoors", "Wear masks", "Seek medical advice"])
@@ -271,7 +273,9 @@ def assess_health_impacts(pm25: float | None, o3: float | None) -> dict[str, Any
             impacts["recommendations"].extend(["Avoid outdoor activities", "Monitor symptoms"])
         else:
             impacts["o3_impact"] = "Very high risk - Severe effects"
-            impacts["recommendations"].extend(["Stay indoors during peak hours", "Use air conditioning"])
+            impacts["recommendations"].extend(
+                ["Stay indoors during peak hours", "Use air conditioning"]
+            )
             impacts["overall_risk"] = "High"
 
     if impacts["overall_risk"] == "Low" and (pm25 and pm25 > 25 or o3 and o3 > 100):

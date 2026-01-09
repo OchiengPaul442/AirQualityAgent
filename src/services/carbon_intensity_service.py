@@ -42,11 +42,11 @@ class CarbonIntensityService:
 
         settings = get_settings()
         self.session = requests.Session()
-        
+
         # Configure retries
         retries = Retry(total=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
-        self.session.mount('https://', HTTPAdapter(max_retries=retries))
-        
+        self.session.mount("https://", HTTPAdapter(max_retries=retries))
+
         self.cache_service = get_cache()
         self.cache_ttl = settings.CACHE_TTL_SECONDS
 
@@ -65,7 +65,9 @@ class CarbonIntensityService:
 
         # Check Redis cache
         cache_key = f"carbon_intensity{endpoint}"
-        cached_data = self.cache_service.get_api_response("carbon_intensity", endpoint, params or {})
+        cached_data = self.cache_service.get_api_response(
+            "carbon_intensity", endpoint, params or {}
+        )
         if cached_data is not None:
             return cached_data
 
@@ -76,7 +78,9 @@ class CarbonIntensityService:
 
             # Check for API errors
             if "error" in data:
-                raise Exception(f"Carbon Intensity API error: {data['error'].get('message', 'Unknown error')}")
+                raise Exception(
+                    f"Carbon Intensity API error: {data['error'].get('message', 'Unknown error')}"
+                )
 
             # Cache the result in Redis
             self.cache_service.set_api_response(
@@ -194,20 +198,17 @@ class CarbonIntensityService:
         formatted_data: dict[str, Any] = {
             "source": "UK Carbon Intensity API",
             "description": "Carbon intensity of electricity generation in Great Britain (gCO2/kWh)",
-            "data": []
+            "data": [],
         }
 
         for item in data["data"]:
             entry = {
-                "period": {
-                    "from": item.get("from"),
-                    "to": item.get("to")
-                },
+                "period": {"from": item.get("from"), "to": item.get("to")},
                 "intensity": {
                     "forecast": item.get("intensity", {}).get("forecast"),
                     "actual": item.get("intensity", {}).get("actual"),
-                    "index": item.get("intensity", {}).get("index")
-                }
+                    "index": item.get("intensity", {}).get("index"),
+                },
             }
 
             # Add generation mix if available

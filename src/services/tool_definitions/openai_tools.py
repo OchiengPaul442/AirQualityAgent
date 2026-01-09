@@ -661,7 +661,7 @@ def get_nsw_tools() -> list[dict]:
                             "type": "integer",
                             "description": "Number of hours of historical data (default: 24)",
                             "default": 24,
-                        }
+                        },
                     },
                     "required": ["pollutant"],
                 },
@@ -801,7 +801,16 @@ User: "Plot PM2.5 levels from the uploaded data"
                         },
                         "chart_type": {
                             "type": "string",
-                            "enum": ["line", "bar", "scatter", "histogram", "box", "pie", "area", "timeseries"],
+                            "enum": [
+                                "line",
+                                "bar",
+                                "scatter",
+                                "histogram",
+                                "box",
+                                "pie",
+                                "area",
+                                "timeseries",
+                            ],
                             "description": "Type of chart to generate",
                         },
                         "x_column": {

@@ -24,9 +24,7 @@ class GeocodingService:
         """Initialize geocoding service."""
         self.session = requests.Session()
         # Set user agent as required by Nominatim
-        self.session.headers.update({
-            'User-Agent': 'Aeris-AQ-AirQualityAgent/1.0'
-        })
+        self.session.headers.update({"User-Agent": "Aeris-AQ-AirQualityAgent/1.0"})
         self.cache_service = get_cache()
 
     def geocode(self, address: str, limit: int = 1) -> Dict[str, Any]:
@@ -46,18 +44,14 @@ class GeocodingService:
         """
         try:
             params = {
-                'q': address,
-                'format': 'json',
-                'limit': limit,
-                'addressdetails': 1,
-                'extratags': 1
+                "q": address,
+                "format": "json",
+                "limit": limit,
+                "addressdetails": 1,
+                "extratags": 1,
             }
 
-            response = self.session.get(
-                f"{self.BASE_URL}/search",
-                params=params,
-                timeout=10
-            )
+            response = self.session.get(f"{self.BASE_URL}/search", params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -76,7 +70,7 @@ class GeocodingService:
                 "address": result.get("address", {}),
                 "importance": result.get("importance", 0),
                 "type": result.get("type", ""),
-                "class": result.get("class", "")
+                "class": result.get("class", ""),
             }
 
         except requests.RequestException as e:
@@ -99,23 +93,19 @@ class GeocodingService:
         """
         try:
             params = {
-                'lat': latitude,
-                'lon': longitude,
-                'format': 'json',
-                'addressdetails': 1,
-                'extratags': 1
+                "lat": latitude,
+                "lon": longitude,
+                "format": "json",
+                "addressdetails": 1,
+                "extratags": 1,
             }
 
-            response = self.session.get(
-                f"{self.BASE_URL}/reverse",
-                params=params,
-                timeout=10
-            )
+            response = self.session.get(f"{self.BASE_URL}/reverse", params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
 
-            if not data or 'error' in data:
+            if not data or "error" in data:
                 return {"success": False, "message": "No address found for the given coordinates"}
 
             return {
@@ -126,7 +116,7 @@ class GeocodingService:
                 "latitude": float(data.get("lat", latitude)),
                 "longitude": float(data.get("lon", longitude)),
                 "type": data.get("type", ""),
-                "class": data.get("class", "")
+                "class": data.get("class", ""),
             }
 
         except requests.RequestException as e:
@@ -169,12 +159,18 @@ class GeocodingService:
 
             # Check if coordinates are reasonable (not null island or obviously wrong)
             if latitude == 0.0 and longitude == 0.0:
-                return {"success": False, "message": "IP address does not provide valid location data"}
+                return {
+                    "success": False,
+                    "message": "IP address does not provide valid location data",
+                }
 
             # Check if this looks like a datacenter/server location
             # Many cloud providers have specific IP ranges that might not represent user location
             if not city and not country_name:
-                return {"success": False, "message": "IP address location data is incomplete or from a server"}
+                return {
+                    "success": False,
+                    "message": "IP address location data is incomplete or from a server",
+                }
 
             result = {
                 "success": True,
@@ -188,7 +184,7 @@ class GeocodingService:
                 "longitude": longitude,
                 "zip_code": data.get("zipCode"),
                 "time_zone": data.get("timeZone"),
-                "isp": data.get("isp")
+                "isp": data.get("isp"),
             }
 
             return result

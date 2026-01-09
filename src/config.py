@@ -76,26 +76,30 @@ class Settings(BaseSettings):
     AI_RESPONSE_STYLE: str = "general"
 
     # AI Token Limits
-    AI_MAX_TOKENS: int = 16384  # Maximum tokens for AI responses - increased for comprehensive outputs
+    AI_MAX_TOKENS: int = (
+        16384  # Maximum tokens for AI responses - increased for comprehensive outputs
+    )
 
     # Image Upload Support
     SUPPORT_IMAGE_UPLOAD: bool = True  # Enable/disable image upload feature
     MAX_IMAGE_SIZE_MB: int = 10  # Maximum image size in megabytes
     ALLOWED_IMAGE_FORMATS: str = "jpg,jpeg,png,gif,webp,bmp"  # Supported formats
-    
+
     # Vision-capable models (models that support image input)
     # Format: provider:model_name
-    VISION_CAPABLE_MODELS: str = "gemini:gemini-1.5-flash,gemini:gemini-1.5-pro,gemini:gemini-2.0-flash,openai:gpt-4-vision-preview,openai:gpt-4-turbo,openai:gpt-4o,openai:gpt-4o-mini"
-    
+    VISION_CAPABLE_MODELS: str = (
+        "gemini:gemini-1.5-flash,gemini:gemini-1.5-pro,gemini:gemini-2.0-flash,openai:gpt-4-vision-preview,openai:gpt-4-turbo,openai:gpt-4o,openai:gpt-4o-mini"
+    )
+
     # Cost Optimization
     ENABLE_COST_OPTIMIZATION: bool = True  # Enable aggressive caching and deduplication
     CACHE_RESPONSE_TTL_SECONDS: int = 3600  # Response cache TTL (1 hour)
     MAX_TOKENS_PER_SESSION: int = 100000  # Token limit per session before warning
-    
+
     # Reasoning Engine
     ENABLE_REASONING_DISPLAY: bool = True  # Show thinking process to users
     REASONING_STYLE: str = "human"  # human (ChatGPT-like) or technical
-    
+
     # Document Processing Limits
     DOCUMENT_MAX_LENGTH_PDF: int = 50000  # Max characters for PDF processing
     DOCUMENT_MAX_LENGTH_CSV: int = 50000  # Max characters for CSV processing
@@ -114,7 +118,9 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = ""
 
     # CORS Configuration
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"  # Comma-separated list of allowed origins
+    CORS_ORIGINS: str = (
+        "http://localhost:3000,http://localhost:5173"  # Comma-separated list of allowed origins
+    )
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: str = "*"  # Comma-separated list or "*"
     CORS_ALLOW_HEADERS: str = "*"  # Comma-separated list or "*"
@@ -125,7 +131,7 @@ class Settings(BaseSettings):
         if self.CORS_ORIGINS == "*":
             return ["*"]
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
-    
+
     @property
     def vision_capable_models_list(self) -> list[tuple[str, str]]:
         """Parse VISION_CAPABLE_MODELS into list of (provider, model) tuples."""
@@ -136,32 +142,28 @@ class Settings(BaseSettings):
                 provider, model = item.split(":", 1)
                 models.append((provider.strip(), model.strip()))
         return models
-    
+
     def is_vision_capable(self, provider: str, model: str) -> bool:
         """
         Check if a specific provider/model combination supports vision.
-        
+
         Args:
             provider: AI provider name (gemini, openai, etc.)
             model: Model name
-        
+
         Returns:
             True if model supports image input
         """
         return (provider.lower(), model.lower()) in [
             (p.lower(), m.lower()) for p, m in self.vision_capable_models_list
         ]
-    
+
     @property
     def allowed_image_formats_list(self) -> list[str]:
         """Parse ALLOWED_IMAGE_FORMATS into list."""
         return [fmt.strip().lower() for fmt in self.ALLOWED_IMAGE_FORMATS.split(",") if fmt.strip()]
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 @lru_cache

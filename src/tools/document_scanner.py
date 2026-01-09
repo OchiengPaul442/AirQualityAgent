@@ -15,6 +15,7 @@ from typing import Any
 
 try:
     import tiktoken
+
     TIKTOKEN_AVAILABLE = True
 except ImportError:
     TIKTOKEN_AVAILABLE = False
@@ -194,7 +195,9 @@ class DocumentScanner:
                 "success": True,
                 "filename": filename,
                 "file_type": "csv",
-                "content": content[:self.settings.DOCUMENT_MAX_LENGTH_CSV],  # Configurable limit for better large file handling
+                "content": content[
+                    : self.settings.DOCUMENT_MAX_LENGTH_CSV
+                ],  # Configurable limit for better large file handling
                 "full_length": len(content),
                 "truncated": len(content) > self.settings.DOCUMENT_MAX_LENGTH_CSV,
                 "metadata": summary,
@@ -236,7 +239,9 @@ class DocumentScanner:
                 try:
                     df = pd.read_excel(file_bytes, sheet_name=sheet_name)
 
-                    content_parts.append(f"\n--- Sheet {i+1}/{len(sheet_names)}: {sheet_name} ---\n")
+                    content_parts.append(
+                        f"\n--- Sheet {i+1}/{len(sheet_names)}: {sheet_name} ---\n"
+                    )
                     content_parts.append(f"Rows: {len(df)}, Columns: {len(df.columns)}\n")
                     content_parts.append(f"Columns: {', '.join(df.columns.tolist())}\n")
 
@@ -258,10 +263,10 @@ class DocumentScanner:
                     for col in preview_df.columns:
                         if pd.api.types.is_datetime64_any_dtype(preview_df[col]):
                             preview_df[col] = preview_df[col].astype(str)
-                    
+
                     # Convert preview dict - handle any remaining datetime objects
                     preview_data = preview_df.to_dict(orient="records")
-                    
+
                     # Recursively convert any datetime objects in the preview data
                     def convert_datetime_to_str(obj):
                         if isinstance(obj, dict):
@@ -270,11 +275,11 @@ class DocumentScanner:
                             return [convert_datetime_to_str(item) for item in obj]
                         elif pd.isna(obj):
                             return None
-                        elif hasattr(obj, 'isoformat'):  # datetime-like objects
+                        elif hasattr(obj, "isoformat"):  # datetime-like objects
                             return obj.isoformat()
                         else:
                             return obj
-                    
+
                     all_sheets_data[sheet_name] = {
                         "rows": len(df),
                         "columns": len(df.columns),
@@ -303,14 +308,20 @@ class DocumentScanner:
                 "success": True,
                 "filename": filename,
                 "file_type": "excel",
-                "content": content[:self.settings.DOCUMENT_MAX_LENGTH_EXCEL],  # Configurable limit for comprehensive multi-sheet analysis
+                "content": content[
+                    : self.settings.DOCUMENT_MAX_LENGTH_EXCEL
+                ],  # Configurable limit for comprehensive multi-sheet analysis
                 "full_length": len(content),
                 "truncated": len(content) > self.settings.DOCUMENT_MAX_LENGTH_EXCEL,
                 "metadata": {
                     "sheet_count": len(sheet_names),
                     "sheet_names": sheet_names,
                     "sheets_data": all_sheets_data,
-                    "total_rows": sum(s.get("rows", 0) for s in all_sheets_data.values() if isinstance(s, dict) and "rows" in s),
+                    "total_rows": sum(
+                        s.get("rows", 0)
+                        for s in all_sheets_data.values()
+                        if isinstance(s, dict) and "rows" in s
+                    ),
                 },
             }
         except ImportError as ie:

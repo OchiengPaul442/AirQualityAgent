@@ -33,7 +33,13 @@ class NSWService:
         self.cache_service = get_cache()
         self.cache_ttl = settings.CACHE_TTL_SECONDS
 
-    def _make_request(self, endpoint: str, method: str = "GET", params: dict | None = None, data: dict | None = None) -> dict[str, Any]:
+    def _make_request(
+        self,
+        endpoint: str,
+        method: str = "GET",
+        params: dict | None = None,
+        data: dict | None = None,
+    ) -> dict[str, Any]:
         """
         Make request to NSW Air Quality API
 
@@ -81,10 +87,10 @@ class NSWService:
     def get_air_quality(self, region: str | None = None) -> dict[str, Any]:
         """
         Get current air quality observations.
-        
+
         Args:
             region: Optional region name to filter by (not currently used but kept for interface consistency)
-            
+
         Returns:
             Observation data
         """
@@ -93,7 +99,7 @@ class NSWService:
         request_data = {
             "StartDate": today,
             "EndDate": today,
-            "Categories": ["Good", "Fair", "Poor", "Very Poor", "Extremely Poor"]
+            "Categories": ["Good", "Fair", "Poor", "Very Poor", "Extremely Poor"],
         }
         return self.get_observations(request_data)
 
@@ -169,7 +175,7 @@ class NSWService:
                 "source": "nsw",
                 "data": {
                     "_important_note": "NSW air quality monitoring data is openly available under Creative Commons Attribution 4.0 International license. Visit https://www.airquality.nsw.gov.au/ for current data."
-                }
+                },
             }
 
     def get_current_air_quality(self, location: str | None = None) -> dict[str, Any]:
@@ -194,7 +200,7 @@ class NSWService:
                 "StartDate": start_date.strftime("%Y-%m-%d"),
                 "EndDate": end_date.strftime("%Y-%m-%d"),
                 "StartTimeLocal": start_date.strftime("%H:%M"),
-                "EndTimeLocal": end_date.strftime("%H:%M")
+                "EndTimeLocal": end_date.strftime("%H:%M"),
             }
 
             # If location is specified, try to find matching sites
@@ -219,7 +225,7 @@ class NSWService:
                 "success": False,
                 "error": f"Unable to retrieve current NSW data: {str(e)}",
                 "message": "NSW air quality data is openly available at https://www.airquality.nsw.gov.au/",
-                "source": "nsw"
+                "source": "nsw",
             }
 
     def get_sites_by_region(self, region: str) -> list[dict[str, Any]]:
@@ -262,7 +268,7 @@ class NSWService:
         request_data = {
             "Parameters": [pollutant],
             "StartDate": start_date.strftime("%Y-%m-%d"),
-            "EndDate": end_date.strftime("%Y-%m-%d")
+            "EndDate": end_date.strftime("%Y-%m-%d"),
         }
 
         return self.get_observations(request_data)

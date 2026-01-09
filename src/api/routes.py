@@ -221,7 +221,7 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
 
         # Clean up agent session context
         agent = get_agent()
-        if hasattr(agent, 'session_manager'):
+        if hasattr(agent, "session_manager"):
             agent.session_manager.clear_session(session_id)
             logger.info(f"Cleaned up agent session context for {session_id[:8]}...")
 
@@ -234,10 +234,7 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error deleting session {session_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete session: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}") from e
 
 
 @router.get("/sessions/{session_id}/messages")
@@ -297,9 +294,15 @@ async def chat(
         None, description="Optional session ID for conversation continuity"
     ),
     file: UploadFile | None = File(None, description="Optional file upload (PDF, CSV, Excel)"),
-    latitude: float | None = Form(None, description="Optional GPS latitude for location-based queries"),
-    longitude: float | None = Form(None, description="Optional GPS longitude for location-based queries"),
-    role: str | None = Form(None, description="Optional agent role/style: general, executive, technical, simple, policy"),
+    latitude: float | None = Form(
+        None, description="Optional GPS latitude for location-based queries"
+    ),
+    longitude: float | None = Form(
+        None, description="Optional GPS longitude for location-based queries"
+    ),
+    role: str | None = Form(
+        None, description="Optional agent role/style: general, executive, technical, simple, policy"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -384,14 +387,10 @@ async def chat(
     try:
         # Validate and sanitize input data
         try:
-            request_data = {
-                'message': message,
-                'session_id': session_id,
-                'file': file
-            }
+            request_data = {"message": message, "session_id": session_id, "file": file}
             sanitized_data = validate_request_data(request_data)
-            message = sanitized_data['message']
-            session_id = sanitized_data['session_id']
+            message = sanitized_data["message"]
+            session_id = sanitized_data["session_id"]
         except ValueError as e:
             logger.warning(f"Input validation failed: {e}")
             raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
@@ -450,14 +449,18 @@ async def chat(
                         status_code=400,
                         detail=f"Failed to process document: {scan_result.get('error', 'Unknown error')}",
                     )
-                
+
                 # Wrap in list for agent processing (expects list of documents)
                 document_data = [scan_result]
-                logger.info(f"Document scanned successfully: {file.filename}, type: {scan_result.get('file_type')}, size: {scan_result.get('full_length', 0)} chars")
-                
+                logger.info(
+                    f"Document scanned successfully: {file.filename}, type: {scan_result.get('file_type')}, size: {scan_result.get('full_length', 0)} chars"
+                )
+
                 # CRITICAL FIX: Prepend document context to user message so AI KNOWS a document was uploaded
                 # This ensures the AI doesn't ask "where's the document" when it's already provided
-                if not message.strip().lower().startswith("analyze") and not message.strip().lower().startswith("scan"):
+                if not message.strip().lower().startswith(
+                    "analyze"
+                ) and not message.strip().lower().startswith("scan"):
                     message = f"[DOCUMENT UPLOADED: {file.filename}] {message}"
                     logger.info(f"Prepended document context to user message: {message[:100]}...")
 
@@ -474,7 +477,9 @@ async def chat(
         try:
             history_objs = get_recent_session_history(db, session_id, max_messages=100)
             if len(history_objs) > 0:
-                logger.info(f"Retrieved {len(history_objs)} messages from session history for context")
+                logger.info(
+                    f"Retrieved {len(history_objs)} messages from session history for context"
+                )
         except Exception as db_error:
             logger.warning(
                 f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
@@ -503,10 +508,20 @@ async def chat(
         original_message = message
         if latitude is not None and longitude is not None:
             # Check if message is about current location
-            location_keywords = ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local']
+            location_keywords = [
+                "my location",
+                "current location",
+                "here",
+                "this location",
+                "where i am",
+                "my area",
+                "local",
+            ]
             if any(keyword in message.lower() for keyword in location_keywords):
                 message = f"Get air quality data for GPS coordinates {latitude:.4f}, {longitude:.4f} (user has already consented by providing GPS data)"
-                logger.info(f"Modified location query with GPS coordinates: '{original_message}' -> '{message}'")
+                logger.info(
+                    f"Modified location query with GPS coordinates: '{original_message}' -> '{message}'"
+                )
 
         # Prepare location data - prefer GPS over IP
         location_data = None
@@ -514,19 +529,12 @@ async def chat(
         if latitude is not None and longitude is not None:
             # Validate GPS coordinates
             if -90 <= latitude <= 90 and -180 <= longitude <= 180:
-                location_data = {
-                    "source": "gps",
-                    "latitude": latitude,
-                    "longitude": longitude
-                }
+                location_data = {"source": "gps", "latitude": latitude, "longitude": longitude}
                 logger.info(f"Using GPS coordinates: {latitude}, {longitude}")
             else:
                 logger.warning(f"Invalid GPS coordinates provided: {latitude}, {longitude}")
         elif client_ip:
-            location_data = {
-                "source": "ip",
-                "ip_address": client_ip
-            }
+            location_data = {"source": "ip", "ip_address": client_ip}
             logger.info(f"Using IP address for location: {client_ip}")
 
         # Initialize Agent Service
@@ -535,15 +543,15 @@ async def chat(
         # Process message with timing for cost tracking
         start_time = time.time()
         result = await agent.process_message(
-            message, 
-            history, 
+            message,
+            history,
             document_data=document_data,
             style=role or settings.AI_RESPONSE_STYLE,
             temperature=settings.AI_RESPONSE_TEMPERATURE,
             top_p=settings.AI_RESPONSE_TOP_P,
             client_ip=client_ip,
             location_data=location_data,
-            session_id=session_id
+            session_id=session_id,
         )
         processing_time = time.time() - start_time
 
@@ -568,12 +576,12 @@ async def chat(
 
         # Accurate token counting using tiktoken (world-standard precision)
         token_counter = get_token_counter(settings.AI_PROVIDER)
-        
+
         # Count tokens accurately for each component
         message_tokens = token_counter.count_tokens(message)
         response_tokens = token_counter.count_tokens(final_response)
         history_tokens = token_counter.count_messages_tokens(history)
-        
+
         # Extract document filenames and count tokens
         document_filenames = []
         document_tokens = 0
@@ -585,10 +593,10 @@ async def chat(
                     filename = doc.get("filename")
                     if filename:
                         document_filenames.append(filename)
-        
+
         # Total with accurate counting (no estimation multiplier needed)
         tokens_used = message_tokens + response_tokens + history_tokens + document_tokens
-        
+
         logger.info(
             f"Accurate token count - Message: {message_tokens}, Response: {response_tokens}, "
             f"History: {history_tokens}, Documents: {document_tokens}, Total: {tokens_used}"
@@ -605,7 +613,7 @@ async def chat(
         # Clean up document data from memory
         if document_data:
             del document_data
-        
+
         # Extract chart data if present in result
         chart_data = result.get("chart_data")
         chart_metadata = result.get("chart_metadata")
@@ -640,24 +648,24 @@ async def chat(
             },
             user_message="Unable to process your message. Please try again.",
         )
-        
+
         # Clean up any lingering resources
-        if 'agent' in locals():
+        if "agent" in locals():
             try:
                 agent._manage_memory()  # Force memory cleanup after error
             except Exception as cleanup_error:
                 logger.warning(f"Memory cleanup failed after error: {cleanup_error}")
-        
+
         raise HTTPException(status_code=500, detail=error_data["message"]) from e
     finally:
         # Always attempt cleanup of document data from memory
         try:
-            if 'document_data' in locals() and document_data is not None:
+            if "document_data" in locals() and document_data is not None:
                 del document_data
         except Exception:
             pass
         try:
-            if 'file_content' in locals() and file_content is not None:
+            if "file_content" in locals() and file_content is not None:
                 file_content.close()
                 del file_content
         except Exception:
@@ -918,14 +926,22 @@ async def disconnect_mcp_server(name: str):
 # VISUALIZATION ENDPOINTS
 # ============================================================================
 
+
 @router.get("/visualization/capabilities")
 async def get_visualization_capabilities():
     """Get visualization capabilities and supported formats"""
     return {
         "supported_formats": ["csv", "xlsx", "xls", "pdf"],
         "supported_chart_types": [
-            "line", "bar", "scatter", "histogram", 
-            "box", "heatmap", "pie", "area", "violin"
+            "line",
+            "bar",
+            "scatter",
+            "histogram",
+            "box",
+            "heatmap",
+            "pie",
+            "area",
+            "violin",
         ],
-        "description": "Create dynamic visualizations from CSV, Excel, PDF files or search results"
+        "description": "Create dynamic visualizations from CSV, Excel, PDF files or search results",
     }

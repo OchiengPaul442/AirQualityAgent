@@ -19,13 +19,12 @@ import plotly.graph_objects as go
 import seaborn as sns
 
 # Use non-interactive backend for server environments
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 
 logger = logging.getLogger(__name__)
 
 ChartType = Literal[
-    "line", "bar", "scatter", "histogram", "box", 
-    "heatmap", "pie", "area", "violin", "timeseries"
+    "line", "bar", "scatter", "histogram", "box", "heatmap", "pie", "area", "violin", "timeseries"
 ]
 
 ChartFormat = Literal["base64", "file", "plotly_json"]
@@ -33,22 +32,24 @@ ChartFormat = Literal["base64", "file", "plotly_json"]
 
 class VisualizationService:
     """Service for creating data visualizations and charts."""
-    
+
     def __init__(self):
         """Initialize visualization service with default styles."""
         # Set professional style for matplotlib
         sns.set_style("whitegrid")
-        plt.rcParams.update({
-            'figure.figsize': (12, 6),
-            'figure.dpi': 100,
-            'font.size': 10,
-            'axes.labelsize': 12,
-            'axes.titlesize': 14,
-            'legend.fontsize': 10,
-            'xtick.labelsize': 10,
-            'ytick.labelsize': 10,
-        })
-    
+        plt.rcParams.update(
+            {
+                "figure.figsize": (12, 6),
+                "figure.dpi": 100,
+                "font.size": 10,
+                "axes.labelsize": 12,
+                "axes.titlesize": 14,
+                "legend.fontsize": 10,
+                "xtick.labelsize": 10,
+                "ytick.labelsize": 10,
+            }
+        )
+
     def generate_chart(
         self,
         data: list[dict[str, Any]] | pd.DataFrame,
@@ -61,11 +62,11 @@ class VisualizationService:
         color_column: str | None = None,
         output_format: ChartFormat = "base64",
         interactive: bool = False,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Generate a chart from data.
-        
+
         Args:
             data: Data as list of dicts or pandas DataFrame
             chart_type: Type of chart to generate
@@ -78,7 +79,7 @@ class VisualizationService:
             output_format: Output format (base64, file, plotly_json)
             interactive: Use plotly for interactive charts
             **kwargs: Additional parameters specific to chart type
-            
+
         Returns:
             dict with chart data, metadata, and generation info
         """
@@ -90,13 +91,13 @@ class VisualizationService:
                 df = pd.DataFrame(data)
             else:
                 df = data.copy()
-            
+
             # Auto-detect columns if not provided
             if x_column is None and len(df.columns) > 0:
                 x_column = df.columns[0]
             if y_column is None and len(df.columns) > 1:
                 y_column = df.columns[1]
-            
+
             # Set default labels
             if title is None:
                 title = f"{chart_type.title()} Chart"
@@ -104,41 +105,49 @@ class VisualizationService:
                 x_label = x_column
             if y_label is None and y_column:
                 y_label = y_column if isinstance(y_column, str) else "Value"
-            
+
             # Generate chart based on type and format
             if interactive or output_format == "plotly_json":
                 result = self._generate_plotly_chart(
-                    df, chart_type, x_column, y_column, title, 
-                    x_label, y_label, color_column, **kwargs
+                    df,
+                    chart_type,
+                    x_column,
+                    y_column,
+                    title,
+                    x_label,
+                    y_label,
+                    color_column,
+                    **kwargs,
                 )
             else:
                 result = self._generate_matplotlib_chart(
-                    df, chart_type, x_column, y_column, title,
-                    x_label, y_label, color_column, **kwargs
+                    df,
+                    chart_type,
+                    x_column,
+                    y_column,
+                    title,
+                    x_label,
+                    y_label,
+                    color_column,
+                    **kwargs,
                 )
-            
+
             # Add metadata
-            result.update({
-                "chart_type": chart_type,
-                "timestamp": datetime.now().isoformat(),
-                "data_rows": len(df),
-                "columns_used": {
-                    "x": x_column,
-                    "y": y_column,
-                    "color": color_column
+            result.update(
+                {
+                    "chart_type": chart_type,
+                    "timestamp": datetime.now().isoformat(),
+                    "data_rows": len(df),
+                    "columns_used": {"x": x_column, "y": y_column, "color": color_column},
                 }
-            })
-            
+            )
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error generating chart: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "chart_type": chart_type
-            }
-    
+            return {"success": False, "error": str(e), "chart_type": chart_type}
+
     def _generate_matplotlib_chart(
         self,
         df: pd.DataFrame,
@@ -149,11 +158,11 @@ class VisualizationService:
         x_label: str | None,
         y_label: str | None,
         color_column: str | None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate chart using matplotlib."""
-        fig, ax = plt.subplots(figsize=kwargs.get('figsize', (12, 6)))
-        
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (12, 6)))
+
         try:
             # Handle multiple y columns - convert to list
             if y_column is None:
@@ -162,94 +171,99 @@ class VisualizationService:
                 y_columns = [y_column]
             else:
                 y_columns = list(y_column)  # type: ignore
-            
+
             if chart_type == "line":
                 for y_col in y_columns:
-                    ax.plot(df[x_column], df[y_col], marker='o', label=y_col)
+                    ax.plot(df[x_column], df[y_col], marker="o", label=y_col)
                 ax.legend()
-                
+
             elif chart_type == "bar":
                 if len(y_columns) == 1:
                     ax.bar(df[x_column], df[y_columns[0]])
                 else:
-                    df.plot(x=x_column, y=y_columns, kind='bar', ax=ax)
-                    
+                    df.plot(x=x_column, y=y_columns, kind="bar", ax=ax)
+
             elif chart_type == "scatter":
                 if color_column and color_column in df.columns:
-                    scatter = ax.scatter(df[x_column], df[y_columns[0]], 
-                                       c=df[color_column], cmap='viridis', alpha=0.6)
+                    scatter = ax.scatter(
+                        df[x_column],
+                        df[y_columns[0]],
+                        c=df[color_column],
+                        cmap="viridis",
+                        alpha=0.6,
+                    )
                     plt.colorbar(scatter, ax=ax, label=color_column)
                 else:
                     ax.scatter(df[x_column], df[y_columns[0]], alpha=0.6)
-                    
+
             elif chart_type == "histogram":
-                ax.hist(df[y_columns[0]], bins=kwargs.get('bins', 30), 
-                       edgecolor='black', alpha=0.7)
+                ax.hist(df[y_columns[0]], bins=kwargs.get("bins", 30), edgecolor="black", alpha=0.7)
                 x_label = y_columns[0]
                 y_label = "Frequency"
-                
+
             elif chart_type == "box":
                 if len(y_columns) == 1:
                     ax.boxplot(df[y_columns[0]])
                 else:
                     df[y_columns].boxplot(ax=ax)
-                    
+
             elif chart_type == "area":
                 for y_col in y_columns:
                     ax.fill_between(df[x_column], df[y_col], alpha=0.4, label=y_col)
                 ax.legend()
-                
+
             elif chart_type == "pie":
-                ax.pie(df[y_columns[0]], labels=df[x_column], autopct='%1.1f%%')
-                
+                ax.pie(df[y_columns[0]], labels=df[x_column], autopct="%1.1f%%")
+
             elif chart_type == "violin":
-                parts = ax.violinplot([df[y_col].dropna() for y_col in y_columns],
-                                     showmeans=True, showmedians=True)
+                parts = ax.violinplot(
+                    [df[y_col].dropna() for y_col in y_columns], showmeans=True, showmedians=True
+                )
                 ax.set_xticks(range(1, len(y_columns) + 1))
                 ax.set_xticklabels(y_columns)
-                
+
             elif chart_type == "timeseries":
                 # Try to parse x_column as datetime
-                df[x_column] = pd.to_datetime(df[x_column], errors='coerce')
+                df[x_column] = pd.to_datetime(df[x_column], errors="coerce")
                 for y_col in y_columns:
-                    ax.plot(df[x_column], df[y_col], marker='o', label=y_col)
+                    ax.plot(df[x_column], df[y_col], marker="o", label=y_col)
                 ax.legend()
                 plt.xticks(rotation=45)
-                
+
             else:
                 # Default to line chart
                 for y_col in y_columns:
-                    ax.plot(df[x_column], df[y_col], marker='o', label=y_col)
+                    ax.plot(df[x_column], df[y_col], marker="o", label=y_col)
                 ax.legend()
-            
+
             # Set labels and title
-            ax.set_title(title, fontsize=14, fontweight='bold')
+            ax.set_title(title, fontsize=14, fontweight="bold")
             if x_label and chart_type != "pie":
                 ax.set_xlabel(x_label, fontsize=12)
             if y_label and chart_type != "pie":
                 ax.set_ylabel(y_label, fontsize=12)
-            
+
             # Improve layout
             plt.tight_layout()
-            
+
             # Convert to base64
             buffer = io.BytesIO()
-            plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            plt.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
             buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+            image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
             plt.close(fig)
-            
+
             return {
                 "success": True,
                 "chart_data": f"data:image/png;base64,{image_base64}",
                 "format": "png",
-                "engine": "matplotlib"
+                "engine": "matplotlib",
             }
-            
+
         except Exception as e:
             plt.close(fig)
             raise e
-    
+
     def _generate_plotly_chart(
         self,
         df: pd.DataFrame,
@@ -260,7 +274,7 @@ class VisualizationService:
         x_label: str | None,
         y_label: str | None,
         color_column: str | None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate interactive chart using plotly."""
         try:
@@ -271,69 +285,84 @@ class VisualizationService:
                 y_columns = [y_column]
             else:
                 y_columns = list(y_column)  # type: ignore
-            
+
             if chart_type == "line" or chart_type == "timeseries":
-                fig = px.line(df, x=x_column, y=y_columns, title=title,
-                             color=color_column if color_column else None)
-                
+                fig = px.line(
+                    df,
+                    x=x_column,
+                    y=y_columns,
+                    title=title,
+                    color=color_column if color_column else None,
+                )
+
             elif chart_type == "bar":
-                fig = px.bar(df, x=x_column, y=y_columns, title=title,
-                            color=color_column if color_column else None)
-                
+                fig = px.bar(
+                    df,
+                    x=x_column,
+                    y=y_columns,
+                    title=title,
+                    color=color_column if color_column else None,
+                )
+
             elif chart_type == "scatter":
-                fig = px.scatter(df, x=x_column, y=y_columns[0], title=title,
-                               color=color_column if color_column else None)
-                
+                fig = px.scatter(
+                    df,
+                    x=x_column,
+                    y=y_columns[0],
+                    title=title,
+                    color=color_column if color_column else None,
+                )
+
             elif chart_type == "histogram":
-                fig = px.histogram(df, x=y_columns[0], title=title, nbins=kwargs.get('bins', 30))
-                
+                fig = px.histogram(df, x=y_columns[0], title=title, nbins=kwargs.get("bins", 30))
+
             elif chart_type == "box":
                 fig = px.box(df, y=y_columns, title=title)
-                
+
             elif chart_type == "area":
                 fig = px.area(df, x=x_column, y=y_columns, title=title)
-                
+
             elif chart_type == "pie":
                 fig = px.pie(df, values=y_columns[0], names=x_column, title=title)
-                
+
             elif chart_type == "violin":
                 fig = px.violin(df, y=y_columns[0], title=title, box=True)
-                
+
             else:
                 # Default to line chart
                 fig = px.line(df, x=x_column, y=y_columns, title=title)
-            
+
             # Update layout
             fig.update_layout(
                 xaxis_title=x_label,
                 yaxis_title=y_label,
-                hovermode='x unified',
-                template='plotly_white'
+                hovermode="x unified",
+                template="plotly_white",
             )
-            
+
             # Convert to JSON or static image
             return {
                 "success": True,
                 "chart_data": fig.to_json(),
                 "format": "plotly_json",
-                "engine": "plotly"
+                "engine": "plotly",
             }
-            
+
         except Exception as e:
             logger.error(f"Error generating plotly chart: {e}")
             raise e
-    
+
     def generate_time_series_chart(
         self,
         data: list[dict[str, Any]] | pd.DataFrame,
         time_column: str,
         value_columns: list[str],
         title: str = "Time Series Analysis",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Convenience method for time series charts.
-        
+
         Args:
         # Convert list to comma-separated string for y_column
         y_col_str = value_columns[0] if len(value_columns) == 1 else ",".join(value_columns)
@@ -351,9 +380,9 @@ class VisualizationService:
             title=title,
             x_label="Time",
             y_label="Value",
-            **kwargs
+            **kwargs,
         )
-    
+
     def generate_comparison_chart(
         self,
         data: list[dict[str, Any]] | pd.DataFrame,
@@ -361,11 +390,11 @@ class VisualizationService:
         value_column: str,
         title: str = "Comparison Chart",
         chart_type: Literal["bar", "line"] = "bar",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Convenience method for comparison charts.
-        
+
         Args:
             data: Data to compare
             category_column: Column for categories (x-axis)
@@ -380,7 +409,7 @@ class VisualizationService:
             x_column=category_column,
             y_column=value_column,
             title=title,
-            **kwargs
+            **kwargs,
         )
 
 

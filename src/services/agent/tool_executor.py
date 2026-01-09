@@ -61,22 +61,27 @@ class ToolExecutor:
         self.geocoding = geocoding_service
         self.client_ip = None  # Will be set by agent service
         self.client_location = None  # Will be set by agent service (GPS data)
-        self.documents_provided = False  # Will be set by agent service when documents are in context
-        self.uploaded_documents = {}  # Store uploaded documents temporarily for fallback access: {filename: content_dict}
-        
+        self.documents_provided = (
+            False  # Will be set by agent service when documents are in context
+        )
+        self.uploaded_documents = (
+            {}
+        )  # Store uploaded documents temporarily for fallback access: {filename: content_dict}
+
         # Lazy-load visualization service
         self._visualization_service = None
-        
+
         # Circuit breaker for failing services
         self.service_failures = {}  # Track failures per service
         self.circuit_breaker_threshold = 5  # Failures before circuit opens
         self.circuit_breaker_timeout = 300  # 5 minutes before retry
-    
+
     @property
     def visualization_service(self):
         """Lazy-load visualization service."""
         if self._visualization_service is None:
             from src.services.visualization_service import get_visualization_service
+
             self._visualization_service = get_visualization_service()
         return self._visualization_service
 
@@ -84,16 +89,16 @@ class ToolExecutor:
         """Check if circuit breaker is open for a service."""
         if service_name not in self.service_failures:
             return False
-        
+
         failure_data = self.service_failures[service_name]
-        if failure_data['count'] >= self.circuit_breaker_threshold:
+        if failure_data["count"] >= self.circuit_breaker_threshold:
             # Check if timeout has passed
-            if time.time() - failure_data['last_failure'] < self.circuit_breaker_timeout:
+            if time.time() - failure_data["last_failure"] < self.circuit_breaker_timeout:
                 logger.warning(f"Circuit breaker OPEN for {service_name}")
                 return True
             else:
                 # Reset circuit breaker
-                self.service_failures[service_name] = {'count': 0, 'last_failure': 0}
+                self.service_failures[service_name] = {"count": 0, "last_failure": 0}
                 logger.info(f"Circuit breaker RESET for {service_name}")
                 return False
         return False
@@ -101,77 +106,79 @@ class ToolExecutor:
     def _record_failure(self, service_name: str):
         """Record a service failure."""
         if service_name not in self.service_failures:
-            self.service_failures[service_name] = {'count': 0, 'last_failure': 0}
-        
-        self.service_failures[service_name]['count'] += 1
-        self.service_failures[service_name]['last_failure'] = time.time()
-        logger.warning(f"Service failure recorded for {service_name}: {self.service_failures[service_name]['count']} failures")
+            self.service_failures[service_name] = {"count": 0, "last_failure": 0}
+
+        self.service_failures[service_name]["count"] += 1
+        self.service_failures[service_name]["last_failure"] = time.time()
+        logger.warning(
+            f"Service failure recorded for {service_name}: {self.service_failures[service_name]['count']} failures"
+        )
 
     def _record_success(self, service_name: str):
         """Record a successful service call."""
         if service_name in self.service_failures:
             # Reset failure count on success
-            self.service_failures[service_name] = {'count': 0, 'last_failure': 0}
+            self.service_failures[service_name] = {"count": 0, "last_failure": 0}
 
     def _get_city_air_quality_with_fallback(self, city: str) -> dict[str, Any]:
         """
         Get city air quality with comprehensive fallback strategy.
-        
+
         Tries ALL available data sources in intelligent order:
         1. WAQI (global coverage, 13k+ stations)
         2. AirQo (if African city)
         3. Geocode + OpenMeteo (works anywhere with coordinates)
         4. DEFRA (UK cities)
-        5. UBA (German cities) 
+        5. UBA (German cities)
         6. NSW (Australian cities)
         7. Carbon Intensity (UK only)
         8. Web search (last resort)
-        
+
         Args:
             city: City name
-            
+
         Returns:
             Result dictionary with success flag and data/message
         """
         tried_services = []
-        
+
         # 1. Try WAQI first (global coverage)
-        if self.waqi and not self._is_circuit_open('waqi'):
+        if self.waqi and not self._is_circuit_open("waqi"):
             try:
                 logger.info(f"Trying WAQI for {city}")
-                tried_services.append('WAQI')
+                tried_services.append("WAQI")
                 result = self.waqi.get_city_feed(city)
                 if result.get("success"):
-                    self._record_success('waqi')
+                    self._record_success("waqi")
                     result["data_source"] = "WAQI"
                     return result
                 logger.info(f"WAQI returned no data for {city}")
-                self._record_failure('waqi')
+                self._record_failure("waqi")
             except Exception as e:
                 logger.error(f"WAQI error for {city}: {e}")
-                self._record_failure('waqi')
-        
+                self._record_failure("waqi")
+
         # 2. Try AirQo (good for African cities, but also try globally)
-        if self.airqo and not self._is_circuit_open('airqo'):
+        if self.airqo and not self._is_circuit_open("airqo"):
             try:
                 logger.info(f"Trying AirQo for {city}")
-                tried_services.append('AirQo')
+                tried_services.append("AirQo")
                 result = self.airqo.get_recent_measurements(city=city)
                 if result.get("success"):
-                    self._record_success('airqo')
+                    self._record_success("airqo")
                     result["data_source"] = "AirQo"
                     return result
                 logger.info(f"AirQo returned no data for {city}")
-                self._record_failure('airqo')
+                self._record_failure("airqo")
             except Exception as e:
                 logger.error(f"AirQo error for {city}: {e}")
-                self._record_failure('airqo')
-        
+                self._record_failure("airqo")
+
         # 3. Try Geocode + OpenMeteo (works anywhere with coordinates)
-        if self.geocoding and self.openmeteo and not self._is_circuit_open('openmeteo'):
+        if self.geocoding and self.openmeteo and not self._is_circuit_open("openmeteo"):
             try:
                 logger.info(f"Trying Geocoding + OpenMeteo for {city}")
-                tried_services.append('OpenMeteo')
+                tried_services.append("OpenMeteo")
                 geocode_result = self.geocoding.geocode_address(city, limit=1)
                 if geocode_result.get("success") and geocode_result.get("results"):
                     location = geocode_result["results"][0]
@@ -180,86 +187,97 @@ class ToolExecutor:
                     if lat and lon:
                         aq_result = self.openmeteo.get_current_air_quality(lat, lon)
                         if aq_result.get("success"):
-                            self._record_success('openmeteo')
+                            self._record_success("openmeteo")
                             # Enhance result to indicate fallback was used
                             aq_result["data_source"] = "meteorological services"
                             aq_result["location_name"] = city
                             aq_result["note"] = f"Data retrieved using coordinates for {city}"
                             return aq_result
                 logger.info(f"Geocoding + OpenMeteo failed for {city}")
-                self._record_failure('openmeteo')
+                self._record_failure("openmeteo")
             except Exception as e:
                 logger.error(f"Geocoding + OpenMeteo error for {city}: {e}")
-                self._record_failure('openmeteo')
-        
+                self._record_failure("openmeteo")
+
         # 4. Try DEFRA (UK cities)
-        if self.defra and not self._is_circuit_open('defra'):
+        if self.defra and not self._is_circuit_open("defra"):
             try:
                 logger.info(f"Trying DEFRA for {city}")
-                tried_services.append('DEFRA')
+                tried_services.append("DEFRA")
                 result = self.defra.get_city_air_quality(city)
                 if result.get("success"):
-                    self._record_success('defra')
+                    self._record_success("defra")
                     result["data_source"] = "DEFRA UK environmental monitoring"
                     return result
                 logger.info(f"DEFRA returned no data for {city}")
-                self._record_failure('defra')
+                self._record_failure("defra")
             except Exception as e:
                 logger.error(f"DEFRA error for {city}: {e}")
-                self._record_failure('defra')
-        
+                self._record_failure("defra")
+
         # 5. Try UBA (German cities)
-        if self.uba and not self._is_circuit_open('uba'):
+        if self.uba and not self._is_circuit_open("uba"):
             try:
                 logger.info(f"Trying UBA for {city}")
-                tried_services.append('UBA')
+                tried_services.append("UBA")
                 result = self.uba.get_city_air_quality(city)
                 if result.get("success"):
-                    self._record_success('uba')
+                    self._record_success("uba")
                     result["data_source"] = "UBA Germany environmental monitoring"
                     return result
                 logger.info(f"UBA returned no data for {city}")
-                self._record_failure('uba')
+                self._record_failure("uba")
             except Exception as e:
                 logger.error(f"UBA error for {city}: {e}")
-                self._record_failure('uba')
-        
+                self._record_failure("uba")
+
         # 6. Try NSW (Australian cities)
-        if self.nsw and not self._is_circuit_open('nsw'):
+        if self.nsw and not self._is_circuit_open("nsw"):
             try:
                 logger.info(f"Trying NSW for {city}")
-                tried_services.append('NSW')
+                tried_services.append("NSW")
                 result = self.nsw.get_city_air_quality(city)
                 if result.get("success"):
-                    self._record_success('nsw')
+                    self._record_success("nsw")
                     result["data_source"] = "NSW Australia environmental monitoring"
                     return result
                 logger.info(f"NSW returned no data for {city}")
-                self._record_failure('nsw')
+                self._record_failure("nsw")
             except Exception as e:
                 logger.error(f"NSW error for {city}: {e}")
-                self._record_failure('nsw')
-        
+                self._record_failure("nsw")
+
         # 7. Try Carbon Intensity (UK only, but worth a try)
-        if self.carbon_intensity and not self._is_circuit_open('carbon_intensity'):
+        if self.carbon_intensity and not self._is_circuit_open("carbon_intensity"):
             try:
                 logger.info(f"Trying Carbon Intensity for {city}")
-                tried_services.append('Carbon Intensity')
+                tried_services.append("Carbon Intensity")
                 # This is UK-specific, so only try if city might be in UK
-                uk_cities = ['london', 'manchester', 'birmingham', 'leeds', 'glasgow', 'sheffield', 'bradford', 'liverpool', 'edinburgh', 'leicester']
+                uk_cities = [
+                    "london",
+                    "manchester",
+                    "birmingham",
+                    "leeds",
+                    "glasgow",
+                    "sheffield",
+                    "bradford",
+                    "liverpool",
+                    "edinburgh",
+                    "leicester",
+                ]
                 if any(uk_city in city.lower() for uk_city in uk_cities):
                     result = self.carbon_intensity.get_current_intensity()
                     if result.get("success"):
-                        self._record_success('carbon_intensity')
+                        self._record_success("carbon_intensity")
                         result["data_source"] = "UK Carbon Intensity monitoring"
                         result["note"] = "UK carbon intensity data (not specific air quality)"
                         return result
                 logger.info(f"Carbon Intensity not applicable for {city}")
-                self._record_failure('carbon_intensity')
+                self._record_failure("carbon_intensity")
             except Exception as e:
                 logger.error(f"Carbon Intensity error for {city}: {e}")
-                self._record_failure('carbon_intensity')
-        
+                self._record_failure("carbon_intensity")
+
         # Last resort: web search with comprehensive query
         logger.info(f"All services failed for {city}. Tried: {', '.join(tried_services)}")
         return {
@@ -268,51 +286,51 @@ class ToolExecutor:
             "tried_services": tried_services,
             "suggestion": "search_web",
             "search_query": f"current air quality {city} site:epa.gov OR site:airnow.gov OR site:who.int",
-            "fallback_advice": f"No monitoring station data found for {city} from {len(tried_services)} services. Try searching official environmental agency websites or nearby major cities."
+            "fallback_advice": f"No monitoring station data found for {city} from {len(tried_services)} services. Try searching official environmental agency websites or nearby major cities.",
         }
 
     def _get_african_city_with_fallback(self, city: str, site_id: str = None) -> dict[str, Any]:
         """
         Get African city air quality with fallback to WAQI and OpenMeteo.
-        
+
         Args:
             city: City name
             site_id: Optional AirQo site ID
-            
+
         Returns:
             Result dictionary
         """
         # Try AirQo first (primary for Africa)
-        if self.airqo and not self._is_circuit_open('airqo'):
+        if self.airqo and not self._is_circuit_open("airqo"):
             try:
                 logger.info(f"Trying AirQo for {city}")
                 result = self.airqo.get_recent_measurements(city=city, site_id=site_id)
                 if result.get("success"):
-                    self._record_success('airqo')
+                    self._record_success("airqo")
                     return result
                 logger.info(f"AirQo returned no data for {city}")
-                self._record_failure('airqo')
+                self._record_failure("airqo")
             except Exception as e:
                 logger.error(f"AirQo error for {city}: {e}")
-                self._record_failure('airqo')
-        
+                self._record_failure("airqo")
+
         # Fallback to WAQI
-        if self.waqi and not self._is_circuit_open('waqi'):
+        if self.waqi and not self._is_circuit_open("waqi"):
             try:
                 logger.info(f"Trying WAQI fallback for {city}")
                 result = self.waqi.get_city_feed(city)
                 if result.get("success"):
-                    self._record_success('waqi')
+                    self._record_success("waqi")
                     result["data_source"] = "World Air Quality Index monitoring network"
                     result["note"] = f"AirQo data unavailable. Using WAQI station data for {city}"
                     return result
-                self._record_failure('waqi')
+                self._record_failure("waqi")
             except Exception as e:
                 logger.error(f"WAQI fallback error for {city}: {e}")
-                self._record_failure('waqi')
-        
+                self._record_failure("waqi")
+
         # Fallback to Geocode + OpenMeteo
-        if self.geocoding and self.openmeteo and not self._is_circuit_open('openmeteo'):
+        if self.geocoding and self.openmeteo and not self._is_circuit_open("openmeteo"):
             try:
                 logger.info(f"Trying Geocoding + OpenMeteo fallback for {city}")
                 geocode_result = self.geocoding.geocode_address(city, limit=1)
@@ -323,22 +341,24 @@ class ToolExecutor:
                     if lat and lon:
                         aq_result = self.openmeteo.get_current_air_quality(lat, lon)
                         if aq_result.get("success"):
-                            self._record_success('openmeteo')
+                            self._record_success("openmeteo")
                             aq_result["data_source"] = "meteorological services"
                             aq_result["location_name"] = city
-                            aq_result["note"] = f"Local monitoring data unavailable. Using modeled data for {city}"
+                            aq_result["note"] = (
+                                f"Local monitoring data unavailable. Using modeled data for {city}"
+                            )
                             return aq_result
-                self._record_failure('openmeteo')
+                self._record_failure("openmeteo")
             except Exception as e:
                 logger.error(f"Geocoding + OpenMeteo fallback error for {city}: {e}")
-                self._record_failure('openmeteo')
-        
+                self._record_failure("openmeteo")
+
         return {
             "success": False,
             "message": f"Unable to retrieve air quality data for {city}. This location may not have active monitoring coverage.",
             "suggestion": "search_web",
             "search_query": f"air quality {city} Africa",
-            "fallback_advice": f"Consider checking local environmental agencies or nearby cities with monitoring stations."
+            "fallback_advice": f"Consider checking local environmental agencies or nearby cities with monitoring stations.",
         }
 
     def execute(self, function_name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -362,14 +382,17 @@ class ToolExecutor:
             elif function_name == "search_waqi_stations":
                 if self.waqi is None:
                     return {"success": False, "message": "WAQI service is not enabled."}
-                if self._is_circuit_open('waqi'):
-                    return {"success": False, "message": "WAQI service temporarily unavailable. Try again later."}
+                if self._is_circuit_open("waqi"):
+                    return {
+                        "success": False,
+                        "message": "WAQI service temporarily unavailable. Try again later.",
+                    }
                 try:
                     result = self.waqi.search_stations(args.get("keyword"))
-                    self._record_success('waqi')
+                    self._record_success("waqi")
                     return result
                 except Exception as e:
-                    self._record_failure('waqi')
+                    self._record_failure("waqi")
                     raise
 
             # AirQo tools - with intelligent fallback
@@ -400,9 +423,7 @@ class ToolExecutor:
                     else None
                 )
                 end_time = (
-                    datetime.fromisoformat(end_time_str)
-                    if isinstance(end_time_str, str)
-                    else None
+                    datetime.fromisoformat(end_time_str) if isinstance(end_time_str, str) else None
                 )
                 return self.airqo.get_historical_measurements(
                     site_id=args.get("site_id"),
@@ -421,33 +442,53 @@ class ToolExecutor:
                 # Intelligent routing: Use AirQo for African cities, WAQI for others
                 city = args.get("city", "").lower()
                 days = args.get("days", 3)
-                
+
                 # List of African countries/cities that should use AirQo
                 african_indicators = [
-                    "africa", "kenya", "uganda", "tanzania", "rwanda", "ghana", "nigeria", 
-                    "ethiopia", "south africa", "egypt", "morocco", "algeria", "tunisia",
-                    "nairobi", "kampala", "dar es salaam", "kigali", "accra", "lagos",
-                    "addis ababa", "cape town", "cairo", "casablanca", "algiers", "tunis"
+                    "africa",
+                    "kenya",
+                    "uganda",
+                    "tanzania",
+                    "rwanda",
+                    "ghana",
+                    "nigeria",
+                    "ethiopia",
+                    "south africa",
+                    "egypt",
+                    "morocco",
+                    "algeria",
+                    "tunisia",
+                    "nairobi",
+                    "kampala",
+                    "dar es salaam",
+                    "kigali",
+                    "accra",
+                    "lagos",
+                    "addis ababa",
+                    "cape town",
+                    "cairo",
+                    "casablanca",
+                    "algiers",
+                    "tunis",
                 ]
-                
+
                 is_african = any(indicator in city for indicator in african_indicators)
-                
+
                 if is_african and self.airqo is not None:
                     # Use AirQo for African cities
                     try:
-                        result = self.airqo.get_forecast(
-                            city=city,
-                            frequency="daily"
-                        )
+                        result = self.airqo.get_forecast(city=city, frequency="daily")
                         # Add explicit source attribution
                         if isinstance(result, dict) and result.get("success"):
                             result["data_source"] = "AirQo monitoring network"
                             result["source_type"] = "airqo"
                         return result
                     except Exception as e:
-                        logger.warning(f"AirQo forecast failed for {city}, falling back to WAQI: {e}")
+                        logger.warning(
+                            f"AirQo forecast failed for {city}, falling back to WAQI: {e}"
+                        )
                         # Fall back to WAQI if AirQo fails
-                
+
                 # Use WAQI for non-African cities or as fallback
                 if self.waqi is not None:
                     try:
@@ -459,9 +500,15 @@ class ToolExecutor:
                         return result
                     except Exception as e:
                         logger.error(f"WAQI forecast failed for {city}: {e}")
-                        return {"success": False, "message": f"Unable to get forecast for {city}. No monitoring stations found or service unavailable."}
+                        return {
+                            "success": False,
+                            "message": f"Unable to get forecast for {city}. No monitoring stations found or service unavailable.",
+                        }
                 else:
-                    return {"success": False, "message": "Air quality forecast services are not available."}
+                    return {
+                        "success": False,
+                        "message": "Air quality forecast services are not available.",
+                    }
 
             elif function_name == "get_air_quality_by_location":
                 if self.airqo is None:
@@ -474,8 +521,7 @@ class ToolExecutor:
                 if self.airqo is None:
                     return {"success": False, "message": "AirQo service is not enabled."}
                 return self.airqo.search_sites_by_location(
-                    location=args.get("location"),
-                    limit=args.get("limit", 50)
+                    location=args.get("location"), limit=args.get("limit", 50)
                 )
 
             # OpenMeteo tools
@@ -506,8 +552,16 @@ class ToolExecutor:
                 return self.openmeteo.get_historical_data(
                     latitude=args.get("latitude"),
                     longitude=args.get("longitude"),
-                    start_date=datetime.strptime(start_date_str, "%Y-%m-%d") if isinstance(start_date_str, str) else None,
-                    end_date=datetime.strptime(end_date_str, "%Y-%m-%d") if isinstance(end_date_str, str) else None,
+                    start_date=(
+                        datetime.strptime(start_date_str, "%Y-%m-%d")
+                        if isinstance(start_date_str, str)
+                        else None
+                    ),
+                    end_date=(
+                        datetime.strptime(end_date_str, "%Y-%m-%d")
+                        if isinstance(end_date_str, str)
+                        else None
+                    ),
                     timezone=args.get("timezone", "auto"),
                 )
 
@@ -576,18 +630,14 @@ class ToolExecutor:
             elif function_name == "get_nsw_pollutant_data":
                 if self.nsw is None:
                     return {"success": False, "message": "NSW service is not enabled."}
-                return self.nsw.get_pollutant_data(
-                    args.get("pollutant"), args.get("hours", 24)
-                )
+                return self.nsw.get_pollutant_data(args.get("pollutant"), args.get("hours", 24))
 
             # Weather tools
             elif function_name == "get_city_weather":
                 return self.weather.get_current_weather(args.get("city"))
 
             elif function_name == "get_weather_forecast":
-                return self.weather.get_weather_forecast(
-                    args.get("city"), args.get("days", 7)
-                )
+                return self.weather.get_weather_forecast(args.get("city"), args.get("days", 7))
 
             # Search and scraping tools
             elif function_name == "search_web":
@@ -601,12 +651,13 @@ class ToolExecutor:
                 file_path = args.get("file_path")
                 if not file_path:
                     return {"error": "file_path parameter is required"}
-                
+
                 # FALLBACK: Check if this is an uploaded document we have in memory
                 # Extract filename from path (user might pass just filename or full path)
                 import os
+
                 filename = os.path.basename(file_path)
-                
+
                 # Check uploaded documents cache first (FALLBACK for when AI can't see context)
                 if filename in self.uploaded_documents:
                     logger.info(f"scan_document: Found uploaded document in cache: {filename}")
@@ -619,9 +670,9 @@ class ToolExecutor:
                         "metadata": doc_data.get("metadata", {}),
                         "truncated": doc_data.get("truncated", False),
                         "full_length": doc_data.get("full_length", 0),
-                        "source": "uploaded_cache"
+                        "source": "uploaded_cache",
                     }
-                
+
                 # Otherwise try to scan from disk
                 logger.info(f"scan_document: Attempting to scan from disk: {file_path}")
                 return self.document_scanner.scan_file(file_path)
@@ -639,7 +690,7 @@ class ToolExecutor:
                     # Use GPS coordinates directly
                     latitude = self.client_location["latitude"]
                     longitude = self.client_location["longitude"]
-                    
+
                     # Get location name using reverse geocoding
                     reverse_result = self.geocoding.reverse_geocode(latitude, longitude)
                     if reverse_result.get("success"):
@@ -648,14 +699,12 @@ class ToolExecutor:
                     else:
                         location_name = f"{latitude:.4f}, {longitude:.4f}"
                         city = "Unknown city"
-                    
+
                     # Automatically call air quality API with GPS coordinates
                     air_quality_result = self.openmeteo.get_current_air_quality(
-                        latitude=latitude,
-                        longitude=longitude,
-                        timezone="auto"
+                        latitude=latitude, longitude=longitude, timezone="auto"
                     )
-                    
+
                     combined_result = {
                         "success": True,
                         "message": "Location determined from GPS coordinates (precise)",
@@ -665,22 +714,28 @@ class ToolExecutor:
                             "city": city,
                             "display_name": location_name,
                             "source": "gps",
-                            "accuracy": "precise"
+                            "accuracy": "precise",
                         },
-                        "air_quality": air_quality_result
+                        "air_quality": air_quality_result,
                     }
                     return combined_result
                 else:
                     # Fall back to IP geolocation
                     location_result = self.geocoding.get_location_from_ip(self.client_ip)
                     # If location retrieval succeeds, automatically get air quality for those coordinates
-                    if location_result.get("success") and location_result.get("latitude") and location_result.get("longitude"):
-                        logger.info(f"Location retrieved from IP: {location_result.get('latitude')}, {location_result.get('longitude')}")
+                    if (
+                        location_result.get("success")
+                        and location_result.get("latitude")
+                        and location_result.get("longitude")
+                    ):
+                        logger.info(
+                            f"Location retrieved from IP: {location_result.get('latitude')}, {location_result.get('longitude')}"
+                        )
                         # Automatically call air quality API with the coordinates
                         air_quality_result = self.openmeteo.get_current_air_quality(
                             latitude=location_result["latitude"],
                             longitude=location_result["longitude"],
-                            timezone="auto"
+                            timezone="auto",
                         )
                         # Combine the results
                         combined_result = {
@@ -693,19 +748,19 @@ class ToolExecutor:
                                 "city": location_result.get("city"),
                                 "region": location_result.get("region"),
                                 "source": "ip",
-                                "accuracy": "approximate"
+                                "accuracy": "approximate",
                             },
-                            "air_quality": air_quality_result
+                            "air_quality": air_quality_result,
                         }
                         return combined_result
                     else:
                         # Location retrieval failed, return the error
                         return location_result
-            
+
             elif function_name == "generate_chart":
                 """
                 Generate a chart/graph from data.
-                
+
                 Expected args:
                     - data: List of dictionaries with data points
                     - chart_type: Type of chart (line, bar, scatter, etc.)
@@ -716,21 +771,23 @@ class ToolExecutor:
                     - y_label: Y-axis label (optional)
                 """
                 try:
-                    logger.info(f"Generating {args.get('chart_type', 'line')} chart: {args.get('title', 'Chart')}")
-                    
+                    logger.info(
+                        f"Generating {args.get('chart_type', 'line')} chart: {args.get('title', 'Chart')}"
+                    )
+
                     # Validate required fields
                     if "data" not in args:
                         return {
                             "success": False,
-                            "error": "Missing 'data' parameter. Please provide data as a list of dictionaries."
+                            "error": "Missing 'data' parameter. Please provide data as a list of dictionaries.",
                         }
-                    
+
                     if not args["data"]:
                         return {
                             "success": False,
-                            "error": "Empty data provided. Cannot generate chart without data."
+                            "error": "Empty data provided. Cannot generate chart without data.",
                         }
-                    
+
                     # Use visualization service to generate chart
                     result = self.visualization_service.generate_chart(
                         data=args["data"],
@@ -741,20 +798,19 @@ class ToolExecutor:
                         x_label=args.get("x_label"),
                         y_label=args.get("y_label"),
                         color_column=args.get("color_column"),
-                        interactive=args.get("interactive", False)
+                        interactive=args.get("interactive", False),
                     )
-                    
+
                     if result.get("success"):
-                        logger.info(f"Chart generated successfully: {result.get('chart_type')} with {result.get('data_rows')} rows")
-                    
+                        logger.info(
+                            f"Chart generated successfully: {result.get('chart_type')} with {result.get('data_rows')} rows"
+                        )
+
                     return result
-                    
+
                 except Exception as e:
                     logger.error(f"Chart generation error: {e}", exc_info=True)
-                    return {
-                        "success": False,
-                        "error": f"Failed to generate chart: {str(e)}"
-                    }
+                    return {"success": False, "error": f"Failed to generate chart: {str(e)}"}
 
             else:
                 return {

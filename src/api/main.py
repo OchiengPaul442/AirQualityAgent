@@ -25,10 +25,10 @@ def setup_logging():
     # Configure root logger
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.StreamHandler(),  # Console output
-        ]
+        ],
     )
 
     # Set specific log levels for different components
@@ -49,6 +49,7 @@ def setup_logging():
         # Only log errors and warnings from providers, not debug info
         logging.getLogger("src.services.providers").setLevel(logging.WARNING)
 
+
 setup_logging()
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,11 @@ limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["100/minute", "1000/hour"],
     headers_enabled=True,  # Add rate limit info to response headers
-    storage_uri=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}" if settings.REDIS_ENABLED else "memory://"
+    storage_uri=(
+        f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+        if settings.REDIS_ENABLED
+        else "memory://"
+    ),
 )
 
 
@@ -103,8 +108,16 @@ app = FastAPI(
 # app.add_middleware(SlowAPIMiddleware)
 
 # Configure CORS middleware
-cors_methods = ["*"] if settings.CORS_ALLOW_METHODS == "*" else [m.strip() for m in settings.CORS_ALLOW_METHODS.split(",")]
-cors_headers = ["*"] if settings.CORS_ALLOW_HEADERS == "*" else [h.strip() for h in settings.CORS_ALLOW_HEADERS.split(",")]
+cors_methods = (
+    ["*"]
+    if settings.CORS_ALLOW_METHODS == "*"
+    else [m.strip() for m in settings.CORS_ALLOW_METHODS.split(",")]
+)
+cors_headers = (
+    ["*"]
+    if settings.CORS_ALLOW_HEADERS == "*"
+    else [h.strip() for h in settings.CORS_ALLOW_HEADERS.split(",")]
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -122,6 +135,7 @@ app.add_middleware(
     allowed_hosts=["*"] if settings.ENVIRONMENT == "development" else settings.cors_origins_list,
 )
 
+
 # Add security and performance headers
 @app.middleware("http")
 async def add_security_headers(request, call_next):
@@ -132,13 +146,16 @@ async def add_security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    )
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
+
     # Performance headers
     response.headers["X-Response-Time"] = str(getattr(request.state, "response_time", 0))
 
     return response
+
 
 # Register global error handlers for better error messages
 register_error_handlers(app)

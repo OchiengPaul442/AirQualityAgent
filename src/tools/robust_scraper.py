@@ -74,12 +74,14 @@ class RobustScraper:
             "Sec-Fetch-User": "?1",
         }
 
-    def scrape(self, url: str) -> dict[str, Any]:
+    def scrape(self, url: str, extract_air_quality_data: bool = True) -> dict[str, Any]:
         """
         Scrape a URL and return structured data.
+        Intelligently extracts air quality data from known providers.
 
         Args:
             url: The URL to scrape.
+            extract_air_quality_data: If True, attempt to extract air quality metrics
 
         Returns:
             A dictionary containing title, text content, and metadata.
@@ -117,7 +119,7 @@ class RobustScraper:
                 full_url = urljoin(url, str(href))
                 links.append({"text": a.get_text(strip=True), "url": full_url})
 
-            return {
+            result = {
                 "url": url,
                 "title": title,
                 "content": clean_text[:20000],  # Limit content size
@@ -125,12 +127,96 @@ class RobustScraper:
                 "status_code": response.status_code,
             }
 
+            # Extract air quality data if requested and URL is from known provider
+            if extract_air_quality_data:
+                air_quality_data = self._extract_air_quality_metrics(soup, url)
+                if air_quality_data:
+                    result["air_quality_data"] = air_quality_data
+                    logger.info(f"Extracted air quality data from {url}")
+
+            return result
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Error scraping {url}: {e}")
             return {"error": str(e), "url": url}
         except Exception as e:
             logger.error(f"Unexpected error scraping {url}: {e}")
             return {"error": str(e), "url": url}
+
+    def _extract_air_quality_metrics(self, soup: BeautifulSoup, url: str) -> dict[str, Any] | None:
+        """
+        Extract air quality metrics from known providers (IQAir, PurpleAir, etc.).
+
+        Args:
+            soup: BeautifulSoup object of the page
+            url: URL being scraped
+
+        Returns:
+            Dictionary with extracted AQ metrics or None
+        """
+        try:
+            data = {}
+
+            # IQAir-specific extraction
+            if "iqair.com" in url:
+                # Look for AQI values in common patterns
+                aqi_patterns = [
+                    ("aqi-value", "class"),
+                    ("aqi-number", "class"),
+                    ("aqi", "id"),
+                    ("air-quality-value", "class"),
+                ]
+
+                for pattern, attr_type in aqi_patterns:
+                    if attr_type == "class":
+                        element = soup.find(class_=pattern)
+                    else:
+                        element = soup.find(id=pattern)
+
+                    if element:
+                        aqi_text = element.get_text(strip=True)
+                        try:
+                            data["aqi"] = int("".join(filter(str.isdigit, aqi_text)))
+                        except ValueError:
+                            pass
+
+                # Extract location
+                location_element = soup.find("h1") or soup.find(class_="location-name")
+                if location_element:
+                    data["location"] = location_element.get_text(strip=True)
+
+                # Extract pollutants (PM2.5, PM10, etc.)
+                pollutant_containers = soup.find_all(class_=["pollutant-item", "pollutant-value"])
+                for container in pollutant_containers:
+                    text = container.get_text(strip=True)
+                    if "PM2.5" in text:
+                        data["pm2.5"] = text
+                    elif "PM10" in text:
+                        data["pm10"] = text
+                    elif "O3" in text or "Ozone" in text:
+                        data["o3"] = text
+
+            # Generic air quality data extraction for other sites
+            else:
+                # Look for common AQI indicators
+                text_lower = soup.get_text().lower()
+                if any(
+                    keyword in text_lower for keyword in ["aqi", "air quality", "pm2.5", "pm10"]
+                ):
+                    # Extract any numeric AQI values
+                    import re
+
+                    aqi_matches = re.findall(
+                        r"\b(?:aqi|air quality index)[:\s]*([0-9]{1,3})\b", text_lower
+                    )
+                    if aqi_matches:
+                        data["aqi"] = int(aqi_matches[0])
+
+            return data if data else None
+
+        except Exception as e:
+            logger.warning(f"Error extracting air quality data: {e}")
+            return None
 
     def close(self):
         """Close the session."""

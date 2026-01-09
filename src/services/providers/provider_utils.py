@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 def format_tool_result_as_json(result: Any) -> str:
     """
     Format tool result as readable JSON string.
-    
+
     Args:
         result: Tool result to format (dict, list, or primitive)
-        
+
     Returns:
         Formatted JSON string
     """
@@ -72,16 +72,14 @@ def retry_with_exponential_backoff(
         except Exception as e:
             last_exception = e
             if attempt < max_retries:  # Don't log on final attempt
-                delay = min(base_delay * (backoff_multiplier ** attempt), max_delay)
+                delay = min(base_delay * (backoff_multiplier**attempt), max_delay)
                 logger.warning(
                     f"{provider_name} error (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                     f"Retrying in {delay:.1f} seconds..."
                 )
                 time.sleep(delay)
             else:
-                logger.error(
-                    f"{provider_name} failed after {max_retries + 1} attempts: {e}"
-                )
+                logger.error(f"{provider_name} failed after {max_retries + 1} attempts: {e}")
 
     # This should never be reached due to the loop logic, but just in case
     if last_exception:
@@ -129,16 +127,14 @@ async def retry_with_exponential_backoff_async(
         except Exception as e:
             last_exception = e
             if attempt < max_retries:  # Don't log on final attempt
-                delay = min(base_delay * (backoff_multiplier ** attempt), max_delay)
+                delay = min(base_delay * (backoff_multiplier**attempt), max_delay)
                 logger.warning(
                     f"{provider_name} error (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                     f"Retrying in {delay:.1f} seconds..."
                 )
                 await asyncio.sleep(delay)
             else:
-                logger.error(
-                    f"{provider_name} failed after {max_retries + 1} attempts: {e}"
-                )
+                logger.error(f"{provider_name} failed after {max_retries + 1} attempts: {e}")
 
     # This should never be reached due to the loop logic, but just in case
     if last_exception:
@@ -187,14 +183,16 @@ def create_rate_limit_error_details(
     if headers and isinstance(headers, dict):
         if provider.lower() == "openai":
             # OpenAI rate limit headers
-            error_details.update({
-                "x_ratelimit_limit_requests": headers.get("x-ratelimit-limit-requests"),
-                "x_ratelimit_limit_tokens": headers.get("x-ratelimit-limit-tokens"),
-                "x_ratelimit_remaining_requests": headers.get("x-ratelimit-remaining-requests"),
-                "x_ratelimit_remaining_tokens": headers.get("x-ratelimit-remaining-tokens"),
-                "x_ratelimit_reset_requests": headers.get("x-ratelimit-reset-requests"),
-                "x_ratelimit_reset_tokens": headers.get("x-ratelimit-reset-tokens"),
-            })
+            error_details.update(
+                {
+                    "x_ratelimit_limit_requests": headers.get("x-ratelimit-limit-requests"),
+                    "x_ratelimit_limit_tokens": headers.get("x-ratelimit-limit-tokens"),
+                    "x_ratelimit_remaining_requests": headers.get("x-ratelimit-remaining-requests"),
+                    "x_ratelimit_remaining_tokens": headers.get("x-ratelimit-remaining-tokens"),
+                    "x_ratelimit_reset_requests": headers.get("x-ratelimit-reset-requests"),
+                    "x_ratelimit_reset_tokens": headers.get("x-ratelimit-reset-tokens"),
+                }
+            )
         elif provider.lower() == "gemini":
             # Gemini might have different headers in the future
             pass
@@ -264,13 +262,14 @@ def get_user_friendly_error_message(
 
     # Rate limit and quota errors
     if is_rate_limit_error(error):
-        base_msg = "Aeris-AQ is currently experiencing high demand. Please wait a moment and try again."
+        base_msg = (
+            "Aeris-AQ is currently experiencing high demand. Please wait a moment and try again."
+        )
 
         # Add reset time info if available (OpenAI)
         if error_details and provider == "openai":
-            reset_time = (
-                error_details.get("x_ratelimit_reset_requests") or
-                error_details.get("x_ratelimit_reset_tokens")
+            reset_time = error_details.get("x_ratelimit_reset_requests") or error_details.get(
+                "x_ratelimit_reset_tokens"
             )
             if reset_time:
                 base_msg += f" Expected reset in approximately {reset_time}."
@@ -286,7 +285,11 @@ def get_user_friendly_error_message(
     # Provider-specific errors
     if provider == "ollama":
         if "model" in error_msg_lower or "not found" in error_msg_lower:
-            model_name = error_details.get("model", "the requested model") if error_details else "the requested model"
+            model_name = (
+                error_details.get("model", "the requested model")
+                if error_details
+                else "the requested model"
+            )
             return f"The model '{model_name}' is not available in Ollama. Please pull the model first with: ollama pull {model_name}"
         if "refused" in error_msg_lower:
             return "Connection refused by Ollama service. Please check that Ollama is running on the correct port."
@@ -304,11 +307,15 @@ def get_user_friendly_error_message(
             return "Permission denied. Please check your Gemini API permissions and quota."
 
     # Model-specific errors
-    if "model" in error_msg_lower and ("not found" in error_msg_lower or "does not exist" in error_msg_lower):
+    if "model" in error_msg_lower and (
+        "not found" in error_msg_lower or "does not exist" in error_msg_lower
+    ):
         return f"The requested model is not available. Please check your model configuration."
 
     # Content policy/filtering errors
-    if "content" in error_msg_lower and ("policy" in error_msg_lower or "filter" in error_msg_lower):
+    if "content" in error_msg_lower and (
+        "policy" in error_msg_lower or "filter" in error_msg_lower
+    ):
         return "Your request was filtered due to content policies. Please rephrase your question."
 
     # Generic fallback with more context

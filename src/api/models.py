@@ -50,11 +50,10 @@ class ChatResponse(BaseModel):
     document_filename: str | None = Field(None, description="Name of the uploaded document if any")
     chart_data: str | None = Field(
         None,
-        description="Base64-encoded chart/graph image (data:image/png;base64,...) if visualization was generated"
+        description="Base64-encoded chart/graph image (data:image/png;base64,...) if visualization was generated",
     )
     chart_metadata: dict[str, Any] | None = Field(
-        None,
-        description="Chart metadata including type, columns used, data rows count, etc."
+        None, description="Chart metadata including type, columns used, data rows count, etc."
     )
 
 

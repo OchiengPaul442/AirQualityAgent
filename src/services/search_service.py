@@ -19,6 +19,8 @@ class SearchService:
     """
 
     # Trusted air quality and environmental sources
+    # IQAir (https://www.iqair.com/) - Premium AQI data provider (not free API but scrapable)
+    # Added per user request as key data source for improved coverage
     TRUSTED_SOURCES = [
         # Core air quality platforms
         "airqo.net",
@@ -28,11 +30,13 @@ class SearchService:
         "aero-glyphs.vercel.app",
         "aqicn.org",
         "openaq.org",
-        "iqair.com",
+        "iqair.com",  # Premium AQI data - scrapable website
         "plumelabs.com",
         "waqi.info",
         "open-meteo.com",
         "carbonintensity.org.uk",
+        "breezometer.com",  # Additional air quality data provider
+        "purpleair.com",  # Community air quality sensors
         # Additional air quality monitoring platforms
         "airgradient.com",
         # Research and academic platforms
@@ -80,12 +84,14 @@ class SearchService:
     def __init__(self):
         """Initialize search service with multiple providers."""
         self.providers = {
-            'duckduckgo': self._search_duckduckgo,
+            "duckduckgo": self._search_duckduckgo,
             # Add more providers here in the future
         }
-        self.default_provider = 'duckduckgo'
+        self.default_provider = "duckduckgo"
 
-    def search(self, query: str, max_results: int = 5, provider: str = None) -> list[dict[str, str]]:
+    def search(
+        self, query: str, max_results: int = 5, provider: str = None
+    ) -> list[dict[str, str]]:
         """
         Performs a web search using the specified provider or default provider.
         Returns a list of search results with 'title', 'href', and 'body' fields.
@@ -101,7 +107,9 @@ class SearchService:
         provider_name = provider or self.default_provider
 
         if provider_name not in self.providers:
-            logger.warning(f"Unknown provider '{provider_name}', falling back to {self.default_provider}")
+            logger.warning(
+                f"Unknown provider '{provider_name}', falling back to {self.default_provider}"
+            )
             provider_name = self.default_provider
 
         # Try the primary provider
@@ -110,7 +118,9 @@ class SearchService:
             if results and len(results) > 0:
                 # Prioritize trusted sources
                 results = self._prioritize_trusted_sources(results)
-                logger.info(f"Found {len(results)} search results for query: {query} using {provider_name}")
+                logger.info(
+                    f"Found {len(results)} search results for query: {query} using {provider_name}"
+                )
                 return results
         except Exception as e:
             logger.error(f"Error with provider {provider_name}: {e}")
@@ -124,7 +134,9 @@ class SearchService:
                 results = search_func(query, max_results)
                 if results and len(results) > 0:
                     results = self._prioritize_trusted_sources(results)
-                    logger.info(f"Found {len(results)} search results using fallback provider {fallback_provider}")
+                    logger.info(
+                        f"Found {len(results)} search results using fallback provider {fallback_provider}"
+                    )
                     return results
             except Exception as e:
                 logger.error(f"Fallback provider {fallback_provider} also failed: {e}")
@@ -142,7 +154,7 @@ class SearchService:
     def _search_duckduckgo(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
         """
         Search using DuckDuckGo with enhanced metadata.
-        
+
         Returns results with: title, href, body, and metadata (source, timestamp, relevance)
         """
         try:
@@ -165,27 +177,28 @@ class SearchService:
                         "relevance_rank": idx + 1,
                         "is_trusted": self._is_trusted_source(result.get("href", "")),
                         "snippet_length": len(result.get("body", "")),
-                        "query": query
-                    }
+                        "query": query,
+                    },
                 }
                 enhanced_results.append(enhanced)
-            
+
             logger.info(f"Enhanced {len(enhanced_results)} search results with metadata")
             return enhanced_results
 
         except Exception as e:
             logger.error(f"DuckDuckGo search failed for '{query}': {e}")
             raise
-    
+
     def _extract_domain(self, url: str) -> str:
         """Extract domain name from URL."""
         try:
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             return parsed.netloc
         except Exception:
             return "unknown"
-    
+
     def _is_trusted_source(self, url: str) -> bool:
         """Check if URL is from a trusted source."""
         return any(source in url for source in self.TRUSTED_SOURCES)
@@ -219,6 +232,8 @@ class SearchService:
         Automatically constructs relevant queries and combines results.
         Includes targeted queries for African air quality sources when applicable.
 
+        **ENHANCED:** Dynamically discovers new air quality data sources and providers.
+
         Args:
             location: City or region name
             max_results: Maximum results per query
@@ -226,13 +241,23 @@ class SearchService:
         Returns:
             Combined list of relevant search results
         """
-        # Base queries for all locations
+        # Base queries for all locations - EXPANDED for better discovery
         queries = [
             f"{location} air quality monitoring stations",
-            f"{location} pollution levels 2025",
+            f"{location} AQI real-time data",
+            f"{location} pollution levels 2025 2026",
             f"{location} environmental agency air quality",
             f"WHO air quality {location}",
+            f"{location} air quality sensors monitoring network",  # NEW: discover sensor networks
+            f"{location} atmospheric pollution data",  # NEW: broader search
         ]
+
+        # Add IQAir-specific queries for enhanced coverage
+        iqair_queries = [
+            f"{location} air quality IQAir",
+            f"site:iqair.com {location}",
+        ]
+        queries.extend(iqair_queries)
 
         # African-specific queries for African locations
         african_countries = [
@@ -339,6 +364,8 @@ class SearchService:
         Search for recent environmental and air quality news.
         Includes targeted queries for African air quality sources when topic is Africa-related.
 
+        **ENHANCED:** Discovers emerging air quality data providers and research.
+
         Args:
             topic: Topic or location to search news for
             max_results: Maximum number of results
@@ -346,8 +373,12 @@ class SearchService:
         Returns:
             List of news articles and reports
         """
-        # Base news queries
-        queries = [f"{topic} air quality environment news 2025"]
+        # Base news queries - EXPANDED for better discovery
+        queries = [
+            f"{topic} air quality environment news 2025 2026",
+            f"{topic} air pollution monitoring research latest",  # NEW: research focus
+            f"{topic} AQI data provider sources",  # NEW: discover new providers
+        ]
 
         # Check if topic is Africa-related
         topic_lower = topic.lower()
@@ -398,3 +429,83 @@ class SearchService:
                 continue
 
         return all_results[:max_results]
+
+    def discover_air_quality_sources(
+        self, location: str, max_results: int = 8
+    ) -> list[dict[str, str]]:
+        """
+        Dynamically discover new air quality data sources and providers for a location.
+
+        This method helps the agent find emerging or lesser-known air quality monitoring
+        networks, citizen science projects, and regional providers that may not be in
+        the primary trusted sources list.
+
+        **USE CASE:** When primary APIs return no data, this discovers alternative sources
+        like IQAir, PurpleAir, local government portals, university research projects, etc.
+
+        Args:
+            location: City, region, or country name
+            max_results: Maximum number of data sources to discover
+
+        Returns:
+            List of search results focusing on data providers and monitoring networks
+        """
+        logger.info(f"Discovering air quality data sources for: {location}")
+
+        discovery_queries = [
+            f"{location} air quality data API monitoring network",
+            f"{location} real-time air pollution sensors",
+            f"{location} government environmental monitoring",
+            f"{location} citizen science air quality project",
+            f"{location} university air quality research data",
+            f"site:iqair.com {location}",  # IQAir specific
+            f"site:purpleair.com {location}",  # PurpleAir specific
+            f"{location} atmospheric research station",
+        ]
+
+        all_sources = []
+        seen_domains = set()
+
+        for query in discovery_queries:
+            try:
+                results = self.search(query, max_results=2)
+
+                for result in results:
+                    href = result.get("href", "")
+                    domain = self._extract_domain(href)
+
+                    # Deduplicate by domain and prioritize data-focused results
+                    if domain and domain not in seen_domains:
+                        # Check if result mentions data/monitoring keywords
+                        text_content = f"{result.get('title', '')} {result.get('body', '')}".lower()
+                        data_keywords = [
+                            "data",
+                            "monitoring",
+                            "sensor",
+                            "api",
+                            "real-time",
+                            "aqi",
+                            "pollution",
+                        ]
+
+                        if any(keyword in text_content for keyword in data_keywords):
+                            seen_domains.add(domain)
+                            all_sources.append(result)
+
+                            # Mark as newly discovered source
+                            result["discovered_source"] = True
+                            result["relevance"] = (
+                                "high" if self._is_trusted_source(href) else "medium"
+                            )
+
+                if len(all_sources) >= max_results:
+                    break
+
+            except Exception as e:
+                logger.warning(f"Error in source discovery for '{query}': {e}")
+                continue
+
+        logger.info(
+            f"Discovered {len(all_sources)} potential air quality data sources for {location}"
+        )
+        return all_sources[:max_results]

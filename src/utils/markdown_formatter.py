@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class MarkdownFormatter:
     """
     Formats Air Quality Agent responses to professional markdown standards.
-    
+
     This formatter ensures air quality research and environmental data presentations:
     1. Lists have proper spacing (blank line before, no extra lines between items)
     2. Tables are properly formatted with aligned columns for data comparison
@@ -40,10 +40,10 @@ class MarkdownFormatter:
     def format_response(text: str) -> str:
         """
         Apply all markdown formatting rules to create professional output.
-        
+
         Args:
             text: Raw markdown text from AI
-            
+
         Returns:
             Professionally formatted markdown text
         """
@@ -69,25 +69,25 @@ class MarkdownFormatter:
     def _normalize_line_breaks(text: str) -> str:
         """Convert various line break formats to consistent \n"""
         # Normalize Windows/Mac line endings to Unix
-        text = text.replace('\r\n', '\n').replace('\r', '\n')
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
         # Remove trailing spaces from each line
-        lines = [line.rstrip() for line in text.split('\n')]
-        return '\n'.join(lines)
+        lines = [line.rstrip() for line in text.split("\n")]
+        return "\n".join(lines)
 
     @staticmethod
     def _fix_broken_parentheses(text: str) -> str:
         """
         Fix parentheses and brackets that are incorrectly split across lines.
-        
+
         This handles cases where AI models generate text like:
         "Station Name ("
         "station_id"
         ")"
-        
+
         And converts it to:
         "Station Name (station_id)"
         """
-        lines = text.split('\n')
+        lines = text.split("\n")
         fixed_lines = []
         i = 0
 
@@ -95,10 +95,12 @@ class MarkdownFormatter:
             line = lines[i]
 
             # Check if line ends with opening parenthesis/bracket but no closing match
-            if ('(' in line or '[' in line or '{' in line) and not (')' in line or ']' in line or '}' in line):
+            if ("(" in line or "[" in line or "{" in line) and not (
+                ")" in line or "]" in line or "}" in line
+            ):
                 # Look ahead to find the closing parenthesis/bracket
-                opening_count = line.count('(') + line.count('[') + line.count('{')
-                closing_count = line.count(')') + line.count(']') + line.count('}')
+                opening_count = line.count("(") + line.count("[") + line.count("{")
+                closing_count = line.count(")") + line.count("]") + line.count("}")
 
                 if opening_count > closing_count:
                     # Find the line with the matching closing parenthesis/bracket
@@ -111,8 +113,12 @@ class MarkdownFormatter:
                         combined_line += next_line
 
                         # Count parentheses in this line
-                        next_opening = next_line.count('(') + next_line.count('[') + next_line.count('{')
-                        next_closing = next_line.count(')') + next_line.count(']') + next_line.count('}')
+                        next_opening = (
+                            next_line.count("(") + next_line.count("[") + next_line.count("{")
+                        )
+                        next_closing = (
+                            next_line.count(")") + next_line.count("]") + next_line.count("}")
+                        )
 
                         opening_count += next_opening
                         closing_count += next_closing
@@ -121,7 +127,9 @@ class MarkdownFormatter:
                         if opening_count <= closing_count:
                             # Check if this completes the parentheses properly
                             # If the current line contains only closing punctuation, we've found the end
-                            if next_line in [')', ']', '}'] or next_line.startswith((')', ']', '}')):
+                            if next_line in [")", "]", "}"] or next_line.startswith(
+                                (")", "]", "}")
+                            ):
                                 fixed_lines.append(combined_line)
                                 i = j + 1
                                 break
@@ -147,13 +155,13 @@ class MarkdownFormatter:
                 fixed_lines.append(line)
                 i += 1
 
-        return '\n'.join(fixed_lines)
+        return "\n".join(fixed_lines)
 
     @staticmethod
     def _convert_emoji_numbering(text: str) -> str:
         """
         Convert emoji numbering to regular numbering for professional appearance.
-        
+
         Converts:
         - 1️⃣ → 1.
         - 2️⃣ → 2.
@@ -161,16 +169,16 @@ class MarkdownFormatter:
         """
         # Define emoji numbers and their regular counterparts
         emoji_numbers = {
-            '1️⃣': '1.',
-            '2️⃣': '2.',
-            '3️⃣': '3.',
-            '4️⃣': '4.',
-            '5️⃣': '5.',
-            '6️⃣': '6.',
-            '7️⃣': '7.',
-            '8️⃣': '8.',
-            '9️⃣': '9.',
-            '🔟': '10.',
+            "1️⃣": "1.",
+            "2️⃣": "2.",
+            "3️⃣": "3.",
+            "4️⃣": "4.",
+            "5️⃣": "5.",
+            "6️⃣": "6.",
+            "7️⃣": "7.",
+            "8️⃣": "8.",
+            "9️⃣": "9.",
+            "🔟": "10.",
         }
 
         for emoji, regular in emoji_numbers.items():
@@ -187,12 +195,12 @@ class MarkdownFormatter:
         - Blank line after
         - Space after the # symbols
         """
-        lines = text.split('\n')
+        lines = text.split("\n")
         formatted_lines: list[str] = []
 
         for i, line in enumerate(lines):
             # Check if line is a header
-            header_match = re.match(r'^(#{1,6})\s*(.*?)$', line)
+            header_match = re.match(r"^(#{1,6})\s*(.*?)$", line)
 
             if header_match:
                 hashes, content = header_match.groups()
@@ -202,23 +210,23 @@ class MarkdownFormatter:
 
                 # Add blank line before header (if not first line and previous isn't blank)
                 if i > 0 and formatted_lines and formatted_lines[-1].strip():
-                    formatted_lines.append('')
+                    formatted_lines.append("")
 
                 formatted_lines.append(formatted_header)
 
                 # Add blank line after header (if next line exists and isn't blank)
                 if i < len(lines) - 1 and lines[i + 1].strip():
-                    formatted_lines.append('')
+                    formatted_lines.append("")
             else:
                 formatted_lines.append(line)
 
-        return '\n'.join(formatted_lines)
+        return "\n".join(formatted_lines)
 
     @staticmethod
     def _format_lists(text: str) -> str:
         """
         Format lists with proper spacing and indentation.
-        
+
         Rules:
         1. Blank line before list starts
         2. No blank lines between list items (unless nested)
@@ -226,7 +234,7 @@ class MarkdownFormatter:
         4. Proper indentation for nested lists (2 spaces)
         5. Space after bullet/number
         """
-        lines = text.split('\n')
+        lines = text.split("\n")
         formatted_lines: list[str] = []
         in_list = False
         list_indent_level = 0
@@ -235,14 +243,14 @@ class MarkdownFormatter:
             stripped = line.strip()
 
             # Detect list items
-            is_bullet = re.match(r'^[\*\-\+]\s+', stripped)
-            is_numbered = re.match(r'^\d+\.\s+', stripped)
+            is_bullet = re.match(r"^[\*\-\+]\s+", stripped)
+            is_numbered = re.match(r"^\d+\.\s+", stripped)
             is_list_item = bool(is_bullet or is_numbered)
 
             if is_list_item:
                 # Entering a list - add blank line before if needed
                 if not in_list and formatted_lines and formatted_lines[-1].strip():
-                    formatted_lines.append('')
+                    formatted_lines.append("")
 
                 in_list = True
 
@@ -253,29 +261,29 @@ class MarkdownFormatter:
                 # Normalize bullet character to '-' for consistency
                 if is_bullet:
                     # Replace *, +, - with consistent '-'
-                    content = re.sub(r'^[\*\-\+]\s+', '', stripped)
-                    formatted_item = '  ' * indent_level + '- ' + content
+                    content = re.sub(r"^[\*\-\+]\s+", "", stripped)
+                    formatted_item = "  " * indent_level + "- " + content
                 else:
                     # Numbered list - keep numbering
-                    formatted_item = '  ' * indent_level + stripped
+                    formatted_item = "  " * indent_level + stripped
 
                 formatted_lines.append(formatted_item)
             else:
                 # Not a list item
                 if in_list and stripped:
                     # Exiting list - add blank line after if next content exists
-                    formatted_lines.append('')
+                    formatted_lines.append("")
                     in_list = False
 
                 formatted_lines.append(line)
 
-        return '\n'.join(formatted_lines)
+        return "\n".join(formatted_lines)
 
     @staticmethod
     def _format_tables(text: str) -> str:
         """
         Format markdown tables with proper alignment and spacing.
-        
+
         Ensures:
         1. Blank line before and after table
         2. Proper pipe alignment
@@ -283,30 +291,36 @@ class MarkdownFormatter:
         4. Valid separator row
         5. Fix malformed tables that don't start with pipes
         """
-        lines = text.split('\n')
+        lines = text.split("\n")
         formatted_lines: list[str] = []
         in_table = False
         table_buffer = []
 
         for i, line in enumerate(lines):
             # Detect table row (has pipes with content)
-            is_table_row = '|' in line and line.strip().startswith('|') and line.strip().endswith('|')
+            is_table_row = (
+                "|" in line and line.strip().startswith("|") and line.strip().endswith("|")
+            )
 
             # Also detect malformed table rows that have pipes but don't start with |
             # This handles cases like: "Header1|Header2|Header3|" or "Data1|Data2|Data3|"
-            is_malformed_table_row = ('|' in line and not line.strip().startswith('|') and
-                                    line.strip().endswith('|') and line.count('|') >= 2)
+            is_malformed_table_row = (
+                "|" in line
+                and not line.strip().startswith("|")
+                and line.strip().endswith("|")
+                and line.count("|") >= 2
+            )
 
             if is_table_row or is_malformed_table_row:
                 if not in_table:
                     # Starting new table - add blank line before
                     if formatted_lines and formatted_lines[-1].strip():
-                        formatted_lines.append('')
+                        formatted_lines.append("")
                     in_table = True
 
                 # Fix malformed table row by ensuring it starts with |
-                if is_malformed_table_row and not line.strip().startswith('|'):
-                    line = '|' + line
+                if is_malformed_table_row and not line.strip().startswith("|"):
+                    line = "|" + line
 
                 table_buffer.append(line)
             else:
@@ -317,7 +331,7 @@ class MarkdownFormatter:
 
                     # Add blank line after table if there's more content
                     if line.strip():
-                        formatted_lines.append('')
+                        formatted_lines.append("")
 
                     table_buffer = []
                     in_table = False
@@ -329,13 +343,13 @@ class MarkdownFormatter:
             formatted_table = MarkdownFormatter._format_table_buffer(table_buffer)
             formatted_lines.extend(formatted_table)
 
-        return '\n'.join(formatted_lines)
+        return "\n".join(formatted_lines)
 
     @staticmethod
     def _format_table_buffer(table_rows: list[str]) -> list[str]:  # type: ignore
         """
         Format a complete table with aligned columns.
-        
+
         CRITICAL FIX: Handle malformed tables with dash separators that cause rendering issues
         """
         if not table_rows:
@@ -349,56 +363,67 @@ class MarkdownFormatter:
             stripped = row.strip()
             if not stripped:
                 continue
-            
+
             # Check if this is a malformed separator row (all dashes/pipes, no proper alignment markers)
             # Proper markdown separator: | --- | --- | or | :--- | :---: |
             # Malformed: |-----------------------------|------------------------------------------------------|
-            if '|' in stripped:
-                cells = [c.strip() for c in stripped.split('|') if c.strip()]
+            if "|" in stripped:
+                cells = [c.strip() for c in stripped.split("|") if c.strip()]
                 if cells:
                     # Check if ALL cells are pure dashes (malformed)
-                    all_dashes = all(re.match(r'^-+$', cell) for cell in cells)
+                    all_dashes = all(re.match(r"^-+$", cell) for cell in cells)
                     if all_dashes and len(cells) > 0:
                         # This is a malformed separator - skip it entirely
                         logger.warning(f"Skipping malformed table separator row: {stripped[:50]}")
                         continue
-            
+
             filtered_rows.append(row)
-        
+
         if not filtered_rows:
             return []
 
         # Check if first row looks like a title (contains date or comparison text)
         title_row = None
         if len(filtered_rows) > 1:
-            first_cells = [cell.strip() for cell in filtered_rows[0].split('|') if cell.strip()]
-            second_cells = [cell.strip() for cell in filtered_rows[1].split('|') if cell.strip()]
+            first_cells = [cell.strip() for cell in filtered_rows[0].split("|") if cell.strip()]
+            second_cells = [cell.strip() for cell in filtered_rows[1].split("|") if cell.strip()]
 
             # If first row has different column count or contains date/comparison keywords
-            is_title_row = (len(first_cells) != len(second_cells) or
-                          any(keyword in filtered_rows[0].lower() for keyword in ['comparison', '202', 'summary', 'data']) or
-                          ('(' in filtered_rows[0] and ')' in filtered_rows[0] and len(first_cells) > len(second_cells)))
+            is_title_row = (
+                len(first_cells) != len(second_cells)
+                or any(
+                    keyword in filtered_rows[0].lower()
+                    for keyword in ["comparison", "202", "summary", "data"]
+                )
+                or (
+                    "(" in filtered_rows[0]
+                    and ")" in filtered_rows[0]
+                    and len(first_cells) > len(second_cells)
+                )
+            )
 
             if is_title_row and len(first_cells) > 1:
                 first_cell = first_cells[0]
-                is_first_cell_title = any(keyword in first_cell.lower() for keyword in ['comparison', '202', 'summary', 'data']) or \
-                                    ('(' in first_cell and ')' in first_cell)
+                is_first_cell_title = any(
+                    keyword in first_cell.lower()
+                    for keyword in ["comparison", "202", "summary", "data"]
+                ) or ("(" in first_cell and ")" in first_cell)
 
                 if is_first_cell_title:
                     title_row = first_cell
                     header_cells = first_cells[1:]
-                    filtered_rows[0] = '| ' + ' | '.join(header_cells) + ' |'
+                    filtered_rows[0] = "| " + " | ".join(header_cells) + " |"
                 else:
-                    title_text = ' '.join(first_cells)
-                    title_text = re.sub(r'\s+', ' ', title_text)
+                    title_text = " ".join(first_cells)
+                    title_text = re.sub(r"\s+", " ", title_text)
                     title_row = title_text
                     filtered_rows = filtered_rows[1:]
 
         # Parse table cells
         parsed_rows = []
         for row in filtered_rows:
-            cells = [cell.strip() for cell in row.split('|')]
-            cells = [c for c in cells if c or cells.index(c) not in (0, len(cells)-1)]
+            cells = [cell.strip() for cell in row.split("|")]
+            cells = [c for c in cells if c or cells.index(c) not in (0, len(cells) - 1)]
             if cells:
                 parsed_rows.append(cells)
 
@@ -411,7 +436,7 @@ class MarkdownFormatter:
 
         for row in parsed_rows:
             for col_idx, cell in enumerate(row):
-                if not re.match(r'^[\-:]+$', cell):
+                if not re.match(r"^[\-:]+$", cell):
                     col_widths[col_idx] = max(col_widths[col_idx], len(cell))  # type: ignore
 
         # Ensure minimum width of 3 for separator dashes
@@ -423,40 +448,46 @@ class MarkdownFormatter:
         # Add title if detected
         if title_row:
             formatted_rows.append(f"**{title_row}**")
-            formatted_rows.append('')
+            formatted_rows.append("")
 
         # Track if we need to add a separator row (after header)
         needs_separator = True
         separator_added = False
-        
+
         for row_idx, row in enumerate(parsed_rows):
             formatted_cells = []
             for col_idx in range(num_cols):
-                cell = row[col_idx] if col_idx < len(row) else ''
+                cell = row[col_idx] if col_idx < len(row) else ""
 
                 # Check if this is already a separator row
-                if re.match(r'^[\-:]+$', cell):
-                    formatted_cells.append('-' * col_widths[col_idx])
+                if re.match(r"^[\-:]+$", cell):
+                    formatted_cells.append("-" * col_widths[col_idx])
                 else:
                     formatted_cells.append(cell.ljust(col_widths[col_idx]))
 
-            formatted_row = '| ' + ' | '.join(formatted_cells) + ' |'
+            formatted_row = "| " + " | ".join(formatted_cells) + " |"
             formatted_rows.append(formatted_row)
-            
+
             # Add separator after first row (header) if not already present
             if needs_separator and row_idx == 0 and not separator_added:
                 # Check if next row is separator
                 if row_idx + 1 < len(parsed_rows):
                     next_row = parsed_rows[row_idx + 1]
-                    is_next_separator = all(re.match(r'^[\-:]+$', cell) for cell in next_row if cell)
+                    is_next_separator = all(
+                        re.match(r"^[\-:]+$", cell) for cell in next_row if cell
+                    )
                     if not is_next_separator:
                         # Add separator
-                        separator = '| ' + ' | '.join(['-' * col_widths[i] for i in range(num_cols)]) + ' |'
+                        separator = (
+                            "| " + " | ".join(["-" * col_widths[i] for i in range(num_cols)]) + " |"
+                        )
                         formatted_rows.append(separator)
                         separator_added = True
                 else:
                     # No next row, add separator
-                    separator = '| ' + ' | '.join(['-' * col_widths[i] for i in range(num_cols)]) + ' |'
+                    separator = (
+                        "| " + " | ".join(["-" * col_widths[i] for i in range(num_cols)]) + " |"
+                    )
                     formatted_rows.append(separator)
                     separator_added = True
 
@@ -466,7 +497,7 @@ class MarkdownFormatter:
     def _format_code_blocks(text: str) -> str:
         """
         Format code blocks for professional presentation.
-        
+
         Ensures:
         - Code blocks use proper fenced syntax with language identifiers
         - Inline code is properly formatted
@@ -477,14 +508,14 @@ class MarkdownFormatter:
             return text
 
         # Handle fenced code blocks (```)
-        lines = text.split('\n')
+        lines = text.split("\n")
         formatted_lines: list[str] = []
         in_code_block = False
         code_block_lines: list[str] = []
         code_language = ""
 
         for line in lines:
-            if line.strip().startswith('```'):
+            if line.strip().startswith("```"):
                 if not in_code_block:
                     # Start of code block
                     in_code_block = True
@@ -506,22 +537,29 @@ class MarkdownFormatter:
                     # doesn't look like code, unwrap it to plain text to avoid ugly
                     # code-block boxes in the UI.
                     joined = "\n".join(cleaned_code).strip()
-                    looks_like_code = bool(code_language) or MarkdownFormatter._looks_like_code(joined)
+                    looks_like_code = bool(code_language) or MarkdownFormatter._looks_like_code(
+                        joined
+                    )
 
-                    if not looks_like_code and len(joined) > 0 and len(joined) <= 80 and '\n' not in joined:
+                    if (
+                        not looks_like_code
+                        and len(joined) > 0
+                        and len(joined) <= 80
+                        and "\n" not in joined
+                    ):
                         # Treat as plain text (single short line) - don't use code fences
                         formatted_lines.append(joined)
                         # preserve a blank line for spacing
-                        formatted_lines.append('')
+                        formatted_lines.append("")
                     else:
                         # Add opening fence with detected language (may be empty)
-                        formatted_lines.append(f'```{code_language}')
+                        formatted_lines.append(f"```{code_language}")
                         # Add cleaned code lines
                         formatted_lines.extend(cleaned_code)
                         # Add closing fence
-                        formatted_lines.append('```')
+                        formatted_lines.append("```")
                         # Add blank line after code block for spacing
-                        formatted_lines.append('')
+                        formatted_lines.append("")
 
                     code_block_lines = []
                     code_language = ""
@@ -543,54 +581,54 @@ class MarkdownFormatter:
             joined = "\n".join(cleaned_code).strip()
             looks_like_code = bool(code_language) or MarkdownFormatter._looks_like_code(joined)
 
-            if not looks_like_code and len(joined) > 0 and len(joined) <= 80 and '\n' not in joined:
+            if not looks_like_code and len(joined) > 0 and len(joined) <= 80 and "\n" not in joined:
                 formatted_lines.append(joined)
-                formatted_lines.append('')
+                formatted_lines.append("")
             else:
-                formatted_lines.append(f'```{code_language}')
+                formatted_lines.append(f"```{code_language}")
                 formatted_lines.extend(cleaned_code)
-                formatted_lines.append('```')
-                formatted_lines.append('')
+                formatted_lines.append("```")
+                formatted_lines.append("")
 
-        return '\n'.join(formatted_lines)
+        return "\n".join(formatted_lines)
 
     @staticmethod
     def _detect_code_language(code_lines: list[str]) -> str:
         """
         Basic language detection for code blocks.
-        
+
         Args:
             code_lines: Lines of code to analyze
-            
+
         Returns:
             Detected language identifier or empty string
         """
         if not code_lines:
             return ""
 
-        code_text = '\n'.join(code_lines).lower()
+        code_text = "\n".join(code_lines).lower()
 
         # Language detection patterns
         language_patterns = {
-            'python': ['def ', 'import ', 'from ', 'class ', 'if __name__'],
-            'javascript': ['function ', 'const ', 'let ', 'var ', 'console.log', '=>'],
-            'typescript': ['interface ', 'type ', ': string', ': number', ': boolean'],
-            'java': ['public class', 'import java', 'public static void main'],
-            'cpp': ['#include', 'std::', 'cout <<', 'cin >>'],
-            'c': ['#include <stdio.h>', 'printf(', 'scanf('],
-            'csharp': ['using System', 'namespace ', 'public class', 'Console.WriteLine'],
-            'php': ['<?php', 'echo ', '$', 'function '],
-            'ruby': ['def ', 'puts ', 'require ', 'class '],
-            'go': ['package ', 'func ', 'import (', 'fmt.Println'],
-            'rust': ['fn ', 'let ', 'use ', 'println!'],
-            'sql': ['select ', 'from ', 'where ', 'insert into', 'create table'],
-            'bash': ['#!/bin/bash', 'echo ', 'if [', 'for ', 'while '],
-            'powershell': ['Write-Host', '$', 'Get-', 'Set-'],
-            'yaml': ['version:', 'services:', 'image:', 'ports:'],
-            'json': ['{', '}', '"', ':'],
-            'xml': ['<', '>', '<?xml', '</'],
-            'html': ['<html', '<head', '<body', '<div'],
-            'css': ['{', '}', 'color:', 'font-size:', 'margin:'],
+            "python": ["def ", "import ", "from ", "class ", "if __name__"],
+            "javascript": ["function ", "const ", "let ", "var ", "console.log", "=>"],
+            "typescript": ["interface ", "type ", ": string", ": number", ": boolean"],
+            "java": ["public class", "import java", "public static void main"],
+            "cpp": ["#include", "std::", "cout <<", "cin >>"],
+            "c": ["#include <stdio.h>", "printf(", "scanf("],
+            "csharp": ["using System", "namespace ", "public class", "Console.WriteLine"],
+            "php": ["<?php", "echo ", "$", "function "],
+            "ruby": ["def ", "puts ", "require ", "class "],
+            "go": ["package ", "func ", "import (", "fmt.Println"],
+            "rust": ["fn ", "let ", "use ", "println!"],
+            "sql": ["select ", "from ", "where ", "insert into", "create table"],
+            "bash": ["#!/bin/bash", "echo ", "if [", "for ", "while "],
+            "powershell": ["Write-Host", "$", "Get-", "Set-"],
+            "yaml": ["version:", "services:", "image:", "ports:"],
+            "json": ["{", "}", '"', ":"],
+            "xml": ["<", ">", "<?xml", "</"],
+            "html": ["<html", "<head", "<body", "<div"],
+            "css": ["{", "}", "color:", "font-size:", "margin:"],
         }
 
         # Count matches for each language
@@ -616,7 +654,27 @@ class MarkdownFormatter:
             return False
 
         # Common code indicators: semicolons, parentheses, equals, arrows, braces, keywords
-        code_indicators = [";", "()", "={", "=>", "->", "import ", "def ", "class ", "console.log", "{", "}", "function ", "print(", "printf(", "$", "<", ">", '"', "'"]
+        code_indicators = [
+            ";",
+            "()",
+            "={",
+            "=>",
+            "->",
+            "import ",
+            "def ",
+            "class ",
+            "console.log",
+            "{",
+            "}",
+            "function ",
+            "print(",
+            "printf(",
+            "$",
+            "<",
+            ">",
+            '"',
+            "'",
+        ]
         score = sum(1 for pat in code_indicators if pat in text)
 
         # Also detect JSON-like or key:value patterns
@@ -629,10 +687,10 @@ class MarkdownFormatter:
     def _clean_code_content(code_lines: list[str]) -> list[str]:
         """
         Clean up code content inside code blocks.
-        
+
         Args:
             code_lines: Raw code lines
-            
+
         Returns:
             Cleaned code lines
         """
@@ -648,16 +706,16 @@ class MarkdownFormatter:
             cleaned_line = line.rstrip()
 
             # For empty lines, keep them as-is (they might be intentional)
-            if cleaned_line or line.endswith(' '):
+            if cleaned_line or line.endswith(" "):
                 cleaned_lines.append(cleaned_line)
             else:
-                cleaned_lines.append('')
+                cleaned_lines.append("")
 
         # Remove excessive empty lines at start and end
-        while cleaned_lines and cleaned_lines[0].strip() == '':
+        while cleaned_lines and cleaned_lines[0].strip() == "":
             cleaned_lines.pop(0)
 
-        while cleaned_lines and cleaned_lines[-1].strip() == '':
+        while cleaned_lines and cleaned_lines[-1].strip() == "":
             cleaned_lines.pop()
 
         return cleaned_lines
@@ -673,14 +731,14 @@ class MarkdownFormatter:
         - URLs become clickable links for easy access to environmental data
         - Maintains academic/professional appearance suitable for air quality reports
         """
-        lines = text.split('\n')
+        lines = text.split("\n")
         formatted_lines: list[str] = []
         sources_section_started = False
         current_sources = []
 
         for i, line in enumerate(lines):
             # Check for inline sources (Source: appearing after content on the same line)
-            inline_source_match = re.search(r'(.+?)\s+(Source|source):\s*(.+)$', line)
+            inline_source_match = re.search(r"(.+?)\s+(Source|source):\s*(.+)$", line)
 
             if inline_source_match:
                 # Handle inline source citation
@@ -691,9 +749,11 @@ class MarkdownFormatter:
                 summary = ""
 
                 # Parse the source text: can be "Title (URL) – summary" or "Title – summary" or just "Title"
-                if '(' in full_source_text and ')' in full_source_text:
+                if "(" in full_source_text and ")" in full_source_text:
                     # Has URL in parentheses: Title (URL) – summary
-                    url_match = re.search(r'(.+?)\s*\((https?://[^\s)]+)\)(?:\s*–\s*(.+))?', full_source_text)
+                    url_match = re.search(
+                        r"(.+?)\s*\((https?://[^\s)]+)\)(?:\s*–\s*(.+))?", full_source_text
+                    )
                     if url_match:
                         title = url_match.group(1).strip()
                         url = url_match.group(2)
@@ -704,8 +764,8 @@ class MarkdownFormatter:
                         summary = ""
                 else:
                     # No URL: Title – summary
-                    if ' – ' in full_source_text:
-                        title, summary = full_source_text.split(' – ', 1)
+                    if " – " in full_source_text:
+                        title, summary = full_source_text.split(" – ", 1)
                         title = title.strip()
                         summary = summary.strip()
                     else:
@@ -713,11 +773,20 @@ class MarkdownFormatter:
                         summary = ""
 
                 # Check if summary continues on next lines
-                if summary and not summary.endswith('.') and not summary.endswith(')') and i + 1 < len(lines):
+                if (
+                    summary
+                    and not summary.endswith(".")
+                    and not summary.endswith(")")
+                    and i + 1 < len(lines)
+                ):
                     next_line = lines[i + 1].strip()
-                    if next_line and not next_line.startswith('Source:') and not re.match(r'^(?:Source|source):', next_line, re.IGNORECASE):
-                        summary += ' ' + next_line
-                        lines[i + 1] = ''  # Mark as processed
+                    if (
+                        next_line
+                        and not next_line.startswith("Source:")
+                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
+                    ):
+                        summary += " " + next_line
+                        lines[i + 1] = ""  # Mark as processed
 
                 # Format inline citation with line break
                 if summary and url:
@@ -736,7 +805,10 @@ class MarkdownFormatter:
 
             # Check if this is a standalone source line (handle multi-line summaries)
             stripped_line = line.strip()
-            source_match = re.match(r'^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$', stripped_line)
+            source_match = re.match(
+                r"^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
+                stripped_line,
+            )
 
             if source_match:
                 title, url, summary = source_match.groups()
@@ -745,12 +817,21 @@ class MarkdownFormatter:
                 summary = summary.strip() if summary else ""
 
                 # Check if summary continues on next lines (incomplete summary)
-                if summary and not summary.endswith('.') and not summary.endswith(')') and i + 1 < len(lines):
+                if (
+                    summary
+                    and not summary.endswith(".")
+                    and not summary.endswith(")")
+                    and i + 1 < len(lines)
+                ):
                     # Look ahead to find continuation of summary
                     next_line = lines[i + 1].strip()
-                    if next_line and not next_line.startswith('Source:') and not re.match(r'^(?:Source|source):', next_line, re.IGNORECASE):
-                        summary += ' ' + next_line
-                        lines[i + 1] = ''  # Mark as processed
+                    if (
+                        next_line
+                        and not next_line.startswith("Source:")
+                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
+                    ):
+                        summary += " " + next_line
+                        lines[i + 1] = ""  # Mark as processed
 
                 # Create professional citation
                 if summary:
@@ -762,7 +843,9 @@ class MarkdownFormatter:
                 continue  # Don't add the original line
 
             # Check if we're starting a sources/references section
-            if re.match(r'^(?:Sources?|References?|Citations?)(?:\s*:)?\s*$', line.strip(), re.IGNORECASE):
+            if re.match(
+                r"^(?:Sources?|References?|Citations?)(?:\s*:)?\s*$", line.strip(), re.IGNORECASE
+            ):
                 sources_section_started = True
                 formatted_lines.append("")  # Add blank line before sources section
                 formatted_lines.append("### Sources & References")
@@ -799,7 +882,7 @@ class MarkdownFormatter:
 
             formatted_lines.append("")
 
-        return '\n'.join(formatted_lines)
+        return "\n".join(formatted_lines)
 
     @staticmethod
     def _format_bold_and_emphasis(text: str) -> str:
@@ -810,13 +893,13 @@ class MarkdownFormatter:
         """
         # Fix bold with extra spaces: ** text ** -> **text**
         # Only match on single lines to avoid cross-line issues
-        text = re.sub(r'(?m)^\*\*\s+([^\*\n]+?)\s+\*\*$', r'**\1**', text)
+        text = re.sub(r"(?m)^\*\*\s+([^\*\n]+?)\s+\*\*$", r"**\1**", text)
 
         # Fix italic with extra spaces: * text * -> *text*
-        text = re.sub(r'(?m)^(?<!\*)\*\s+([^\*\n]+?)\s+\*(?!\*)$', r'*\1*', text)
+        text = re.sub(r"(?m)^(?<!\*)\*\s+([^\*\n]+?)\s+\*(?!\*)$", r"*\1*", text)
 
         # Fix bold-italic: *** text *** -> ***text***
-        text = re.sub(r'(?m)^\*\*\*\s+([^\*\n]+?)\s+\*\*\*$', r'***\1***', text)
+        text = re.sub(r"(?m)^\*\*\*\s+([^\*\n]+?)\s+\*\*\*$", r"***\1***", text)
 
         return text
 
@@ -829,7 +912,7 @@ class MarkdownFormatter:
         - Proper spacing around blocks
         """
         # Remove trailing spaces from lines
-        lines = [line.rstrip() for line in text.split('\n')]
+        lines = [line.rstrip() for line in text.split("\n")]
 
         # Collapse more than 2 consecutive blank lines to 2
         cleaned_lines = []
@@ -844,7 +927,7 @@ class MarkdownFormatter:
                 blank_count = 0
                 cleaned_lines.append(line)
 
-        return '\n'.join(cleaned_lines)
+        return "\n".join(cleaned_lines)
 
     @staticmethod
     def _final_cleanup(text: str) -> str:
@@ -854,10 +937,10 @@ class MarkdownFormatter:
 
         # Ensure single blank line between major sections
         # (Already handled mostly, but this catches edge cases)
-        text = re.sub(r'\n{4,}', '\n\n\n', text)
+        text = re.sub(r"\n{4,}", "\n\n\n", text)
 
         # Fix any remaining spacing around headers
-        text = re.sub(r'\n(#{1,6}\s+.*?)\n{3,}', r'\n\n\1\n\n', text)
+        text = re.sub(r"\n(#{1,6}\s+.*?)\n{3,}", r"\n\n\1\n\n", text)
 
         return text
 
@@ -865,19 +948,19 @@ class MarkdownFormatter:
 def format_markdown(text: str) -> str:
     """
     Convenience function to format markdown text.
-    
+
     Args:
         text: Raw markdown text
-        
+
     Returns:
         Professionally formatted markdown
-        
+
     Example:
         >>> raw = "# Title\\n\\n\\n- item 1\\n- item 2"
         >>> formatted = format_markdown(raw)
         >>> print(formatted)
         # Title
-        
+
         - item 1
         - item 2
     """
@@ -888,44 +971,41 @@ def format_markdown(text: str) -> str:
 def validate_markdown_table(table_text: str) -> dict:
     """
     Validate if a markdown table is properly formatted.
-    
+
     Args:
         table_text: Markdown table text
-        
+
     Returns:
         Dict with 'valid' (bool) and 'errors' (list of issues)
     """
     errors = []
-    lines = [line.strip() for line in table_text.strip().split('\n') if line.strip()]
+    lines = [line.strip() for line in table_text.strip().split("\n") if line.strip()]
 
     if len(lines) < 2:
         errors.append("Table must have at least header row and separator row")
-        return {'valid': False, 'errors': errors}
+        return {"valid": False, "errors": errors}
 
     # Check all lines start and end with |
     for i, line in enumerate(lines):
-        if not line.startswith('|') or not line.endswith('|'):
+        if not line.startswith("|") or not line.endswith("|"):
             errors.append(f"Row {i+1} must start and end with |")
 
     # Check separator row (usually second row)
     if len(lines) >= 2:
         sep_row = lines[1]
-        cells = [c.strip() for c in sep_row.split('|')[1:-1]]
+        cells = [c.strip() for c in sep_row.split("|")[1:-1]]
         for cell in cells:
-            if not re.match(r'^:?-+:?$', cell):
+            if not re.match(r"^:?-+:?$", cell):
                 errors.append(f"Invalid separator row format: {sep_row}")
                 break
 
     # Check consistent column count
     col_counts = []
     for line in lines:
-        count = len([c for c in line.split('|')[1:-1]])
+        count = len([c for c in line.split("|")[1:-1]])
         col_counts.append(count)
 
     if len(set(col_counts)) > 1:
         errors.append(f"Inconsistent column counts: {col_counts}")
 
-    return {
-        'valid': len(errors) == 0,
-        'errors': errors
-    }
+    return {"valid": len(errors) == 0, "errors": errors}

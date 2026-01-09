@@ -7,7 +7,9 @@ Provides functions to remove sensitive data like API tokens from responses.
 from typing import Any
 
 
-def sanitize_sensitive_data(data: Any, sensitive_keys: list[str] | None = None, tokens: list[str] | None = None) -> Any:
+def sanitize_sensitive_data(
+    data: Any, sensitive_keys: list[str] | None = None, tokens: list[str] | None = None
+) -> Any:
     """
     Remove sensitive information from data structures.
 

@@ -168,6 +168,7 @@ class AirQoService:
             try:
                 # Parse next page URL to extract pagination parameters
                 import urllib.parse
+
                 parsed = urllib.parse.urlparse(meta["nextPage"])
                 next_params = urllib.parse.parse_qs(parsed.query)
 
@@ -185,7 +186,9 @@ class AirQoService:
                     all_measurements.extend(next_data["measurements"])
                     meta = next_data.get("meta", {})
                     pages_fetched += 1
-                    logger.info(f"Fetched page {pages_fetched} for measurements, total records: {len(all_measurements)}")
+                    logger.info(
+                        f"Fetched page {pages_fetched} for measurements, total records: {len(all_measurements)}"
+                    )
                 else:
                     break
 
@@ -272,6 +275,7 @@ class AirQoService:
                 try:
                     # Parse next page URL to extract pagination parameters
                     import urllib.parse
+
                     parsed = urllib.parse.urlparse(meta["nextPage"])
                     next_params = urllib.parse.parse_qs(parsed.query)
 
@@ -289,7 +293,9 @@ class AirQoService:
                         all_measurements.extend(next_response["measurements"])
                         meta = next_response.get("meta", {})
                         pages_fetched += 1
-                        logger.info(f"Fetched page {pages_fetched} for historical data, total measurements: {len(all_measurements)}")
+                        logger.info(
+                            f"Fetched page {pages_fetched} for historical data, total measurements: {len(all_measurements)}"
+                        )
                     else:
                         break
 
@@ -318,8 +324,8 @@ class AirQoService:
                     "requested_date_range": {
                         "start_time": start_time.isoformat() if start_time else None,
                         "end_time": end_time.isoformat() if end_time else None,
-                        "frequency": frequency
-                    }
+                        "frequency": frequency,
+                    },
                 }
             else:
                 # Re-raise other errors
@@ -758,25 +764,34 @@ class AirQoService:
                         if data.get("success"):
                             data["search_location"] = search_query
                             data["sites_queried"] = len(site_ids[:5])
-                            
+
                             # Add detailed station information for transparency
                             station_details = []
                             for site in sites[:5]:
                                 station_info = {
-                                    "site_name": site.get("name", site.get("description", "Unknown")),
+                                    "site_name": site.get(
+                                        "name", site.get("description", "Unknown")
+                                    ),
                                     "site_id": site.get("_id"),
-                                    "location": site.get("location_name", site.get("city", "Unknown")),
+                                    "location": site.get(
+                                        "location_name", site.get("city", "Unknown")
+                                    ),
                                     "latitude": site.get("latitude"),
                                     "longitude": site.get("longitude"),
-                                    "country": site.get("country")
+                                    "country": site.get("country"),
                                 }
                                 # Only include if we have meaningful data
-                                if station_info["site_name"] and station_info["site_name"] != "Unknown":
+                                if (
+                                    station_info["site_name"]
+                                    and station_info["site_name"] != "Unknown"
+                                ):
                                     station_details.append(station_info)
-                            
+
                             if station_details:
                                 data["monitoring_stations"] = station_details
-                                data["_data_source_note"] = f"Data from {len(station_details)} AirQo monitoring station(s) in or near {search_query}"
+                                data["_data_source_note"] = (
+                                    f"Data from {len(station_details)} AirQo monitoring station(s) in or near {search_query}"
+                                )
 
                         return format_air_quality_data(data, source="airqo")
 
@@ -835,12 +850,7 @@ class AirQoService:
         finally:
             loop.close()
 
-        return {
-            "success": True,
-            "cities": results,
-            "count": len(cities),
-            "source": "airqo"
-        }
+        return {"success": True, "cities": results, "count": len(cities), "source": "airqo"}
 
     def search_sites_by_location(self, location: str, limit: int = 80) -> dict[str, Any]:
         """
@@ -913,7 +923,12 @@ class AirQoService:
         """
         try:
             url = "https://nominatim.openstreetmap.org/reverse"
-            params: dict[str, Any] = {"lat": latitude, "lon": longitude, "format": "json", "zoom": 10}  # City level
+            params: dict[str, Any] = {
+                "lat": latitude,
+                "lon": longitude,
+                "format": "json",
+                "zoom": 10,
+            }  # City level
             headers = {"User-Agent": "AirQoAgent/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             if response.status_code == 200:

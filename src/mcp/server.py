@@ -116,13 +116,14 @@ async def scrape_webpage(url: str) -> dict[str, Any]:
 async def search_web(query: str) -> dict[str, Any]:
     """
     MANDATORY TOOL: Use this for ANY question requiring research, current information, health data, policy information, solutions, safety guidelines, or general knowledge. ALWAYS use this instead of saying 'data not available' or giving generic advice. Search for specific, accurate information from reliable sources.
-    
+
     Args:
         query: The search query for any topic
     """
     try:
         # Import here to avoid circular imports
         from src.services.search_service import SearchService
+
         search_service = SearchService()
         results = search_service.search(query)
         return {"results": results}

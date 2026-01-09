@@ -24,8 +24,13 @@ class DefraService:
         self.session = requests.Session()
         self.cache = get_cache()
 
-    def get_station_data(self, site_id: str, species_code: str = "PM25",
-                        start_date: str | None = None, end_date: str | None = None) -> dict[str, Any]:
+    def get_station_data(
+        self,
+        site_id: str,
+        species_code: str = "PM25",
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
         """
         Get air quality data for a specific monitoring station.
 
@@ -46,11 +51,11 @@ class DefraService:
         cache_key = f"defra_{site_id}_{species_code}_{start_date}_{end_date}"
 
         # Check cache first
-        cached_data = self.cache.get_api_response("defra", f"site-data/{site_id}", {
-            "species_code": species_code,
-            "start_date": start_date,
-            "end_date": end_date
-        })
+        cached_data = self.cache.get_api_response(
+            "defra",
+            f"site-data/{site_id}",
+            {"species_code": species_code, "start_date": start_date, "end_date": end_date},
+        )
         if cached_data:
             logger.info(f"Retrieved DEFRA data from cache for site {site_id}")
             return cached_data
@@ -61,7 +66,7 @@ class DefraService:
                 "site_id": site_id,
                 "species_code": species_code,
                 "start_date": start_date,
-                "end_date": end_date
+                "end_date": end_date,
             }
 
             response = self.session.get(url, params=params, timeout=30)
@@ -71,17 +76,21 @@ class DefraService:
                 data = response.json()
             except ValueError:
                 logger.error(f"DEFRA API returned non-JSON response for site {site_id}")
-                return {"error": "DEFRA API returned invalid data. Please try OpenMeteoService for UK data."}
+                return {
+                    "error": "DEFRA API returned invalid data. Please try OpenMeteoService for UK data."
+                }
 
             # Format the data
             formatted_data = self._format_station_data(data, site_id, species_code)
 
             # Cache for 1 hour
-            self.cache.set_api_response("defra", f"site-data/{site_id}", {
-                "species_code": species_code,
-                "start_date": start_date,
-                "end_date": end_date
-            }, formatted_data, ttl=3600)
+            self.cache.set_api_response(
+                "defra",
+                f"site-data/{site_id}",
+                {"species_code": species_code, "start_date": start_date, "end_date": end_date},
+                formatted_data,
+                ttl=3600,
+            )
 
             logger.info(f"Successfully retrieved DEFRA data for site {site_id}")
             return formatted_data
@@ -90,8 +99,13 @@ class DefraService:
             logger.error(f"Error fetching DEFRA data for site {site_id}: {e}")
             return {"error": f"Failed to fetch DEFRA data: {str(e)}"}
 
-    def get_multiple_stations(self, site_ids: list[str], species_code: str = "PM25",
-                            start_date: str | None = None, end_date: str | None = None) -> dict[str, Any]:
+    def get_multiple_stations(
+        self,
+        site_ids: list[str],
+        species_code: str = "PM25",
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
         """
         Get air quality data for multiple monitoring stations.
 
@@ -118,10 +132,12 @@ class DefraService:
             "source": "UK DEFRA",
             "timestamp": datetime.now().isoformat(),
             "stations": results,
-            "total_stations": len(results)
+            "total_stations": len(results),
         }
 
-    def _format_station_data(self, raw_data: dict, site_id: str, species_code: str) -> dict[str, Any]:
+    def _format_station_data(
+        self, raw_data: dict, site_id: str, species_code: str
+    ) -> dict[str, Any]:
         """
         Format raw DEFRA API response into standardized format.
 
@@ -147,11 +163,13 @@ class DefraService:
                         if isinstance(values, list) and len(values) >= 2:
                             value = values[1]  # Measurement value
                             if value is not None:
-                                measurements.append({
-                                    "timestamp": timestamp,
-                                    "value": float(value),
-                                    "unit": self._get_unit_for_species(species_code)
-                                })
+                                measurements.append(
+                                    {
+                                        "timestamp": timestamp,
+                                        "value": float(value),
+                                        "unit": self._get_unit_for_species(species_code),
+                                    }
+                                )
 
             # Calculate statistics
             if measurements:
@@ -160,7 +178,7 @@ class DefraService:
                     "average": round(sum(values) / len(values), 2),
                     "maximum": max(values),
                     "minimum": min(values),
-                    "count": len(measurements)
+                    "count": len(measurements),
                 }
             else:
                 stats = {"average": None, "maximum": None, "minimum": None, "count": 0}
@@ -173,7 +191,7 @@ class DefraService:
                 "unit": self._get_unit_for_species(species_code),
                 "measurements": measurements,
                 "statistics": stats,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -189,7 +207,7 @@ class DefraService:
             "SO2": "Sulphur Dioxide",
             "O3": "Ozone",
             "CO": "Carbon Monoxide",
-            "NOX": "Nitrogen Oxides"
+            "NOX": "Nitrogen Oxides",
         }
         return names.get(species_code, species_code)
 
@@ -202,18 +220,18 @@ class DefraService:
             "SO2": "µg/m³",
             "O3": "µg/m³",
             "CO": "mg/m³",
-            "NOX": "µg/m³"
+            "NOX": "µg/m³",
         }
         return units.get(species_code, "µg/m³")
 
     def get_sites(self) -> dict[str, Any]:
         """
         Get list of available DEFRA monitoring sites.
-        
+
         Note: DEFRA does not provide a public API endpoint for listing all sites.
-        This method returns a curated list of major monitoring sites based on 
+        This method returns a curated list of major monitoring sites based on
         DEFRA's public data. For a complete list, users should check the DEFRA website.
-        
+
         Returns:
             Dictionary containing site information
         """
@@ -221,51 +239,156 @@ class DefraService:
         # Based on DEFRA's public monitoring network data
         sites = [
             # London and South East
-            {"code": "LON1", "name": "London Bloomsbury", "region": "London", "type": "Urban Background"},
+            {
+                "code": "LON1",
+                "name": "London Bloomsbury",
+                "region": "London",
+                "type": "Urban Background",
+            },
             {"code": "LON6", "name": "London Eltham", "region": "London", "type": "Suburban"},
-            {"code": "LON7", "name": "London Hillingdon", "region": "London", "type": "Urban Background"},
-            {"code": "LON8", "name": "London N. Kensington", "region": "London", "type": "Urban Background"},
-            {"code": "LON9", "name": "London Westminster", "region": "London", "type": "Urban Background"},
-
+            {
+                "code": "LON7",
+                "name": "London Hillingdon",
+                "region": "London",
+                "type": "Urban Background",
+            },
+            {
+                "code": "LON8",
+                "name": "London N. Kensington",
+                "region": "London",
+                "type": "Urban Background",
+            },
+            {
+                "code": "LON9",
+                "name": "London Westminster",
+                "region": "London",
+                "type": "Urban Background",
+            },
             # North West England
-            {"code": "MAN3", "name": "Manchester Piccadilly", "region": "North West", "type": "Urban Background"},
-            {"code": "LIV1", "name": "Liverpool Speke", "region": "North West", "type": "Urban Background"},
-
+            {
+                "code": "MAN3",
+                "name": "Manchester Piccadilly",
+                "region": "North West",
+                "type": "Urban Background",
+            },
+            {
+                "code": "LIV1",
+                "name": "Liverpool Speke",
+                "region": "North West",
+                "type": "Urban Background",
+            },
             # West Midlands
-            {"code": "BIR1", "name": "Birmingham Centre", "region": "West Midlands", "type": "Urban Background"},
-            {"code": "BIR3", "name": "Birmingham Tyburn", "region": "West Midlands", "type": "Urban Background"},
-
+            {
+                "code": "BIR1",
+                "name": "Birmingham Centre",
+                "region": "West Midlands",
+                "type": "Urban Background",
+            },
+            {
+                "code": "BIR3",
+                "name": "Birmingham Tyburn",
+                "region": "West Midlands",
+                "type": "Urban Background",
+            },
             # Yorkshire and Humber
-            {"code": "LEED", "name": "Leeds Centre", "region": "Yorkshire", "type": "Urban Background"},
-            {"code": "SHE1", "name": "Sheffield Tinsley", "region": "Yorkshire", "type": "Urban Background"},
-
+            {
+                "code": "LEED",
+                "name": "Leeds Centre",
+                "region": "Yorkshire",
+                "type": "Urban Background",
+            },
+            {
+                "code": "SHE1",
+                "name": "Sheffield Tinsley",
+                "region": "Yorkshire",
+                "type": "Urban Background",
+            },
             # Scotland
-            {"code": "GLA4", "name": "Glasgow Centre", "region": "Scotland", "type": "Urban Background"},
-            {"code": "EDI1", "name": "Edinburgh St Leonards", "region": "Scotland", "type": "Urban Background"},
-
+            {
+                "code": "GLA4",
+                "name": "Glasgow Centre",
+                "region": "Scotland",
+                "type": "Urban Background",
+            },
+            {
+                "code": "EDI1",
+                "name": "Edinburgh St Leonards",
+                "region": "Scotland",
+                "type": "Urban Background",
+            },
             # Wales
-            {"code": "CAR1", "name": "Cardiff Centre", "region": "Wales", "type": "Urban Background"},
+            {
+                "code": "CAR1",
+                "name": "Cardiff Centre",
+                "region": "Wales",
+                "type": "Urban Background",
+            },
             {"code": "SWA1", "name": "Swansea", "region": "Wales", "type": "Urban Background"},
-
             # South West
-            {"code": "BRI1", "name": "Bristol St Pauls", "region": "South West", "type": "Urban Background"},
-            {"code": "PLY1", "name": "Plymouth Centre", "region": "South West", "type": "Urban Background"},
-
+            {
+                "code": "BRI1",
+                "name": "Bristol St Pauls",
+                "region": "South West",
+                "type": "Urban Background",
+            },
+            {
+                "code": "PLY1",
+                "name": "Plymouth Centre",
+                "region": "South West",
+                "type": "Urban Background",
+            },
             # East of England
-            {"code": "CAM1", "name": "Cambridge Centre", "region": "East of England", "type": "Urban Background"},
-            {"code": "NOR1", "name": "Norwich Lakenfields", "region": "East of England", "type": "Urban Background"},
-
+            {
+                "code": "CAM1",
+                "name": "Cambridge Centre",
+                "region": "East of England",
+                "type": "Urban Background",
+            },
+            {
+                "code": "NOR1",
+                "name": "Norwich Lakenfields",
+                "region": "East of England",
+                "type": "Urban Background",
+            },
             # South East (non-London)
-            {"code": "BHT1", "name": "Brighton Preston Park", "region": "South East", "type": "Urban Background"},
-            {"code": "SOU1", "name": "Southampton Centre", "region": "South East", "type": "Urban Background"},
-
+            {
+                "code": "BHT1",
+                "name": "Brighton Preston Park",
+                "region": "South East",
+                "type": "Urban Background",
+            },
+            {
+                "code": "SOU1",
+                "name": "Southampton Centre",
+                "region": "South East",
+                "type": "Urban Background",
+            },
             # East Midlands
-            {"code": "NOT1", "name": "Nottingham Centre", "region": "East Midlands", "type": "Urban Background"},
-            {"code": "LEI1", "name": "Leicester Centre", "region": "East Midlands", "type": "Urban Background"},
-
+            {
+                "code": "NOT1",
+                "name": "Nottingham Centre",
+                "region": "East Midlands",
+                "type": "Urban Background",
+            },
+            {
+                "code": "LEI1",
+                "name": "Leicester Centre",
+                "region": "East Midlands",
+                "type": "Urban Background",
+            },
             # North East
-            {"code": "NCA1", "name": "Newcastle Centre", "region": "North East", "type": "Urban Background"},
-            {"code": "MID1", "name": "Middlesbrough", "region": "North East", "type": "Urban Background"},
+            {
+                "code": "NCA1",
+                "name": "Newcastle Centre",
+                "region": "North East",
+                "type": "Urban Background",
+            },
+            {
+                "code": "MID1",
+                "name": "Middlesbrough",
+                "region": "North East",
+                "type": "Urban Background",
+            },
         ]
 
         return {
@@ -273,7 +396,7 @@ class DefraService:
             "sites": sites,
             "total_sites": len(sites),
             "timestamp": datetime.now().isoformat(),
-            "note": "This is a curated list of major DEFRA monitoring sites. DEFRA does not provide a public API for site discovery. For the complete list, visit https://uk-air.defra.gov.uk/networks/site-info"
+            "note": "This is a curated list of major DEFRA monitoring sites. DEFRA does not provide a public API for site discovery. For the complete list, visit https://uk-air.defra.gov.uk/networks/site-info",
         }
 
     def get_species_codes(self) -> dict[str, Any]:
@@ -294,5 +417,5 @@ class DefraService:
             "source": "UK DEFRA",
             "species": species,
             "total_species": len(species),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }

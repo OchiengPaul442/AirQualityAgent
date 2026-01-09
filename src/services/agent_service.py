@@ -59,10 +59,10 @@ class AgentService:
         self.settings = get_settings()
         self.cache = get_cache()
         self.mcp_clients: dict[str, MCPClient] = {}
-        
+
         # Initialize SessionContextManager for better long-conversation handling
         self.session_manager = SessionContextManager(max_contexts=50, context_ttl=3600)
-        
+
         # Document accumulation cache per session with timestamp tracking for cleanup
         # DEPRECATED: Moved to SessionContextManager, kept for backward compatibility
         # Format: {session_id: {"documents": [...], "last_access": timestamp}}
@@ -70,16 +70,22 @@ class AgentService:
         self.document_cache_ttl = 3600  # 1 hour TTL for document cache cleanup
 
         # Parse enabled data sources
-        enabled_sources = set(src.strip().lower() for src in self.settings.ENABLED_DATA_SOURCES.split(',') if src.strip())
+        enabled_sources = set(
+            src.strip().lower()
+            for src in self.settings.ENABLED_DATA_SOURCES.split(",")
+            if src.strip()
+        )
 
         # Initialize services based on enabled sources
-        self.waqi = WAQIService() if 'waqi' in enabled_sources else None
-        self.airqo = AirQoService() if 'airqo' in enabled_sources else None
-        self.openmeteo = OpenMeteoService() if 'openmeteo' in enabled_sources else None
-        self.carbon_intensity = CarbonIntensityService() if 'carbon_intensity' in enabled_sources else None
-        self.defra = DefraService() if 'defra' in enabled_sources else None
-        self.uba = UbaService() if 'uba' in enabled_sources else None
-        self.nsw = NSWService() if 'nsw' in enabled_sources else None
+        self.waqi = WAQIService() if "waqi" in enabled_sources else None
+        self.airqo = AirQoService() if "airqo" in enabled_sources else None
+        self.openmeteo = OpenMeteoService() if "openmeteo" in enabled_sources else None
+        self.carbon_intensity = (
+            CarbonIntensityService() if "carbon_intensity" in enabled_sources else None
+        )
+        self.defra = DefraService() if "defra" in enabled_sources else None
+        self.uba = UbaService() if "uba" in enabled_sources else None
+        self.nsw = NSWService() if "nsw" in enabled_sources else None
         self.weather = WeatherService()  # Always enabled as it's used by other services
         self.scraper = RobustScraper()  # Always enabled for web scraping
         self.search = SearchService()  # Always enabled for web search
@@ -118,9 +124,7 @@ class AgentService:
             # swallow provider setup errors here; provider will raise on use
             logger.exception("Provider setup failed during AgentService init")
 
-        logger.info(
-            f"AgentService initialized with provider: {self.settings.AI_PROVIDER}"
-        )
+        logger.info(f"AgentService initialized with provider: {self.settings.AI_PROVIDER}")
 
         # Memory management and loop prevention
         self.conversation_memory: list[dict] = []
@@ -128,9 +132,11 @@ class AgentService:
         self.loop_detection_window = 8  # Check last N messages for loops (reduced from 10)
         self.max_response_length = 6000  # Prevent extremely long responses (reduced from 8000)
         self.max_message_cache_size = 100  # Limit total cached messages in memory
-        
+
         # Session context management for better long-conversation handling
-        self.session_context_cache: dict[str, dict[str, Any]] = {}  # {session_id: {summary, last_update}}
+        self.session_context_cache: dict[str, dict[str, Any]] = (
+            {}
+        )  # {session_id: {summary, last_update}}
         self.max_session_contexts = 50  # Limit concurrent session contexts in memory
 
     def _check_for_loops(self, user_message: str) -> bool:
@@ -144,8 +150,10 @@ class AgentService:
             return False
 
         # Get recent user messages
-        recent_messages = [msg.get('user', '') for msg in self.conversation_memory[-self.loop_detection_window:]]
-        
+        recent_messages = [
+            msg.get("user", "") for msg in self.conversation_memory[-self.loop_detection_window :]
+        ]
+
         # Check for exact message repetition (must be exact and repeated 3+ times)
         exact_count = recent_messages.count(user_message)
         if exact_count >= 3:
@@ -162,26 +170,28 @@ class AgentService:
             intersection = len(words1 & words2)
             union = len(words1 | words2)
             return intersection / union if union > 0 else 0.0
-        
+
         # Check if current message is very similar to multiple recent messages
         similar_count = 0
         for recent_msg in recent_messages[-5:]:  # Check last 5 messages only
             similarity = get_word_similarity(user_message, recent_msg)
             if similarity > 0.8:  # Very similar (80%+ word overlap)
                 similar_count += 1
-        
+
         # Only flag as loop if highly similar message appears 3+ times
         if similar_count >= 3:
             logger.warning(f"Semantic loop detected: {similar_count} similar messages")
             return True
 
         # Check for AI repetition (same AI response multiple times in a row)
-        recent_ai_responses = [msg.get('ai', '') for msg in self.conversation_memory[-5:]]
+        recent_ai_responses = [msg.get("ai", "") for msg in self.conversation_memory[-5:]]
         if len(recent_ai_responses) >= 3:
             # Check if AI is giving the same response repeatedly
             last_ai = recent_ai_responses[-1] if recent_ai_responses else ""
             if last_ai and recent_ai_responses.count(last_ai) >= 3:
-                logger.warning(f"AI response loop detected: same response {recent_ai_responses.count(last_ai)} times")
+                logger.warning(
+                    f"AI response loop detected: same response {recent_ai_responses.count(last_ai)} times"
+                )
                 return True
 
         return False
@@ -190,8 +200,8 @@ class AgentService:
         """Manage conversation memory to prevent bloat and loops."""
         if len(self.conversation_memory) > self.max_conversation_length:
             # Keep only the most recent messages
-            self.conversation_memory = self.conversation_memory[-self.max_conversation_length:]
-        
+            self.conversation_memory = self.conversation_memory[-self.max_conversation_length :]
+
         # Session context manager handles its own cleanup automatically
         # Log session context stats periodically
         if len(self.conversation_memory) % 10 == 0:  # Every 10 messages
@@ -200,16 +210,19 @@ class AgentService:
 
     def _add_to_memory(self, user_message: str, ai_response: str):
         """Add conversation turn to memory with safeguards."""
-        self.conversation_memory.append({
-            'user': user_message[:1000],  # Limit message length
-            'ai': ai_response[:2000],     # Limit response length
-            'timestamp': self._get_timestamp()
-        })
+        self.conversation_memory.append(
+            {
+                "user": user_message[:1000],  # Limit message length
+                "ai": ai_response[:2000],  # Limit response length
+                "timestamp": self._get_timestamp(),
+            }
+        )
         self._manage_memory()
 
     def _get_timestamp(self) -> str:
         """Get current timestamp for memory tracking."""
         from datetime import datetime
+
         return datetime.now().isoformat()
 
     def _create_provider(self) -> BaseAIProvider:
@@ -245,32 +258,54 @@ class AgentService:
             bool: True if user has consented to location sharing
         """
         consent_keywords = [
-            "yes", "sure", "okay", "proceed", "go ahead", "allow", "consent", "please",
-            "yes please", "of course", "absolutely", "fine", "ok", "alright", "sure thing"
+            "yes",
+            "sure",
+            "okay",
+            "proceed",
+            "go ahead",
+            "allow",
+            "consent",
+            "please",
+            "yes please",
+            "of course",
+            "absolutely",
+            "fine",
+            "ok",
+            "alright",
+            "sure thing",
         ]
-        
+
         location_related_phrases = [
-            "location", "current location", "my location", "where i am", "local", "here",
-            "air quality", "pollution", "aqi", "gps", "coordinates"
+            "location",
+            "current location",
+            "my location",
+            "where i am",
+            "local",
+            "here",
+            "air quality",
+            "pollution",
+            "aqi",
+            "gps",
+            "coordinates",
         ]
-        
+
         has_location_question = False
         has_consent = False
-        
+
         for message in history:
             content = message.get("content", "").lower().strip()
             role = message.get("role", "")
-            
+
             # Check assistant messages for location questions
             if role == "assistant":
                 if any(phrase in content for phrase in location_related_phrases):
                     has_location_question = True
-            
+
             # Check user messages for consent
             elif role == "user":
                 if any(keyword in content for keyword in consent_keywords):
                     has_consent = True
-        
+
         # Only consider consent valid if there was a location-related question before
         return has_location_question and has_consent
 
@@ -290,13 +325,31 @@ class AgentService:
         # Very short messages (1-2 words) - check exact matches or abbreviations
         if len(words) <= 2:
             # Exact matches for short appreciation messages
-            exact_matches = ["thanks", "thank", "thx", "ty", "cheers", "ok", "okay", "awesome", "helpful"]
+            exact_matches = [
+                "thanks",
+                "thank",
+                "thx",
+                "ty",
+                "cheers",
+                "ok",
+                "okay",
+                "awesome",
+                "helpful",
+            ]
             if message_lower in exact_matches:
                 return True
             # Check for appreciation phrases
             appreciation_phrases = [
-                "thank you", "thank you very much", "thanks a lot", "thank you so much",
-                "appreciate it", "much appreciated", "good job", "well done", "nice work", "great job"
+                "thank you",
+                "thank you very much",
+                "thanks a lot",
+                "thank you so much",
+                "appreciate it",
+                "much appreciated",
+                "good job",
+                "well done",
+                "nice work",
+                "great job",
             ]
             if message_lower in appreciation_phrases:
                 return True
@@ -304,7 +357,18 @@ class AgentService:
 
         # Short messages (3-5 words) that contain appreciation keywords as whole words
         if len(words) <= 5:
-            appreciation_words = ["thank", "thanks", "appreciate", "great", "awesome", "perfect", "nice", "helpful", "cheers", "appreciated"]
+            appreciation_words = [
+                "thank",
+                "thanks",
+                "appreciate",
+                "great",
+                "awesome",
+                "perfect",
+                "nice",
+                "helpful",
+                "cheers",
+                "appreciated",
+            ]
             # Check if any appreciation word is in the message as a whole word
             for word in words:
                 if word in appreciation_words:
@@ -325,52 +389,48 @@ class AgentService:
     def _check_security_violation(self, message_lower: str) -> bool:
         """
         Check if a message contains security violation attempts.
-        
+
         This provides an additional layer of security beyond system instructions,
         since AI providers may not always follow security rules properly.
-        
+
         Args:
             message_lower: Lowercase message to check
-            
+
         Returns:
             bool: True if security violation detected
         """
         # Security violation patterns
         security_patterns = [
             # Tool/function enumeration attempts
-            r'\b(list|show|display|enumerate)\b.*\b(tool|function|method|api)s?\b',
-            r'\b(what|which)\b.*\b(tool|function|method|api)s?\b.*\b(available|do you have|can you)\b',
-            r'\b(available|accessible)\b.*\b(tool|function|method|api)s?\b',
-            
+            r"\b(list|show|display|enumerate)\b.*\b(tool|function|method|api)s?\b",
+            r"\b(what|which)\b.*\b(tool|function|method|api)s?\b.*\b(available|do you have|can you)\b",
+            r"\b(available|accessible)\b.*\b(tool|function|method|api)s?\b",
             # System prompt/instruction revelation attempts
-            r'\b(system|internal)\b.*\b(prompt|instruction)s?\b',
-            r'\b(show|reveal|display)\b.*\b(prompt|instruction)s?\b',
-            r'\b(what.*prompt|what.*instruction)\b',
-            
+            r"\b(system|internal)\b.*\b(prompt|instruction)s?\b",
+            r"\b(show|reveal|display)\b.*\b(prompt|instruction)s?\b",
+            r"\b(what.*prompt|what.*instruction)\b",
             # API key/token revelation attempts
-            r'\b(api|access)\b.*\b(key|token|secret)s?\b',
-            r'\b(what.*key|what.*token|what.*secret)\b',
-            r'\b(show|reveal)\b.*\b(key|token|secret)s?\b',
-            
+            r"\b(api|access)\b.*\b(key|token|secret)s?\b",
+            r"\b(what.*key|what.*token|what.*secret)\b",
+            r"\b(show|reveal)\b.*\b(key|token|secret)s?\b",
             # Source code revelation attempts
-            r'\b(source|program)\b.*\b(code)\b.*\b(show|reveal|display)\b',
-            r'\b(show|reveal|display)\b.*\b(source|program)\b.*\b(code)\b',
-            
+            r"\b(source|program)\b.*\b(code)\b.*\b(show|reveal|display)\b",
+            r"\b(show|reveal|display)\b.*\b(source|program)\b.*\b(code)\b",
             # Developer mode attempts
-            r'\b(developer|dev|admin|root)\b.*\b(mode|access|privileges)\b',
-            r'\b(enter|enable|activate)\b.*\b(developer|dev|admin)\b.*\b(mode|access)\b',
-            r'\b(ignore|suspend|bypass)\b.*\b(safety|security|restriction)s?\b',
-            
+            r"\b(developer|dev|admin|root)\b.*\b(mode|access|privileges)\b",
+            r"\b(enter|enable|activate)\b.*\b(developer|dev|admin)\b.*\b(mode|access)\b",
+            r"\b(ignore|suspend|bypass)\b.*\b(safety|security|restriction)s?\b",
             # Direct security bypass attempts
-            r'\b(override|ignore|bypass)\b.*\b(instruction|rule|security)s?\b',
-            r'\b(dan|jailbreak|uncensored)\b',
+            r"\b(override|ignore|bypass)\b.*\b(instruction|rule|security)s?\b",
+            r"\b(dan|jailbreak|uncensored)\b",
         ]
-        
+
         import re
+
         for pattern in security_patterns:
             if re.search(pattern, message_lower, re.IGNORECASE):
                 return True
-        
+
         return False
 
     def _generate_cache_key(
@@ -391,21 +451,30 @@ class AgentService:
         # Only use message, last 3 history items, and basic params
         try:
             # Truncate message for cache key to avoid extremely long keys
-            msg_hash = message[:500] if len(message) <= 500 else hashlib.md5(message.encode()).hexdigest()
-            
+            msg_hash = (
+                message[:500] if len(message) <= 500 else hashlib.md5(message.encode()).hexdigest()
+            )
+
             # Only use last 3 history items (not 5) for better memory efficiency
             recent_history = history[-3:] if len(history) > 3 else history
-            history_str = str([{"role": h.get("role", ""), "content": h.get("content", "")[:100]} for h in recent_history])
-            
+            history_str = str(
+                [
+                    {"role": h.get("role", ""), "content": h.get("content", "")[:100]}
+                    for h in recent_history
+                ]
+            )
+
             # Document cache key: use filenames only, not full content
             doc_str = ""
             if document_data:
                 try:
-                    filenames = [d.get("filename", "unknown") for d in document_data if isinstance(d, dict)]
+                    filenames = [
+                        d.get("filename", "unknown") for d in document_data if isinstance(d, dict)
+                    ]
                     doc_str = ",".join(filenames)
                 except Exception:
                     doc_str = "docs_present"
-            
+
             cache_parts = [
                 self.settings.AI_PROVIDER,
                 self.settings.AI_MODEL,
@@ -460,7 +529,9 @@ class AgentService:
         cache_timestamp = cached_data.get("_cache_timestamp")
         if cache_timestamp is None:
             # Legacy cache without timestamp - treat as stale
-            logger.info(f"Legacy cache without timestamp for key {cache_key[:16]}... - treating as stale")
+            logger.info(
+                f"Legacy cache without timestamp for key {cache_key[:16]}... - treating as stale"
+            )
             return None
 
         # Calculate age of cached data
@@ -478,7 +549,9 @@ class AgentService:
             # Forecast data: Very short TTL (1-2 hours max)
             max_age_minutes = 60  # 1 hour for forecasts
             data_type = "forecast"
-        elif any(keyword in message_lower for keyword in ['current', 'now', 'today', 'latest', 'recent']):
+        elif any(
+            keyword in message_lower for keyword in ["current", "now", "today", "latest", "recent"]
+        ):
             # Explicitly current/recent data requests
             max_age_minutes = 30  # 30 minutes
             data_type = "current_explicit"
@@ -493,7 +566,9 @@ class AgentService:
 
         # Check if cache is too old
         if cache_age_minutes > max_age_minutes:
-            logger.info(f"Cache too old for {data_type} query: {cache_age_minutes:.1f}min > {max_age_minutes}min limit")
+            logger.info(
+                f"Cache too old for {data_type} query: {cache_age_minutes:.1f}min > {max_age_minutes}min limit"
+            )
             return None
 
         # Additional freshness checks for air quality data
@@ -506,17 +581,23 @@ class AgentService:
                 # Reduce TTL during high-variability periods
                 adjusted_max_age = max_age_minutes * 0.5  # 50% of normal TTL
                 if cache_age_minutes > adjusted_max_age:
-                    logger.info(f"Cache invalidated during peak hours: {cache_age_minutes:.1f}min > {adjusted_max_age}min adjusted limit")
+                    logger.info(
+                        f"Cache invalidated during peak hours: {cache_age_minutes:.1f}min > {adjusted_max_age}min adjusted limit"
+                    )
                     return None
 
             # Check for repeated identical queries (user might be testing/refreshed)
             # If same query within 5 minutes, serve from cache (user expectation management)
             if cache_age_minutes < 5:
-                logger.info(f"Recent identical query ({cache_age_minutes:.1f}min ago) - serving from cache")
+                logger.info(
+                    f"Recent identical query ({cache_age_minutes:.1f}min ago) - serving from cache"
+                )
                 return cached_data
 
         # Log successful cache hit with freshness info
-        logger.info(f"Fresh cache hit: {data_type} data, age {cache_age_minutes:.1f}min (limit {max_age_minutes}min)")
+        logger.info(
+            f"Fresh cache hit: {data_type} data, age {cache_age_minutes:.1f}min (limit {max_age_minutes}min)"
+        )
 
         # Return the cached response (remove internal metadata before returning)
         response_copy = cached_data.copy()
@@ -540,7 +621,7 @@ class AgentService:
         current_time = time.time()
         cleanup_interval = 300  # 5 minutes between cleanup runs
 
-        if hasattr(self, '_last_cache_cleanup'):
+        if hasattr(self, "_last_cache_cleanup"):
             if current_time - self._last_cache_cleanup < cleanup_interval:
                 return 0  # Skip cleanup if recently done
 
@@ -548,7 +629,7 @@ class AgentService:
 
         # For Redis cache, we rely on TTL expiration
         # For memory cache, we need manual cleanup
-        if hasattr(self.cache, '_memory_cache'):
+        if hasattr(self.cache, "_memory_cache"):
             cleaned_count = 0
             max_age_seconds = 14400  # 4 hours max age for any cache entry
 
@@ -616,57 +697,73 @@ class AgentService:
 
         # Check for GPS-based location queries
         if location_data and location_data.get("source") == "gps":
-            location_keywords = ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local']
+            location_keywords = [
+                "my location",
+                "current location",
+                "here",
+                "this location",
+                "where i am",
+                "my area",
+                "local",
+            ]
             if any(keyword in message.lower() for keyword in location_keywords):
-                logger.info(f"GPS location query detected, providing direct air quality data for coordinates: {location_data['latitude']}, {location_data['longitude']}")
-                
+                logger.info(
+                    f"GPS location query detected, providing direct air quality data for coordinates: {location_data['latitude']}, {location_data['longitude']}"
+                )
+
                 # Get air quality data directly
                 from src.services.openmeteo_service import OpenMeteoService
+
                 openmeteo = OpenMeteoService()
                 air_quality_result = openmeteo.get_current_air_quality(
                     latitude=location_data["latitude"],
                     longitude=location_data["longitude"],
-                    timezone="auto"
+                    timezone="auto",
                 )
-                
+
                 # Get location name
                 from src.services.geocoding_service import GeocodingService
+
                 geocoding = GeocodingService()
-                reverse_result = geocoding.reverse_geocode(location_data["latitude"], location_data["longitude"])
+                reverse_result = geocoding.reverse_geocode(
+                    location_data["latitude"], location_data["longitude"]
+                )
                 location_name = "your current location"
                 if reverse_result.get("success"):
                     city = reverse_result.get("address", {}).get("city", "")
                     if city:
                         location_name = city
-                
+
                 # Format response
                 if "current" in air_quality_result and air_quality_result["current"]:
                     response_text = f"# Air Quality at {location_name}\n\n"
                     response_text += f"**Location**: {location_data['latitude']:.4f}, {location_data['longitude']:.4f} (precise GPS)\n\n"
-                    
+
                     # Add air quality data
                     current = air_quality_result["current"]
                     response_text += "## Current Air Quality\n\n"
                     response_text += "| Parameter | Value | Status |\n"
                     response_text += "|-----------|-------|--------|\n"
-                    
+
                     if "us_aqi" in current:
                         us_aqi = current["us_aqi"]
-                        status = "Good" if us_aqi <= 50 else "Moderate" if us_aqi <= 100 else "Unhealthy"
+                        status = (
+                            "Good" if us_aqi <= 50 else "Moderate" if us_aqi <= 100 else "Unhealthy"
+                        )
                         response_text += f"| US AQI | {us_aqi} | {status} |\n"
-                    
+
                     if "pm2_5" in current:
                         pm25 = current["pm2_5"]
                         response_text += f"| PM2.5 | {pm25} µg/m³ | |\n"
-                    
+
                     if "pm10" in current:
                         pm10 = current["pm10"]
                         response_text += f"| PM10 | {pm10} µg/m³ | |\n"
-                    
+
                     response_text += "\n*Data provided with precise GPS coordinates for accurate local air quality information.*"
                 else:
                     response_text = f"I couldn't retrieve air quality data for your current location ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). Please try again or specify a different location."
-                
+
                 return {
                     "response": response_text,
                     "tokens_used": 0,
@@ -677,22 +774,55 @@ class AgentService:
         # Check for location consent in history and modify message if needed
         original_message = message
         has_consent = self._has_location_consent(history)
-        is_location_query = any(keyword in message.lower() for keyword in ['my location', 'current location', 'here', 'this location', 'where i am', 'my area', 'local', 'air quality in my location'])
-        
+        is_location_query = any(
+            keyword in message.lower()
+            for keyword in [
+                "my location",
+                "current location",
+                "here",
+                "this location",
+                "where i am",
+                "my area",
+                "local",
+                "air quality in my location",
+            ]
+        )
+
         # Only treat as consent if message is ONLY/PRIMARILY consent - not if it's a real question with "please" at the end
         is_consent_response = (
-            len(message.split()) <= 5 and  # Short messages only
-            any(keyword in message.lower() for keyword in ['yes', 'sure', 'okay', 'proceed', 'go ahead', 'allow', 'consent']) and
-            not any(question in message.lower() for question in ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'effects', 'impact', 'affect'])
+            len(message.split()) <= 5  # Short messages only
+            and any(
+                keyword in message.lower()
+                for keyword in ["yes", "sure", "okay", "proceed", "go ahead", "allow", "consent"]
+            )
+            and not any(
+                question in message.lower()
+                for question in [
+                    "what",
+                    "how",
+                    "why",
+                    "when",
+                    "where",
+                    "which",
+                    "who",
+                    "effects",
+                    "impact",
+                    "affect",
+                ]
+            )
         )
-        
+
         if has_consent and is_location_query:
             message = f"User has already consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
-            logger.info(f"Detected location consent in history and location query, modified message: '{original_message}' -> '{message}'")
+            logger.info(
+                f"Detected location consent in history and location query, modified message: '{original_message}' -> '{message}'"
+            )
         elif is_consent_response and not is_location_query:
             # User is responding to consent request with just "yes" - treat as location query
             message = f"User has consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
-            logger.info(f"Detected consent response without explicit location query, treating as location request: '{original_message}' -> '{message}'")
+            logger.info(
+                f"Detected consent response without explicit location query, treating as location request: '{original_message}' -> '{message}'"
+            )
 
         # Check cost limits
         within_limits, error_msg = self.cost_tracker.check_limits()
@@ -732,7 +862,9 @@ class AgentService:
                 # CRITICAL: Also store in tool_executor for fallback scan_document access
                 filename = doc.get("filename", "unknown")
                 self.tool_executor.uploaded_documents[filename] = doc
-            logger.info(f"Documents added to session context AND tool executor cache: {len(document_data)} document(s)\"")
+            logger.info(
+                f'Documents added to session context AND tool executor cache: {len(document_data)} document(s)"'
+            )
 
         # Get accumulated documents from session manager
         if session_id:
@@ -741,14 +873,14 @@ class AgentService:
             self.session_manager.update_summary(session_id, history)
         else:
             accumulated_docs = document_data or []
-        
+
         # CRITICAL FIX: Inject document content DIRECTLY into user message for AI visibility
         # System instructions alone are not enough - AI models often ignore long context
         document_injection = ""
         if accumulated_docs:
             self.tool_executor.documents_provided = True
             logger.info(f"Documents provided - injecting content into user message for visibility")
-            
+
             # Build compact document summary for injection
             doc_summaries = []
             for doc in accumulated_docs[:3]:  # Limit to 3 most recent
@@ -756,46 +888,58 @@ class AgentService:
                 file_type = doc.get("file_type", "unknown")
                 content = doc.get("content", "")[:2000]  # First 2000 chars only
                 truncated = doc.get("truncated", False) or len(doc.get("content", "")) > 2000
-                
-                doc_summary = f"\\n\\n--- DOCUMENT: {filename} ({file_type.upper()}) ---\\n{content}"
+
+                doc_summary = (
+                    f"\\n\\n--- DOCUMENT: {filename} ({file_type.upper()}) ---\\n{content}"
+                )
                 if truncated:
                     doc_summary += f"\\n[... content truncated, use scan_document('{filename}') for full content ...]\\n"
                 doc_summaries.append(doc_summary)
-            
+
             document_injection = "\\n\\n".join(doc_summaries) + "\\n\\n--- END DOCUMENTS ---\\n\\n"
-            logger.info(f"Document injection created: {len(document_injection)} chars for {len(accumulated_docs)} document(s)")
+            logger.info(
+                f"Document injection created: {len(document_injection)} chars for {len(accumulated_docs)} document(s)"
+            )
         else:
             self.tool_executor.documents_provided = False
-        
+
         # Prepend document content to user message for MAXIMUM visibility
         if document_injection:
             original_message = message
             message = f"{document_injection}USER QUERY: {message}"
-            logger.info(f"Injected document content into user message (was {len(original_message)} chars, now {len(message)} chars)")
-        
+            logger.info(
+                f"Injected document content into user message (was {len(original_message)} chars, now {len(message)} chars)"
+            )
+
         # Build document context FIRST (most important)
-        document_context = self._build_document_context(accumulated_docs, history) if accumulated_docs else ""
-        
+        document_context = (
+            self._build_document_context(accumulated_docs, history) if accumulated_docs else ""
+        )
+
         # Get location context
         location_context = ""
         if location_data and location_data.get("source") == "gps":
             location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
-        
+
         # Add session summary for better long-conversation context
         session_summary = ""
         if session_id:
             session_summary = self.session_manager.get_context_summary(session_id)
-        
+
         # Fallback safety net: If multiple documents and issues occur, prioritize the newest document
         if len(accumulated_docs) > 1 and document_data:
             # Check if the newest document is in the accumulated list
             newest_doc = document_data[0] if document_data else None
-            if newest_doc and newest_doc.get("filename") not in [doc.get("filename") for doc in accumulated_docs]:
+            if newest_doc and newest_doc.get("filename") not in [
+                doc.get("filename") for doc in accumulated_docs
+            ]:
                 # If newest document failed to accumulate, use only the newest one as fallback
-                logger.warning(f"Document accumulation issue detected, using newest document as fallback: {newest_doc.get('filename')}")
+                logger.warning(
+                    f"Document accumulation issue detected, using newest document as fallback: {newest_doc.get('filename')}"
+                )
                 accumulated_docs = [newest_doc]
                 document_context = self._build_document_context(accumulated_docs, history)
-        
+
         # CRITICAL: Put document context at the BEGINNING (custom_prefix) so AI sees it FIRST
         # This ensures document content has highest priority in the context window
         system_instruction = get_system_instruction(
@@ -803,11 +947,13 @@ class AgentService:
             custom_prefix=document_context,  # Documents FIRST
             custom_suffix=location_context + session_summary,  # Other context after
         )
-        
+
         # Log if document context was added
         if accumulated_docs:
             doc_context_length = len(self._build_document_context(accumulated_docs, history))
-            logger.info(f"Document context added to system instruction: {doc_context_length} chars for {len(accumulated_docs)} document(s)")
+            logger.info(
+                f"Document context added to system instruction: {doc_context_length} chars for {len(accumulated_docs)} document(s)"
+            )
 
         # Set location data for geocoding services (GPS takes precedence over IP)
         if location_data:
@@ -815,9 +961,11 @@ class AgentService:
                 self.tool_executor.client_location = {
                     "source": "gps",
                     "latitude": location_data["latitude"],
-                    "longitude": location_data["longitude"]
+                    "longitude": location_data["longitude"],
                 }
-                logger.info(f"Set GPS location for tool executor: {location_data['latitude']}, {location_data['longitude']}")
+                logger.info(
+                    f"Set GPS location for tool executor: {location_data['latitude']}, {location_data['longitude']}"
+                )
             elif location_data.get("source") == "ip":
                 self.tool_executor.client_ip = location_data["ip_address"]
                 self.tool_executor.client_location = None  # Clear GPS if IP is used
@@ -827,11 +975,13 @@ class AgentService:
             self.tool_executor.client_ip = client_ip
             self.tool_executor.client_location = None
             logger.info(f"Set IP location for tool executor (fallback): {client_ip}")
-        
+
         # CRITICAL: If documents are provided, block scan_document tool to prevent AI confusion
         if accumulated_docs:
             self.tool_executor.documents_provided = True
-            logger.info(f"Blocking scan_document tool - {len(accumulated_docs)} document(s) already provided")
+            logger.info(
+                f"Blocking scan_document tool - {len(accumulated_docs)} document(s) already provided"
+            )
         else:
             self.tool_executor.documents_provided = False
 
@@ -865,26 +1015,27 @@ class AgentService:
         # Analyze query and call tools BEFORE sending to AI to ensure tools are always used
         # This bypasses the model's weak tool-calling capability by proactively detecting intent
         logger.info(f"🔍 QueryAnalyzer: Analyzing query for proactive tool calling...")
-        
-        proactive_results = await QueryAnalyzer.proactively_call_tools(
-            message,
-            self.tool_executor
-        )
-        
+
+        proactive_results = await QueryAnalyzer.proactively_call_tools(message, self.tool_executor)
+
         tools_called_proactively = proactive_results.get("tools_called", [])
         context_injection = proactive_results.get("context_injection", "")
-        
+
         if tools_called_proactively:
-            logger.info(f"✅ QueryAnalyzer called {len(tools_called_proactively)} tool(s) proactively: {tools_called_proactively}")
+            logger.info(
+                f"✅ QueryAnalyzer called {len(tools_called_proactively)} tool(s) proactively: {tools_called_proactively}"
+            )
             # Inject tool results into system instruction so AI can format them
             if context_injection:
                 system_instruction += context_injection
-                logger.info(f"📝 Injected {len(context_injection)} characters of tool results into system instruction")
+                logger.info(
+                    f"📝 Injected {len(context_injection)} characters of tool results into system instruction"
+                )
         else:
             logger.info("ℹ️ QueryAnalyzer: No tools needed for this query")
 
         # Process with provider
-        
+
         try:
             response_data = await self.provider.process_message(
                 message=message,
@@ -893,12 +1044,16 @@ class AgentService:
                 temperature=response_params.get("temperature"),
                 top_p=response_params.get("top_p"),
                 top_k=response_params.get("top_k"),
-                max_tokens=response_params.get("max_tokens"),  # Fixed: use max_tokens not max_output_tokens
+                max_tokens=response_params.get(
+                    "max_tokens"
+                ),  # Fixed: use max_tokens not max_output_tokens
             )
 
             # Defensive: provider may (incorrectly) return None in some error paths
             if response_data is None:
-                logger.error("Provider.process_message returned None (unexpected). Returning safe error response.")
+                logger.error(
+                    "Provider.process_message returned None (unexpected). Returning safe error response."
+                )
                 return {
                     "response": (
                         "I apologize, but the AI service returned no data. "
@@ -911,12 +1066,16 @@ class AgentService:
 
             # Merge proactively called tools with any tools the provider might have called
             provider_tools = response_data.get("tools_used", [])
-            all_tools_used = list(set(tools_called_proactively + (provider_tools if provider_tools else [])))
+            all_tools_used = list(
+                set(tools_called_proactively + (provider_tools if provider_tools else []))
+            )
             response_data["tools_used"] = all_tools_used
-            
+
             if all_tools_used:
-                logger.info(f"🔧 Combined tool usage - Proactive: {tools_called_proactively}, Provider: {provider_tools}, Total: {all_tools_used}")
-            
+                logger.info(
+                    f"🔧 Combined tool usage - Proactive: {tools_called_proactively}, Provider: {provider_tools}, Total: {all_tools_used}"
+                )
+
             # Extract chart data from tool results if chart was generated
             # Check if generate_chart was called and capture the chart data
             if "generate_chart" in all_tools_used:
@@ -928,9 +1087,11 @@ class AgentService:
                         "data_rows": chart_result.get("data_rows"),
                         "columns_used": chart_result.get("columns_used"),
                         "format": chart_result.get("format"),
-                        "engine": chart_result.get("engine")
+                        "engine": chart_result.get("engine"),
                     }
-                    logger.info(f"📊 Chart generated: {chart_result.get('chart_type')} with {chart_result.get('data_rows')} rows")
+                    logger.info(
+                        f"📊 Chart generated: {chart_result.get('chart_type')} with {chart_result.get('data_rows')} rows"
+                    )
 
             # Track costs
             tokens_used = response_data.get("tokens_used", 0)
@@ -941,6 +1102,7 @@ class AgentService:
 
             # Cache the response with timestamp metadata
             import time
+
             response_data["_cache_timestamp"] = time.time()  # Add timestamp for freshness tracking
             response_data["cached"] = False
 
@@ -965,17 +1127,35 @@ class AgentService:
             # it likely indicates a data retrieval failure - provide helpful fallback
             ai_response = response_data.get("response", "").strip()
             tools_used = response_data.get("tools_used", [])
-            
+
             # Check if response is inadequate (too short, generic, or doesn't contain actual data)
             is_inadequate = (
-                len(ai_response) < 100 or  # Too short
-                ai_response.lower().strip() in ["air quality", "air quality data", "no data"] or  # Generic responses
-                (len(tools_used) > 0 and not any(indicator in ai_response.lower() for indicator in [
-                    "aqi", "pm2.5", "pm10", "µg/m³", "good", "moderate", "unhealthy", "hazardous",
-                    "kampala", "nairobi", "dar es salaam", "station", "monitoring"
-                ]))  # Tools used but no actual air quality data in response
+                len(ai_response) < 100  # Too short
+                or ai_response.lower().strip()
+                in ["air quality", "air quality data", "no data"]  # Generic responses
+                or (
+                    len(tools_used) > 0
+                    and not any(
+                        indicator in ai_response.lower()
+                        for indicator in [
+                            "aqi",
+                            "pm2.5",
+                            "pm10",
+                            "µg/m³",
+                            "good",
+                            "moderate",
+                            "unhealthy",
+                            "hazardous",
+                            "kampala",
+                            "nairobi",
+                            "dar es salaam",
+                            "station",
+                            "monitoring",
+                        ]
+                    )
+                )  # Tools used but no actual air quality data in response
             )
-            
+
             if is_inadequate and len(tools_used) > 0:
                 # Response is inadequate and tools were used - provide helpful fallback
                 if "mwanza" in message.lower():
@@ -994,7 +1174,7 @@ class AgentService:
                         if len(word) > 3 and word[0].isupper():  # Likely a city name
                             location_match = word
                             break
-                    
+
                     if location_match:
                         response_data["response"] = (
                             f"I couldn't find air quality monitoring data for {location_match}. "
@@ -1007,7 +1187,9 @@ class AgentService:
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")
             if len(ai_response) > self.max_response_length:
-                ai_response = ai_response[:self.max_response_length] + "... [Response truncated for length]"
+                ai_response = (
+                    ai_response[: self.max_response_length] + "... [Response truncated for length]"
+                )
                 response_data["response"] = ai_response
                 response_data["truncated"] = True
 
@@ -1033,7 +1215,9 @@ class AgentService:
             }
 
     def _build_document_context(
-        self, document_data: list[dict[str, Any]] | None, history: list[dict[str, str]] | None = None
+        self,
+        document_data: list[dict[str, Any]] | None,
+        history: list[dict[str, str]] | None = None,
     ) -> str:
         """
         Build document context string for system instruction.
@@ -1052,11 +1236,11 @@ class AgentService:
         if not isinstance(document_data, list):
             logger.warning(f"document_data should be a list, got {type(document_data)}")
             return ""
-        
+
         # Note: Document accumulation is now handled by the document_cache in process_message
         # This method now receives pre-accumulated documents
         all_documents = document_data
-        
+
         # Remove duplicates based on filename
         seen_filenames = set()
         unique_documents = []
@@ -1065,72 +1249,72 @@ class AgentService:
             if filename not in seen_filenames:
                 seen_filenames.add(filename)
                 unique_documents.append(doc)
-        
+
         # Limit to last 3 documents to avoid resource issues
         if len(unique_documents) > 3:
             unique_documents = unique_documents[-3:]
-        
+
         context_parts = [
-            "\n\n" + "="*80,
+            "\n\n" + "=" * 80,
             "🔔 DOCUMENTS ARE UPLOADED AND READY - READ THIS FIRST!",
-            "="*80,
+            "=" * 80,
             "\n⚠️⚠️⚠️ CRITICAL: Documents have been uploaded and their content is provided below.",
             "\n🚫 DO NOT call scan_document tool - the data is ALREADY HERE",
-            "🚫 DO NOT say 'I don\'t have access' - YOU DO HAVE ACCESS (see below)",
+            "🚫 DO NOT say 'I don't have access' - YOU DO HAVE ACCESS (see below)",
             "✅ ANALYZE the document content directly - it is ready for you\n",
         ]
-        
+
         if len(unique_documents) > 1:
-            context_parts.append(
-                f"\n📚 YOU HAVE ACCESS TO {len(unique_documents)} DOCUMENTS:"
-            )
-            context_parts.append(
-                "⚠️ Analyze and reference ALL relevant documents when appropriate."
-            )
+            context_parts.append(f"\n📚 YOU HAVE ACCESS TO {len(unique_documents)} DOCUMENTS:")
+            context_parts.append("⚠️ Analyze and reference ALL relevant documents when appropriate.")
             context_parts.append(
                 "⚠️ Maintain context across documents for comprehensive analysis.\n"
             )
         else:
-            context_parts.append(
-                f"\n📄 YOU HAVE ACCESS TO 1 DOCUMENT (see content below):\n"
-            )
+            context_parts.append(f"\n📄 YOU HAVE ACCESS TO 1 DOCUMENT (see content below):\n")
 
         for idx, doc in enumerate(unique_documents, 1):
             # Skip if not a dictionary
             if not isinstance(doc, dict):
                 logger.warning(f"Skipping non-dict document: {type(doc)}")
                 continue
-            
+
             filename = doc.get("filename", "Unknown")
             content = doc.get("content", "")
             file_type = doc.get("file_type", "unknown")
             truncated = doc.get("truncated", False)
             full_length = doc.get("full_length", len(content))
-            
+
             # Build document header
             context_parts.append(f"\n📄 Document {idx}: {filename}")
             context_parts.append(f"File Type: {file_type.upper()}")
             context_parts.append(f"Status: ✅ Scanned and Ready")
-            
+
             # Add metadata if available
             metadata = doc.get("metadata", {})
             if metadata:
-                metadata_str = ", ".join([f"{k}: {v}" for k, v in metadata.items() if k not in ['characters']])
+                metadata_str = ", ".join(
+                    [f"{k}: {v}" for k, v in metadata.items() if k not in ["characters"]]
+                )
                 if metadata_str:
                     context_parts.append(f"Details: {metadata_str}")
-            
+
             # Show truncation info
             if truncated:
-                context_parts.append(f"Size: {full_length} characters total (preview showing first 1,000)")
-            
+                context_parts.append(
+                    f"Size: {full_length} characters total (preview showing first 1,000)"
+                )
+
             # Add content with clear delimiter
             context_parts.append(f"\n--- DATA START ---\n{content[:1000]}")
             if truncated:
                 context_parts.append("\n--- DATA TRUNCATED (use above preview) ---")
             else:
                 context_parts.append("\n--- DATA END ---")
-        
-        context_parts.append("\n\n✅ All document data above is ready for your analysis. Proceed with answering the user's question using this data.")
+
+        context_parts.append(
+            "\n\n✅ All document data above is ready for your analysis. Proceed with answering the user's question using this data."
+        )
         context_parts.append("=== END DOCUMENTS ===\n")
 
         return "\n".join(context_parts)
@@ -1205,27 +1389,46 @@ class AgentService:
             # Check if response contains ACTUAL sensitive information (not tool usage mentions)
             # We WANT the agent to mention data sources and services used - that's transparent and helpful
             sensitive_indicators = [
-                r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*[\w\-]{8,}',  # ACTUAL keys with values (8+ chars)
-                r'(?i)(site[_-]?id|device[_-]?id)\s*[:=]\s*[\w\-]{5,}',  # ACTUAL IDs with values (5+ chars)
+                r"(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*[\w\-]{8,}",  # ACTUAL keys with values (8+ chars)
+                r"(?i)(site[_-]?id|device[_-]?id)\s*[:=]\s*[\w\-]{5,}",  # ACTUAL IDs with values (5+ chars)
                 r'\{"type":\s*"function"[^}]*"name":\s*"[^"]+"[^}]*\}',  # Full tool call JSON structure
                 # REMOVED: URLs - they are helpful references
                 # REMOVED: [REDACTED] markers - we don't use these anymore
                 # REMOVED: "using tool/service" - we WANT transparency about data sources
             ]
 
-            contains_sensitive = any(re.search(pattern, response_text) for pattern in sensitive_indicators)
+            contains_sensitive = any(
+                re.search(pattern, response_text) for pattern in sensitive_indicators
+            )
 
             # EXCEPTION: Allow document analysis responses even if they might match patterns
             # These are legitimate responses to user uploads
-            is_document_analysis = any(keyword in response_text.lower() for keyword in [
-                'document overview', 'file:', 'sheet:', 'rows:', 'columns:', 
-                'excel', 'spreadsheet', 'csv', 'analyzing', 'data preview',
-                'table:', 'primary content', 'who_aap', 'xlsx', 'document'
-            ])
+            is_document_analysis = any(
+                keyword in response_text.lower()
+                for keyword in [
+                    "document overview",
+                    "file:",
+                    "sheet:",
+                    "rows:",
+                    "columns:",
+                    "excel",
+                    "spreadsheet",
+                    "csv",
+                    "analyzing",
+                    "data preview",
+                    "table:",
+                    "primary content",
+                    "who_aap",
+                    "xlsx",
+                    "document",
+                ]
+            )
 
             if contains_sensitive and not is_document_analysis:
                 # Replace with professional response instead of showing redaction markers
-                logger.warning(f"Sensitive information detected in response, replacing with professional message. Original: {response_text[:200]}...")
+                logger.warning(
+                    f"Sensitive information detected in response, replacing with professional message. Original: {response_text[:200]}..."
+                )
                 response_data["response"] = (
                     "I apologize, but I cannot provide the specific technical details you're requesting. "
                     "This is to ensure security and protect sensitive information. "
@@ -1236,18 +1439,33 @@ class AgentService:
 
             # If no sensitive content detected, proceed with normal cleaning
             # Remove API keys and tokens (common patterns) - but only actual key VALUES
-            response_text = re.sub(r'(?i)(api\s+key|token|secret|password|auth\s+key)\s*[:=]\s*\S+', '[FILTERED]', response_text)
-            response_text = re.sub(r'(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+', '[FILTERED]', response_text)
+            response_text = re.sub(
+                r"(?i)(api\s+key|token|secret|password|auth\s+key)\s*[:=]\s*\S+",
+                "[FILTERED]",
+                response_text,
+            )
+            response_text = re.sub(
+                r"(?i)(api[_-]?key|token|secret|password|auth[_-]?key)\s*[:=]\s*\S+",
+                "[FILTERED]",
+                response_text,
+            )
 
             # DO NOT remove tool/service mentions - we WANT transparency about data sources!
             # User requirement #4: "AI AGENT MAKE USE OF ALL THE TOOLS, SERVICES"
             # Users need to know where data comes from for trust and verification
-            
+
             # Remove only FULL tool call JSON structures (internal implementation details)
-            response_text = re.sub(r'\{"type":\s*"function"[^}]*"name":\s*"[^"]+"\}', '[technical details removed]', response_text, flags=re.DOTALL)
-            
+            response_text = re.sub(
+                r'\{"type":\s*"function"[^}]*"name":\s*"[^"]+"\}',
+                "[technical details removed]",
+                response_text,
+                flags=re.DOTALL,
+            )
+
             # Remove only function call syntax like function_name(arg="value")
-            response_text = re.sub(r'\b\w+\([^)]*=\s*"[^"]*"\)', '[technical details removed]', response_text)
+            response_text = re.sub(
+                r'\b\w+\([^)]*=\s*"[^"]*"\)', "[technical details removed]", response_text
+            )
 
             # Remove internal IDs and site identifiers ONLY when they appear with assignment operators
             # Public reference URLs and general mentions of services are fine and helpful
@@ -1259,11 +1477,11 @@ class AgentService:
             ]
 
             for pattern in internal_id_patterns:
-                response_text = re.sub(pattern, '[details removed]', response_text)
+                response_text = re.sub(pattern, "[details removed]", response_text)
 
             # Remove escaped JSON artifacts from parsing
-            response_text = re.sub(r'\\"[^"]*\\":', '', response_text)
-            response_text = re.sub(r'\\n', ' ', response_text)
+            response_text = re.sub(r'\\"[^"]*\\":', "", response_text)
+            response_text = re.sub(r"\\n", " ", response_text)
 
             # DO NOT remove URLs, long numbers, or hex codes - these could be legitimate data references
             # Public reference URLs are helpful for users to verify information

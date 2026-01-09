@@ -148,6 +148,12 @@ class GeminiProvider(BaseAIProvider):
         if top_k is not None:
             config_params["top_k"] = top_k
         # Use max_tokens directly - DO NOT multiply
+        
+        # Retry configuration for token limit handling  
+        max_retries = 2
+        
+        for attempt in range(max_retries):
+            try:
         effective_max_tokens = max_tokens if max_tokens is not None else self.settings.AI_MAX_TOKENS
         if effective_max_tokens is not None:
             config_params["max_output_tokens"] = effective_max_tokens
@@ -181,7 +187,56 @@ class GeminiProvider(BaseAIProvider):
                 )
                 break  # Success, exit retry loop
             except Exception as e:
+                error_msg = str(e).lower()
                 logger.error(f"Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
+                
+                # Check for token limit errors
+                if ("token" in error_msg and ("limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg)) or "context length" in error_msg:
+                    logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
+                    
+                    # Convert messages back to dict format for truncation
+                    messages_dict = [{"role": "system", "content": system_instruction}]
+                    for msg in chat_history:
+                        messages_dict.append({
+                            "role": "user" if msg.role == "user" else "assistant",
+                            "content": msg.parts[0].text if msg.parts else ""
+                        })
+                    messages_dict.append({"role": "user", "content": message})
+                    
+                    # Truncate
+                    truncated = self._truncate_context_intelligently(messages_dict, system_instruction)
+                    
+                    # Convert back to Gemini format
+                    chat_history = []
+                    for msg in truncated[1:-1]:  # Skip system and current user message
+                        role = "user" if msg["role"] == "user" else "model"
+                        chat_history.append(
+                            types.Content(role=role, parts=[types.Part(text=msg.get("content", ""))])
+                        )
+                    
+                    # Retry with truncated context
+                    try:
+                        logger.info(f"Retrying with truncated context ({len(chat_history)} messages)...")
+                        chat = self.client.chats.create(
+                            model=self.settings.AI_MODEL,
+                            config=types.GenerateContentConfig(**config_params),
+                            history=chat_history,
+                        )
+                        response = chat.send_message(message)
+                        logger.info("✅ Successfully processed with truncated context")
+                        break  # Success, exit retry loop
+                    except Exception as retry_error:
+                        logger.error(f"Truncation retry failed: {retry_error}")
+                        return {
+                            "response": (
+                                "I apologize, but the conversation has become too long for my current context window. "
+                                "To continue, please start a new conversation or ask your question more concisely. "
+                                "I can still help with air quality information - just phrase it in a shorter way."
+                            ),
+                            "tools_used": [],
+                            "context_truncated": True,
+                        }
+                
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)
                     logger.info(f"Retrying in {delay} seconds...")

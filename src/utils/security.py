@@ -17,35 +17,32 @@ from typing import Any, Dict, List, Union
 # Dangerous patterns that should be blocked
 DANGEROUS_PATTERNS = [
     # SQL injection patterns
-    r'\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|JOIN)\b',
-    r';\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)',
-    r'--\s*$',  # SQL comments
-    r'/\*.*\*/',  # SQL block comments
-
+    r"\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|JOIN)\b",
+    r";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)",
+    r"--\s*$",  # SQL comments
+    r"/\*.*\*/",  # SQL block comments
     # Command injection patterns (REFINED - allow safe punctuation)
-    r'[;&|`$]\s',  # Shell metacharacters with space (avoid false positives)
-    r'\b(rm|del|format|shutdown|reboot|halt|poweroff)\s',  # Dangerous commands
-    r'\b(cmd|bash|sh|powershell)\.exe\b',  # Executable shells
-
+    r"[;&|`$]\s",  # Shell metacharacters with space (avoid false positives)
+    r"\b(rm|del|format|shutdown|reboot|halt|poweroff)\s",  # Dangerous commands
+    r"\b(cmd|bash|sh|powershell)\.exe\b",  # Executable shells
     # Path traversal
-    r'\.\./',  # Directory traversal
-    r'\\\.\\\.\\',  # Windows path traversal
-
+    r"\.\./",  # Directory traversal
+    r"\\\.\\\.\\",  # Windows path traversal
     # XSS patterns
-    r'<script[^>]*>.*?</script>',
-    r'javascript:',
-    r'on\w+\s*=',
-    r'<iframe[^>]*>',
-    r'<object[^>]*>',
-    r'<embed[^>]*>',
-
+    r"<script[^>]*>.*?</script>",
+    r"javascript:",
+    r"on\w+\s*=",
+    r"<iframe[^>]*>",
+    r"<object[^>]*>",
+    r"<embed[^>]*>",
     # Code execution patterns
-    r'\b(eval|exec|compile|__import__|importlib|subprocess|os\.system|os\.popen)\b',
-    r'\b(open|file|input)\s*\(',
+    r"\b(eval|exec|compile|__import__|importlib|subprocess|os\.system|os\.popen)\b",
+    r"\b(open|file|input)\s*\(",
 ]
 
 # Safe characters for different contexts (EXPANDED for international support)
-SAFE_CHARS = re.compile(r'[^a-zA-Z0-9\s\.,!?\-\'\"():;°µ²³/]')
+SAFE_CHARS = re.compile(r"[^a-zA-Z0-9\s\.,!?\-\'\"():;°µ²³/]")
+
 
 class InputSanitizer:
     """Comprehensive input sanitization and validation."""
@@ -70,20 +67,20 @@ class InputSanitizer:
             text = text[:max_length]
 
         # Normalize unicode
-        text = unicodedata.normalize('NFKC', text)
+        text = unicodedata.normalize("NFKC", text)
 
         # Remove null bytes and other control characters
-        text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+        text = "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
 
         # Remove dangerous patterns
         for pattern in DANGEROUS_PATTERNS:
-            text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
         # HTML escape
         text = html.escape(text, quote=True)
 
         # Remove excessive whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
         return text
 
@@ -111,7 +108,9 @@ class InputSanitizer:
                 return False
 
         # Check for excessive special characters
-        special_chars = sum(1 for char in message if not char.isalnum() and char not in ' \n\r\t.,!?-')
+        special_chars = sum(
+            1 for char in message if not char.isalnum() and char not in " \n\r\t.,!?-"
+        )
         if special_chars > len(message) * 0.3:  # More than 30% special chars
             return False
 
@@ -132,10 +131,10 @@ class InputSanitizer:
             raise ValueError("Filename must be a string")
 
         # Remove path separators
-        filename = re.sub(r'[\/\\]', '', filename)
+        filename = re.sub(r"[\/\\]", "", filename)
 
         # Remove dangerous characters
-        filename = re.sub(r'[<>:"|?*]', '', filename)
+        filename = re.sub(r'[<>:"|?*]', "", filename)
 
         # Limit length
         if len(filename) > 255:
@@ -162,10 +161,10 @@ class InputSanitizer:
             raise ValueError("Input must be a string")
 
         # Escape SQL LIKE wildcards
-        input_str = input_str.replace('%', '\\%').replace('_', '\\_')
+        input_str = input_str.replace("%", "\\%").replace("_", "\\_")
 
         # Remove other dangerous SQL characters
-        input_str = re.sub(r'[;\'\"]', '', input_str)
+        input_str = re.sub(r"[;\'\"]", "", input_str)
 
         return input_str
 
@@ -175,20 +174,20 @@ class ResponseFilter:
 
     # Patterns to remove from responses
     TOOL_MENTION_PATTERNS = [
-        r'\b(get_african_city_air_quality|get_city_air_quality|get_weather_forecast|search_web)\b',
-        r'\b(API call|function call|tool call|retrieved through)\b',
-        r'\b(using the|via the|through the)\s+\w+_?\w*\s+(API|service|function)\b',
-        r'\b(called|executed|invoked)\s+(the\s+)?\w+_?\w*\s+(function|API|tool)\b',
+        r"\b(get_african_city_air_quality|get_city_air_quality|get_weather_forecast|search_web)\b",
+        r"\b(API call|function call|tool call|retrieved through)\b",
+        r"\b(using the|via the|through the)\s+\w+_?\w*\s+(API|service|function)\b",
+        r"\b(called|executed|invoked)\s+(the\s+)?\w+_?\w*\s+(function|API|tool)\b",
     ]
 
     # Source name mappings
     SOURCE_MAPPINGS = {
-        'get_african_city_air_quality': 'AirQo',
-        'get_city_air_quality': 'WAQI',
-        'get_weather_forecast': 'Open-Meteo',
-        'search_web': 'web search',
-        'get_openmeteo_current_air_quality': 'Open-Meteo',
-        'get_multiple_african_cities_air_quality': 'AirQo',
+        "get_african_city_air_quality": "AirQo",
+        "get_city_air_quality": "WAQI",
+        "get_weather_forecast": "Open-Meteo",
+        "search_web": "web search",
+        "get_openmeteo_current_air_quality": "Open-Meteo",
+        "get_multiple_african_cities_air_quality": "AirQo",
     }
 
     @staticmethod
@@ -207,40 +206,43 @@ class ResponseFilter:
 
         # Remove API keys and tokens (more aggressive patterns)
         # Pattern 1: "API key is abc123" or "token is def456"
-        response = re.sub(r'(?i)(api\s*key|token|secret|password|auth\s*key)\s+(is|are|:|=)\s+[a-zA-Z0-9_\-]+', 
-                         r'\1 [FILTERED]', response)
-        # Pattern 2: key="abc123" or token="def456"  
-        response = re.sub(r'(?i)(api[-_]?key|token|secret|password|auth[-_]?key)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]{8,})[\'"]?',
-                         r'\1=[FILTERED]', response)
+        response = re.sub(
+            r"(?i)(api\s*key|token|secret|password|auth\s*key)\s+(is|are|:|=)\s+[a-zA-Z0-9_\-]+",
+            r"\1 [FILTERED]",
+            response,
+        )
+        # Pattern 2: key="abc123" or token="def456"
+        response = re.sub(
+            r'(?i)(api[-_]?key|token|secret|password|auth[-_]?key)\s*[:=]\s*[\'"]?([a-zA-Z0-9_\-]{8,})[\'"]?',
+            r"\1=[FILTERED]",
+            response,
+        )
         # Pattern 3: Plain alphanumeric keys/tokens after mention
-        response = re.sub(r'(?i)\b(key|token)\s+[a-zA-Z0-9_\-]{20,}\b', r'\1 [FILTERED]', response)
+        response = re.sub(r"(?i)\b(key|token)\s+[a-zA-Z0-9_\-]{20,}\b", r"\1 [FILTERED]", response)
 
         # Remove tool function names
         for pattern in ResponseFilter.TOOL_MENTION_PATTERNS:
-            response = re.sub(pattern, '', response, flags=re.IGNORECASE)
+            response = re.sub(pattern, "", response, flags=re.IGNORECASE)
 
         # Replace technical source mentions with user-friendly names
         for tech_name, user_name in ResponseFilter.SOURCE_MAPPINGS.items():
             response = re.sub(
-                rf'\b{re.escape(tech_name)}\b',
-                user_name,
-                response,
-                flags=re.IGNORECASE
+                rf"\b{re.escape(tech_name)}\b", user_name, response, flags=re.IGNORECASE
             )
 
         # Clean up any resulting awkward phrasing BUT PRESERVE NEWLINES
         # Split by lines first to preserve markdown structure
-        lines = response.split('\n')
+        lines = response.split("\n")
         cleaned_lines = []
         for line in lines:
             # Only collapse multiple spaces within a line, NOT newlines
-            line = re.sub(r'  +', ' ', line)  # Multiple spaces (not single space)
-            line = re.sub(r'\s*\.\s*\.', '.', line)  # Double periods
-            line = re.sub(r'\s*,\s*,', ',', line)  # Double commas
+            line = re.sub(r"  +", " ", line)  # Multiple spaces (not single space)
+            line = re.sub(r"\s*\.\s*\.", ".", line)  # Double periods
+            line = re.sub(r"\s*,\s*,", ",", line)  # Double commas
             cleaned_lines.append(line.strip())
-        
+
         # Rejoin with newlines to preserve markdown structure
-        response = '\n'.join(cleaned_lines)
+        response = "\n".join(cleaned_lines)
         return response.strip()
 
     @staticmethod
@@ -258,7 +260,7 @@ class ResponseFilter:
             sanitized = {}
             for key, value in data.items():
                 # Skip internal fields
-                if key.startswith('_') or key in ['tools_used', 'internal_data']:
+                if key.startswith("_") or key in ["tools_used", "internal_data"]:
                     continue
                 sanitized[key] = ResponseFilter.sanitize_for_display(value)
             return sanitized
@@ -286,22 +288,22 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
     sanitized = {}
 
     for key, value in data.items():
-        if key == 'message':
+        if key == "message":
             if not isinstance(value, str):
                 raise ValueError("Message must be a string")
             if not InputSanitizer.validate_message_content(value):
                 raise ValueError("Message contains potentially dangerous content")
             sanitized[key] = InputSanitizer.sanitize_text_input(value)
-        elif key == 'session_id':
+        elif key == "session_id":
             if value is not None:
                 if not isinstance(value, str):
                     raise ValueError("Session ID must be a string")
                 # Basic UUID validation
-                if not re.match(r'^[a-f0-9\-]{36}$', value):
+                if not re.match(r"^[a-f0-9\-]{36}$", value):
                     raise ValueError("Invalid session ID format")
             # Always include session_id in sanitized data, even if None
             sanitized[key] = value
-        elif key == 'file':
+        elif key == "file":
             # File validation is handled separately in the route
             sanitized[key] = value
         else:
@@ -329,6 +331,7 @@ def sanitize_response(response: str) -> str:
 
     # HTML escape dangerous characters
     import html
+
     sanitized = html.escape(response, quote=True)
 
     return sanitized

@@ -21,9 +21,7 @@ class WeatherService:
     def get_coordinates(self, city: str) -> dict[str, float] | None:
         """Get coordinates for a city name."""
         try:
-            params = {
-                "name": city, "count": 1, "language": "en", "format": "json"
-            }
+            params = {"name": city, "count": 1, "language": "en", "format": "json"}
             response = requests.get(self.GEOCODING_URL, params=params, timeout=10)  # type: ignore
             response.raise_for_status()
             data = response.json()

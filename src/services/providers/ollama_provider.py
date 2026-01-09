@@ -31,42 +31,116 @@ class OllamaProvider(BaseAIProvider):
         logger.info(
             f"Initialized Ollama provider. Host: {self.settings.OLLAMA_BASE_URL}, Model: {self.settings.AI_MODEL}"
         )
-    
+
     @staticmethod
     def _sanitize_text(text: str) -> str:
         """
         Sanitize text to handle problematic Unicode characters that cause UTF-8 encoding errors.
-        
+
         This fixes the 'surrogates not allowed' error by:
         1. Encoding to UTF-8 with error handling
         2. Decoding back to string
         3. Replacing unpaired surrogates with safe characters
-        
+
         Args:
             text: Text that may contain problematic Unicode
-            
+
         Returns:
             Sanitized text safe for UTF-8 encoding
         """
         if not text:
             return text
-        
+
         try:
             # Try to encode/decode to catch problematic characters
             # Use 'surrogatepass' to handle unpaired surrogates, then replace them
-            encoded = text.encode('utf-8', errors='surrogatepass')
-            return encoded.decode('utf-8', errors='replace')
+            encoded = text.encode("utf-8", errors="surrogatepass")
+            return encoded.decode("utf-8", errors="replace")
         except Exception as e:
             logger.warning(f"Text sanitization fallback used: {e}")
             # Fallback: remove any characters that can't be encoded
-            return text.encode('utf-8', errors='ignore').decode('utf-8')
+            return text.encode("utf-8", errors="ignore").decode("utf-8")
 
+    def _truncate_context_intelligently(
+        self, messages: list[dict], system_instruction: str
+    ) -> list[dict]:
+        """
+        Intelligently truncate conversation context when token limit is exceeded.
+
+        Strategy:
+        1. Keep system instruction (required)
+        2. Keep most recent user message (required)
+        3. Keep most recent 2-3 exchanges
+        4. Summarize or remove older messages
+        5. Keep tool results from recent exchanges
+
+        Args:
+            messages: List of message dictionaries
+            system_instruction: System instruction text
+
+        Returns:
+            Truncated list of messages
+        """
+        try:
+            # Separate system, user, assistant, and tool messages
+            system_msgs = [m for m in messages if m.get("role") == "system"]
+            user_msgs = [m for m in messages if m.get("role") == "user"]
+            assistant_msgs = [m for m in messages if m.get("role") == "assistant"]
+            tool_msgs = [m for m in messages if m.get("role") == "tool"]
+
+            # Keep system instruction (always first)
+            truncated = (
+                system_msgs[:1]
+                if system_msgs
+                else [{"role": "system", "content": system_instruction}]
+            )
+
+            # Keep last 3 user-assistant exchanges (6 messages)
+            recent_exchanges = []
+            min_keep = min(3, len(user_msgs))
+
+            for i in range(min_keep):
+                # Add user message
+                if len(user_msgs) > i:
+                    recent_exchanges.append(user_msgs[-(i + 1)])
+
+                # Add corresponding assistant message if exists
+                if len(assistant_msgs) > i:
+                    recent_exchanges.append(assistant_msgs[-(i + 1)])
+
+            # Reverse to maintain chronological order
+            recent_exchanges.reverse()
+
+            # Add recent tool messages (last 3)
+            recent_tools = tool_msgs[-3:] if len(tool_msgs) > 0 else []
+
+            # Combine: system + recent exchanges + recent tools + current user message
+            truncated.extend(recent_exchanges)
+            truncated.extend(recent_tools)
+
+            # Ensure the very last user message is included (if not already)
+            if user_msgs and user_msgs[-1] not in truncated:
+                truncated.append(user_msgs[-1])
+
+            logger.info(f"Context truncated from {len(messages)} to {len(truncated)} messages")
+            return truncated
+
+        except Exception as e:
+            logger.error(f"Error truncating context: {e}")
+            # Fallback: keep system + last 2 messages
+            return [
+                {"role": "system", "content": system_instruction},
+                messages[-2] if len(messages) >= 2 else messages[0],
+                messages[-1],
+            ]
+
+    @staticmethod
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """
         Get Ollama tool definitions.
 
         Ollama uses OpenAI-compatible format for tools.
-        
+
         Returns:
             List of tool dictionaries
         """
@@ -102,7 +176,7 @@ class OllamaProvider(BaseAIProvider):
         # Sanitize all text inputs to prevent UTF-8 encoding errors
         system_instruction = self._sanitize_text(system_instruction)
         message = self._sanitize_text(message)
-        
+
         # Build messages
         messages = [{"role": "system", "content": system_instruction}]
         for msg in history:
@@ -116,7 +190,7 @@ class OllamaProvider(BaseAIProvider):
         max_retries = 3
         base_delay = 1
         response = None  # Initialize response to prevent NoneType errors
-        
+
         for attempt in range(max_retries):
             try:
                 # Call Ollama with tools
@@ -133,7 +207,9 @@ class OllamaProvider(BaseAIProvider):
                 if max_tokens is not None:
                     options["num_predict"] = max_tokens
 
-                logger.info(f"Calling Ollama chat with model {self.settings.AI_MODEL}, messages count: {len(messages)}")
+                logger.info(
+                    f"Calling Ollama chat with model {self.settings.AI_MODEL}, messages count: {len(messages)}"
+                )
 
                 # Get tools for Ollama (uses OpenAI-compatible format)
                 tools = self.get_tool_definitions()
@@ -154,16 +230,20 @@ class OllamaProvider(BaseAIProvider):
 
                 # DEBUG: Log the full response to see what DeepSeek R1 returns
                 logger.info(f"DEBUG: Full Ollama response: {response}")
-                if 'message' in response and 'content' in response['message']:
-                    logger.info(f"DEBUG: Response content preview: {response['message']['content'][:200]}...")
+                if "message" in response and "content" in response["message"]:
+                    logger.info(
+                        f"DEBUG: Response content preview: {response['message']['content'][:200]}..."
+                    )
 
-                logger.info(f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}")
+                logger.info(
+                    f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}"
+                )
                 break  # Success, exit retry loop
-                
+
             except ConnectionError as e:
                 logger.error(f"Ollama connection error (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    delay = base_delay * (2**attempt)  # Exponential backoff
                     logger.info(f"Retrying in {delay} seconds...")
                     time.sleep(delay)
                 else:
@@ -173,11 +253,11 @@ class OllamaProvider(BaseAIProvider):
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                     }
-                    
+
             except TimeoutError as e:
                 logger.error(f"Ollama timeout (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
                     time.sleep(delay)
                 else:
@@ -187,11 +267,51 @@ class OllamaProvider(BaseAIProvider):
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                     }
-                    
+
             except Exception as e:
                 error_msg = str(e).lower()
                 logger.error(f"Ollama error (attempt {attempt + 1}/{max_retries}): {e}")
-                
+
+                # Check for token limit issues (prompt too long)
+                if (
+                    "prompt too long" in error_msg
+                    or "limit is" in error_msg
+                    or "token" in error_msg
+                    and "limit" in error_msg
+                ):
+                    logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
+
+                    # Try to intelligently truncate the context
+                    messages = self._truncate_context_intelligently(messages, system_instruction)
+
+                    # Retry with truncated context
+                    try:
+                        logger.info(
+                            f"Retrying with truncated context ({len(messages)} messages)..."
+                        )
+                        response = ollama.chat(
+                            model=self.settings.AI_MODEL,
+                            messages=messages,
+                            tools=tools,
+                            options=options,
+                        )
+                        logger.info("✅ Successfully processed with truncated context")
+                        break  # Success, exit retry loop
+                    except Exception as retry_error:
+                        logger.error(f"Truncation retry failed: {retry_error}")
+                        # Fall through to return user-friendly error
+                        return {
+                            "response": (
+                                "I apologize, but the conversation has become too long for my current context window. "
+                                "To continue, please start a new conversation or ask your question more concisely. "
+                                "I can still help with air quality information - just phrase it in a shorter way."
+                            ),
+                            "tools_used": [],
+                            "tokens_used": 0,
+                            "cost_estimate": 0.0,
+                            "context_truncated": True,
+                        }
+
                 # Check for rate limiting or quota issues
                 if "rate" in error_msg or "limit" in error_msg or "quota" in error_msg:
                     # Extract detailed rate limit information for monitoring
@@ -218,9 +338,9 @@ class OllamaProvider(BaseAIProvider):
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                     }
-                
+
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
                     time.sleep(delay)
                 else:
@@ -241,7 +361,9 @@ class OllamaProvider(BaseAIProvider):
                         }
                     else:
                         # Log the full error for developers but provide user-friendly message
-                        logger.error(f"Unexpected Ollama error (attempt {attempt + 1}/{max_retries}): {e}")
+                        logger.error(
+                            f"Unexpected Ollama error (attempt {attempt + 1}/{max_retries}): {e}"
+                        )
                         return {
                             "response": (
                                 "I apologize, but I'm experiencing technical difficulties with the local AI service. "
@@ -265,7 +387,11 @@ class OllamaProvider(BaseAIProvider):
 
         # If the response object is not a dict-like with .get(), try to adapt
         try:
-            has_message = response.get("message") if isinstance(response, dict) else getattr(response, 'message', None)
+            has_message = (
+                response.get("message")
+                if isinstance(response, dict)
+                else getattr(response, "message", None)
+            )
         except Exception:
             has_message = None
 
@@ -279,10 +405,12 @@ class OllamaProvider(BaseAIProvider):
             }
 
         # Normalize message object access
-        message_obj = response.get("message") if isinstance(response, dict) else getattr(response, 'message')
+        message_obj = (
+            response.get("message") if isinstance(response, dict) else getattr(response, "message")
+        )
 
         # Handle tool calls
-        if getattr(message_obj, 'tool_calls', None):
+        if getattr(message_obj, "tool_calls", None):
             tool_calls = message_obj.tool_calls
             logger.info(f"Ollama requested {len(tool_calls)} tool calls")
 
@@ -332,7 +460,11 @@ class OllamaProvider(BaseAIProvider):
                     if s:
                         combined.append(s)
                 if combined:
-                    assistant_summary = "TOOL RESULTS SUMMARY:\n\n" + "\n\n".join(combined) + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."
+                    assistant_summary = (
+                        "TOOL RESULTS SUMMARY:\n\n"
+                        + "\n\n".join(combined)
+                        + "\n\nPlease use the summary above to craft a complete, professional, and self-contained response to the user."
+                    )
                     messages.append({"role": "assistant", "content": assistant_summary})
             except Exception:
                 pass
@@ -347,7 +479,11 @@ class OllamaProvider(BaseAIProvider):
                         "top_p": top_p,
                     },
                 )
-                final_message = final_response.get("message") if isinstance(final_response, dict) else getattr(final_response, 'message', None)
+                final_message = (
+                    final_response.get("message")
+                    if isinstance(final_response, dict)
+                    else getattr(final_response, "message", None)
+                )
                 if not final_message:
                     logger.error(f"Ollama final response message is None: {final_response}")
                     return {
@@ -380,11 +516,11 @@ class OllamaProvider(BaseAIProvider):
 
         # Clean response
         response_text = self._clean_response(response_text)
-        
+
         # Debug: Log raw response for reasoning extraction debugging
         if self.settings.ENVIRONMENT == "development":
             logger.debug(f"Raw response text before reasoning extraction: {response_text[:500]}...")
-        
+
         # Extract thinking/reasoning steps if present
         thinking_steps, cleaned_response = self._extract_thinking_steps(response_text)
 
@@ -400,72 +536,81 @@ class OllamaProvider(BaseAIProvider):
     def _extract_thinking_steps(self, content: str) -> tuple[list[str], str]:
         """
         Extract thinking/reasoning steps from response content.
-        
+
         Ollama reasoning models (like Nemotron-3-nano) often wrap their thinking
         in special markers like <think>...</think> or similar patterns.
-        
+
         Args:
             content: The full response content
-            
+
         Returns:
             Tuple of (thinking_steps, cleaned_content)
             - thinking_steps: List of extracted thinking steps
             - cleaned_content: Content with thinking markers removed
         """
         import re
-        
+
         thinking_steps = []
         cleaned_content = content
-        
+
         # Pattern 1: <think>...</think> tags (Nemotron format shown in example)
-        think_pattern = r'<think>(.*?)</think>'
+        think_pattern = r"<think>(.*?)</think>"
         matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
         if matches:
             logger.info(f"Found {len(matches)} <think> tag matches in response")
             for match in matches:
                 # Split by newlines and filter empty lines
-                steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
+                steps = [step.strip() for step in match.strip().split("\n") if step.strip()]
                 thinking_steps.extend(steps)
             # Remove <think> tags from cleaned content
-            cleaned_content = re.sub(think_pattern, '', content, flags=re.DOTALL | re.IGNORECASE)
-        
+            cleaned_content = re.sub(think_pattern, "", content, flags=re.DOTALL | re.IGNORECASE)
+
         # Pattern 2: "Thinking..." prefix (some models use this)
-        thinking_prefix_pattern = r'^⠹?\s*Thinking\.\.\.?\s*\n(.*?)\n\.\.\.done thinking\.?\s*\n'
-        matches = re.findall(thinking_prefix_pattern, content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
+        thinking_prefix_pattern = r"^⠹?\s*Thinking\.\.\.?\s*\n(.*?)\n\.\.\.done thinking\.?\s*\n"
+        matches = re.findall(
+            thinking_prefix_pattern, content, re.MULTILINE | re.DOTALL | re.IGNORECASE
+        )
         if matches:
             for match in matches:
-                steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
+                steps = [step.strip() for step in match.strip().split("\n") if step.strip()]
                 thinking_steps.extend(steps)
-            cleaned_content = re.sub(thinking_prefix_pattern, '', content, flags=re.MULTILINE | re.DOTALL | re.IGNORECASE)
-        
+            cleaned_content = re.sub(
+                thinking_prefix_pattern, "", content, flags=re.MULTILINE | re.DOTALL | re.IGNORECASE
+            )
+
         # Pattern 3: Explicit "Step N:" patterns in reasoning models
-        step_pattern = r'(?:^|\n)(Step \d+:.*?)(?=\n(?:Step \d+:|$))'
+        step_pattern = r"(?:^|\n)(Step \d+:.*?)(?=\n(?:Step \d+:|$))"
         step_matches = re.findall(step_pattern, content, re.DOTALL | re.MULTILINE)
         if step_matches and not thinking_steps:  # Only if we haven't found thinking yet
             thinking_steps.extend([step.strip() for step in step_matches])
             # Don't remove step patterns from content as they might be part of the answer
-        
+
         # Pattern 4: Reasoning blocks marked with specific headers
-        reasoning_block_pattern = r'(?:^|\n)(?:Reasoning|Analysis|Thought Process):\s*\n(.*?)(?=\n\n|\n(?:[A-Z][a-z]+:)|$)'
+        reasoning_block_pattern = r"(?:^|\n)(?:Reasoning|Analysis|Thought Process):\s*\n(.*?)(?=\n\n|\n(?:[A-Z][a-z]+:)|$)"
         reasoning_matches = re.findall(reasoning_block_pattern, content, re.DOTALL | re.MULTILINE)
         if reasoning_matches and not thinking_steps:
             for match in reasoning_matches:
-                steps = [step.strip() for step in match.strip().split('\n') if step.strip()]
+                steps = [step.strip() for step in match.strip().split("\n") if step.strip()]
                 thinking_steps.extend(steps)
-        
+
         # Clean up the content
         cleaned_content = cleaned_content.strip()
-        
+
         # Remove any residual thinking markers
-        cleaned_content = re.sub(r'^\s*\.\.\.done thinking\.?\s*\n?', '', cleaned_content, flags=re.MULTILINE | re.IGNORECASE)
-        cleaned_content = re.sub(r'^\s*⠹\s*', '', cleaned_content, flags=re.MULTILINE)
-        
+        cleaned_content = re.sub(
+            r"^\s*\.\.\.done thinking\.?\s*\n?",
+            "",
+            cleaned_content,
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
+        cleaned_content = re.sub(r"^\s*⠹\s*", "", cleaned_content, flags=re.MULTILINE)
+
         # Log extraction results
         if thinking_steps:
             logger.info(f"Extracted {len(thinking_steps)} thinking steps: {thinking_steps[:3]}...")
         else:
             logger.debug("No thinking steps extracted from response")
-        
+
         return thinking_steps, cleaned_content
 
     def _clean_response(self, content: str) -> str:
@@ -481,28 +626,28 @@ class OllamaProvider(BaseAIProvider):
 
         # CRITICAL: Remove any leaked tool call syntax or internal function calls
         # Remove JSON-like function call patterns
-        content = re.sub(r'\{"type":\s*"function".*?\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{"name":\s*".*?".*?\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{"type":\s*"function".*?\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{"name":\s*".*?".*?\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{"parameters":\s*\{.*?\}\}', "", content, flags=re.DOTALL)
+
         # Remove function call syntax like (city="Gulu")
-        content = re.sub(r'\(\w+="[^"]*"\)', '', content)
-        
+        content = re.sub(r'\(\w+="[^"]*"\)', "", content)
+
         # Remove any remaining JSON objects that look like tool calls
-        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{[^}]*"type"[^}]*"function"[^}]*\}', "", content, flags=re.DOTALL)
+
         # Remove raw JSON data that might leak from tool results
-        content = re.sub(r'\{[^}]*"code"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"id"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"name"[^}]*\}', '', content, flags=re.DOTALL)
-        content = re.sub(r'\{[^}]*"location"[^}]*\}', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r'\{[^}]*"code"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"id"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"name"[^}]*\}', "", content, flags=re.DOTALL)
+        content = re.sub(r'\{[^}]*"location"[^}]*\}', "", content, flags=re.DOTALL)
+
         # Remove escaped JSON
-        content = re.sub(r'\\"[^"]*\\":', '', content)
-        content = re.sub(r'\\n', ' ', content)
-        
+        content = re.sub(r'\\"[^"]*\\":', "", content)
+        content = re.sub(r"\\n", " ", content)
+
         # Remove HTML tags
-        content = re.sub(r'<[^>]+>', '', content)
+        content = re.sub(r"<[^>]+>", "", content)
 
         # Remove code markers ONLY if they're not part of proper code blocks
         unwanted_patterns = [
@@ -515,7 +660,7 @@ class OllamaProvider(BaseAIProvider):
             content = content.replace(pattern, "```\n")
 
         # Ensure proper spacing after markdown elements
-        lines = content.split('\n')
+        lines = content.split("\n")
         cleaned_lines = []
         prev_was_header = False
         prev_was_list = False
@@ -524,26 +669,26 @@ class OllamaProvider(BaseAIProvider):
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            
+
             # Check for headers
-            is_header = stripped.startswith('#') and ' ' in stripped[:7]
-            
+            is_header = stripped.startswith("#") and " " in stripped[:7]
+
             # Check for list items
-            is_list = bool(re.match(r'^[\s]*[-*+]\s', line) or re.match(r'^[\s]*\d+\.\s', line))
-            
+            is_list = bool(re.match(r"^[\s]*[-*+]\s", line) or re.match(r"^[\s]*\d+\.\s", line))
+
             # Check if this is a table row
-            is_table_row = '|' in stripped and stripped.startswith('|') and stripped.endswith('|')
-            
+            is_table_row = "|" in stripped and stripped.startswith("|") and stripped.endswith("|")
+
             if is_table_row:
                 if not in_table:
                     # Starting a table - ensure blank line before
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
+                        cleaned_lines.append("")
                     in_table = True
-                    table_header_count = stripped.count('|') - 1
+                    table_header_count = stripped.count("|") - 1
                     cleaned_lines.append(line)
                 else:
-                    current_count = stripped.count('|') - 1
+                    current_count = stripped.count("|") - 1
                     if current_count == table_header_count:
                         cleaned_lines.append(line)
                     else:
@@ -553,28 +698,28 @@ class OllamaProvider(BaseAIProvider):
                 if in_table and stripped:
                     # End of table - ensure blank line after
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
+                        cleaned_lines.append("")
                     in_table = False
-                
+
                 # Ensure proper spacing after headers
                 if prev_was_header and stripped and not is_header:
                     if cleaned_lines and cleaned_lines[-1].strip():
-                        cleaned_lines.append('')
-                
+                        cleaned_lines.append("")
+
                 # Ensure proper spacing before headers
                 if is_header and cleaned_lines and cleaned_lines[-1].strip():
                     if not prev_was_list:
-                        cleaned_lines.append('')
-                
+                        cleaned_lines.append("")
+
                 cleaned_lines.append(line)
                 prev_was_header = is_header
                 prev_was_list = is_list
 
-        content = '\n'.join(cleaned_lines)
+        content = "\n".join(cleaned_lines)
 
         # Ensure proper spacing in tables
-        content = re.sub(r'\|([^|\n]*?)\|', r'| \1 |', content)
-        content = re.sub(r'\| +\|', r'| |', content)
+        content = re.sub(r"\|([^|\n]*?)\|", r"| \1 |", content)
+        content = re.sub(r"\| +\|", r"| |", content)
 
         return content.strip()
 
@@ -589,7 +734,12 @@ class OllamaProvider(BaseAIProvider):
                 if measurements:
                     m = measurements[0]
                     site = m.get("siteDetails") or {}
-                    site_name = site.get("name") or site.get("formatted_name") or result.get("search_location") or "Unknown site"
+                    site_name = (
+                        site.get("name")
+                        or site.get("formatted_name")
+                        or result.get("search_location")
+                        or "Unknown site"
+                    )
                     site_id = m.get("site_id") or site.get("site_id") or "Unknown"
                     time = m.get("time") or m.get("timestamp") or "Unknown time"
                     pm25 = m.get("pm2_5", {})
@@ -599,9 +749,13 @@ class OllamaProvider(BaseAIProvider):
                     summary_lines = [f"# Air Quality — {site_name}", ""]
                     # Removed site ID display for security
                     if isinstance(pm25, dict):
-                        summary_lines.append(f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})")
+                        summary_lines.append(
+                            f"- PM2.5: {pm25.get('value', 'N/A')} µg/m³ (AQI: {pm25.get('aqi', 'N/A')})"
+                        )
                     if isinstance(pm10, dict):
-                        summary_lines.append(f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})")
+                        summary_lines.append(
+                            f"- PM10: {pm10.get('value', 'N/A')} µg/m³ (AQI: {pm10.get('aqi', 'N/A')})"
+                        )
                     if aqi:
                         summary_lines.append(f"- Overall AQI/Category: {aqi}")
 

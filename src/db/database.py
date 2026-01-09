@@ -26,16 +26,16 @@ def parse_database_url_smart(db_url: str) -> str:
         postgresql://user:pass@word@host:5432/db -> correctly parsed
         postgresql://user:pass%40word@host:5432/db -> already URL-encoded, works fine
     """
-    if not db_url or '://' not in db_url:
+    if not db_url or "://" not in db_url:
         return db_url
 
     # If URL is already properly encoded (contains %40 for @), use standard parsing
-    if '%40' in db_url:
+    if "%40" in db_url:
         return db_url
 
     # Check if this looks like a malformed URL due to @ in password
     # Pattern: scheme://user:password@host:port/db where password might contain @
-    match = re.match(r'^([^:]+)://([^:@]+):([^@]+)@([^:]+)(?::(\d+))?(?:/(.+))?$', db_url)
+    match = re.match(r"^([^:]+)://([^:@]+):([^@]+)@([^:]+)(?::(\d+))?(?:/(.+))?$", db_url)
 
     if not match:
         # Standard URL, use as-is
@@ -44,22 +44,24 @@ def parse_database_url_smart(db_url: str) -> str:
     scheme, user, password_part, host_part, port, path = match.groups()
 
     # Check if host_part contains @, which indicates password had @ symbol
-    if '@' in host_part:
+    if "@" in host_part:
         # Split host_part at the last @ to separate actual host from password remainder
-        host_parts = host_part.rsplit('@', 1)
+        host_parts = host_part.rsplit("@", 1)
         if len(host_parts) == 2:
             password_remainder, actual_host = host_parts
-            full_password = password_part + '@' + password_remainder
+            full_password = password_part + "@" + password_remainder
 
             # Reconstruct URL with properly encoded password
-            encoded_password = quote(full_password, safe='')
+            encoded_password = quote(full_password, safe="")
             reconstructed = f"{scheme}://{user}:{encoded_password}@{actual_host}"
             if port:
                 reconstructed += f":{port}"
             if path:
                 reconstructed += f"/{path}"
 
-            logger.info(f"Fixed malformed database URL (password contained @): {db_url} -> {reconstructed}")
+            logger.info(
+                f"Fixed malformed database URL (password contained @): {db_url} -> {reconstructed}"
+            )
             return reconstructed
 
     # URL appears normal

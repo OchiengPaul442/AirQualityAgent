@@ -142,7 +142,12 @@ class OpenAIProvider(BaseAIProvider):
         force_scrape_tool = self._should_force_scrape_tool(message.lower())
         force_air_quality_tool, cities_to_query = self._should_force_air_quality_tool(message.lower())
 
-        if force_search_tool:
+        # Retry configuration for token limit handling
+        max_retries = 2
+        
+        for attempt in range(max_retries):
+            try:
+                if force_search_tool:
             logger.info("FORCING search_web tool call for query")
             # Add a fake tool call to force the model to use search
             messages.append({
@@ -380,6 +385,35 @@ class OpenAIProvider(BaseAIProvider):
                     "tools_used": [],
                     "rate_limit_info": error_details,  # Include for debugging
                 }
+            except openai.BadRequestError as e:
+                # Check for token limit errors
+                error_msg = str(e).lower()
+                if "token" in error_msg and ("limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg):
+                    logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
+                    
+                    # Try to intelligently truncate the context
+                    messages = self._truncate_context_intelligently(messages, system_instruction)
+                    
+                    # Retry with truncated context
+                    try:
+                        logger.info(f"Retrying with truncated context ({len(messages)} messages)...")
+                        api_params["messages"] = messages
+                        response = self.client.chat.completions.create(**api_params)
+                        logger.info("✅ Successfully processed with truncated context")
+                        break  # Success, exit retry loop
+                    except Exception as retry_error:
+                        logger.error(f"Truncation retry failed: {retry_error}")
+                        return {
+                            "response": (
+                                "I apologize, but the conversation has become too long for my current context window. "
+                                "To continue, please start a new conversation or ask your question more concisely. "
+                                "I can still help with air quality information - just phrase it in a shorter way."
+                            ),
+                            "tools_used": [],
+                            "context_truncated": True,
+                        }
+                # Not a token limit error, raise it
+                raise
             except Exception as e:
                 logger.error(f"Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
