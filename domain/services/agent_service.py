@@ -895,6 +895,7 @@ class AgentService:
         history = history or []
 
         # CRITICAL FIX: Merge LangChain memory history with incoming history
+        # LangChain provides backup/supplemental memory when database is unavailable
         if session_id:
             try:
                 lc_memory = self._get_or_create_langchain_memory(session_id)
@@ -902,12 +903,20 @@ class AgentService:
                     langchain_history = lc_memory.get_history()
                     if langchain_history:
                         logger.info(f"📚 Loaded {len(langchain_history)} messages from LangChain memory for session {session_id}")
-                        # Merge histories, prioritizing database history if both exist
+                        
+                        # If no database history, use LangChain as primary source
                         if not history:
                             history = langchain_history
+                            logger.info(f"Using LangChain memory as primary source ({len(history)} messages)")
                         else:
-                            # Database history takes precedence, but supplement with LangChain if needed
-                            logger.info(f"Using database history ({len(history)} messages), LangChain available as backup")
+                            # Database history exists - LangChain is supplemental
+                            # Merge unique messages from LangChain that aren't in database
+                            db_contents = {msg.get("content", "") for msg in history}
+                            for lc_msg in langchain_history:
+                                if lc_msg.get("content", "") not in db_contents:
+                                    history.append(lc_msg)
+                                    logger.debug(f"Added unique message from LangChain to history")
+                            logger.info(f"Using database history ({len(history)} messages total after LangChain merge)")
             except Exception as e:
                 logger.warning(f"Failed to load LangChain memory for session {session_id}: {e}")
 

@@ -67,7 +67,7 @@ class LangChainSessionMemory:
         
         # Check if Redis is enabled in settings
         if not self.settings.REDIS_ENABLED:
-            logger.info(f"Redis disabled in settings. Using in-memory chat history for session {session_id}")
+            logger.info(f"Redis disabled in settings (REDIS_ENABLED={self.settings.REDIS_ENABLED}). Using in-memory chat history for session {session_id}")
             self.chat_history = InMemoryChatMessageHistory()
             return
         
@@ -97,11 +97,13 @@ class LangChainSessionMemory:
         """Add a user message to memory."""
         self.chat_history.add_user_message(message)
         self._trim_messages()
+        logger.info(f"Added user message to LangChain memory (session: {self.session_id[:8]}...): {message[:50]}...")
 
     def add_ai_message(self, message: str) -> None:
         """Add an AI message to memory."""
         self.chat_history.add_ai_message(message)
         self._trim_messages()
+        logger.info(f"Added AI message to LangChain memory (session: {self.session_id[:8]}...): {message[:50]}...")
 
     def _trim_messages(self) -> None:
         """Trim messages to stay within limits."""
@@ -136,6 +138,7 @@ class LangChainSessionMemory:
                 "content": msg.content
             })
 
+        logger.info(f"Retrieved {len(history)} messages from LangChain memory (session: {self.session_id[:8]}...)")
         return history
 
     def clear(self) -> None:

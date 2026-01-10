@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     def validate_database_url(cls, v):
         return "sqlite:///./data/chat_sessions.db" if not v or not v.strip() else v
 
+    @field_validator("REDIS_ENABLED", mode="before")
+    @classmethod
+    def validate_redis_enabled(cls, v):
+        """Convert string 'true'/'false' to boolean."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return False
+
     # API Configuration
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Aeris-AQ - Air Quality AI Assistant API"
@@ -40,6 +50,16 @@ class Settings(BaseSettings):
     MAX_MESSAGES_PER_SESSION: int = 100
     SESSION_LIMIT_WARNING_THRESHOLD: int = 90
     DISABLE_SESSION_LIMIT: bool = True
+
+    @field_validator("DISABLE_SESSION_LIMIT", mode="before")
+    @classmethod
+    def validate_disable_session_limit(cls, v):
+        """Convert string 'true'/'false' to boolean."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return True  # Default to True for testing
 
     # Data Sources
     WAQI_API_KEY: str = ""
