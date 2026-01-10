@@ -208,9 +208,21 @@ class VisualizationService:
             if y_column is None:
                 y_columns = []
             elif isinstance(y_column, str):
-                y_columns = [y_column]
+                # Handle comma-separated columns for multi-series
+                if ',' in y_column:
+                    y_columns = [col.strip() for col in y_column.split(',')]
+                else:
+                    y_columns = [y_column]
             else:
                 y_columns = list(y_column)  # type: ignore
+
+            # For histogram, if no y_column provided, use first numeric column
+            if chart_type == "histogram" and not y_columns:
+                numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                if numeric_cols:
+                    y_columns = [numeric_cols[0]]
+                else:
+                    raise ValueError("No numeric columns found for histogram")
 
             if chart_type == "line":
                 for y_col in y_columns:
