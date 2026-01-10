@@ -9,6 +9,14 @@ import logging
 import re
 from typing import Any
 
+# Import centralized formatters to reduce code duplication
+from ...utils.result_formatters import (
+    format_air_quality_result,
+    format_forecast_result,
+    format_scrape_result,
+    format_search_result,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,8 +111,39 @@ class QueryAnalyzer:
                 - skip_ai_tools: bool (whether AI should call additional tools)
         """
         message_lower = message.lower()
-        
+
+        # CRITICAL: Check data_analysis and research FIRST (higher priority than educational)
+        # Data analysis queries - Need web search + visualization
+        data_indicators = [
+            'statistics', 'stats', 'data', 'chart', 'graph', 'trend',
+            'deaths', 'mortality', 'study', 'research', 'report',
+        ]
+
+        if any(indicator in message_lower for indicator in data_indicators):
+            return {
+                "query_type": "data_analysis",
+                "confidence": 0.85,
+                "recommended_tools": ["search_web", "generate_chart"],
+                "skip_ai_tools": False,
+            }
+
+        # Research queries - Need web search only
+        research_indicators = [
+            'latest', 'recent', 'current', 'new', 'update',
+            'policy', 'regulation', 'guideline', 'standard',
+            '2024', '2025', '2026',
+        ]
+
+        if any(indicator in message_lower for indicator in research_indicators):
+            return {
+                "query_type": "research",
+                "confidence": 0.8,
+                "recommended_tools": ["search_web"],
+                "skip_ai_tools": False,
+            }
+
         # Educational queries - No tools needed, pure AI knowledge
+        # CHECKED LAST to avoid false positives from "tell me about recent studies"
         educational_patterns = [
             r'\bwhat is\b',
             r'\bexplain\b',
@@ -115,7 +154,7 @@ class QueryAnalyzer:
             r'\bdifference between\b',
             r'\bcompare.*and\b',  # "compare PM2.5 and PM10" (concepts, not cities)
         ]
-        
+
         # Check if it's educational (no location mentions)
         if any(re.search(pattern, message_lower) for pattern in educational_patterns):
             # Verify it's not location-specific
@@ -126,17 +165,17 @@ class QueryAnalyzer:
                     "recommended_tools": [],
                     "skip_ai_tools": True,  # AI can answer without tools
                 }
-        
+
         # Location-specific queries - Need air quality tools
         location_indicators = [
             'in kampala', 'in london', 'in nairobi', 'in paris',
             'air quality', 'aqi', 'pollution level', 'pm2.5', 'pm10',
             'safe to', 'breathe', 'outdoor', 'exercise',
         ]
-        
+
         has_location = any(city in message_lower for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES)
         has_aq_keyword = any(indicator in message_lower for indicator in location_indicators)
-        
+
         if has_location and has_aq_keyword:
             return {
                 "query_type": "location_specific",
@@ -144,36 +183,7 @@ class QueryAnalyzer:
                 "recommended_tools": ["get_city_air_quality", "get_african_city_air_quality"],
                 "skip_ai_tools": False,  # Let proactive system handle it
             }
-        
-        # Data analysis queries - Need web search + visualization
-        data_indicators = [
-            'statistics', 'stats', 'data', 'chart', 'graph', 'trend',
-            'deaths', 'mortality', 'study', 'research', 'report',
-        ]
-        
-        if any(indicator in message_lower for indicator in data_indicators):
-            return {
-                "query_type": "data_analysis",
-                "confidence": 0.85,
-                "recommended_tools": ["search_web", "generate_chart"],
-                "skip_ai_tools": False,
-            }
-        
-        # Research queries - Need web search only
-        research_indicators = [
-            'latest', 'recent', 'current', 'new', 'update',
-            'policy', 'regulation', 'guideline', 'standard',
-            '2024', '2025', '2026',
-        ]
-        
-        if any(indicator in message_lower for indicator in research_indicators):
-            return {
-                "query_type": "research",
-                "confidence": 0.8,
-                "recommended_tools": ["search_web"],
-                "skip_ai_tools": False,
-            }
-        
+
         # Default: Let proactive system decide
         return {
             "query_type": "general",
@@ -216,16 +226,24 @@ class QueryAnalyzer:
 
         is_air_quality = any(keyword in message_lower for keyword in air_quality_keywords)
 
-        # Extract coordinates (lat/lon)
+        # Extract coordinates (lat/lon) - handle multiple formats
         coordinates = None
-        coord_pattern = r"(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)"
-        coord_match = re.search(coord_pattern, message)
+        # Format 1: "latitude X, longitude Y" or "lat X, lon Y"
+        coord_pattern_verbose = r'(?:latitude|lat)\s+(-?\d+\.?\d*)\s*,?\s*(?:longitude|lon)\s+(-?\d+\.?\d*)'
+        # Format 2: Simple "X, Y"
+        coord_pattern_simple = r'(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)'
+        
+        coord_match = re.search(coord_pattern_verbose, message, re.IGNORECASE)
+        if not coord_match:
+            coord_match = re.search(coord_pattern_simple, message)
+        
         if coord_match:
             try:
                 lat = float(coord_match.group(1))
                 lon = float(coord_match.group(2))
                 if -90 <= lat <= 90 and -180 <= lon <= 180:
                     coordinates = {"latitude": lat, "longitude": lon}
+                    logger.info(f"📍 Extracted coordinates: lat={lat}, lon={lon}")
             except ValueError:
                 pass
 
@@ -266,32 +284,53 @@ class QueryAnalyzer:
         """
         message_lower = message.lower()
 
-        # Keywords that indicate need for current/supplemental information
+        # Educational/definition questions that DON'T need search
+        educational_patterns = [
+            r"what (is|are|does|do|means?)",
+            r"how (does|do|is|are)",
+            r"define",
+            r"explain",
+            r"tell me about",
+            r"why (is|are|does|do)",
+        ]
+
+        # Check if it's a simple educational question without location/data requests
+        is_educational = any(re.search(pattern, message_lower) for pattern in educational_patterns)
+        is_short = len(message.split()) < 15  # Short questions are usually educational
+
+        # Keywords that definitely need search
         temporal_keywords = ["latest", "recent", "new", "current", "update", "2024", "2025", "2026", "this year", "last year"]
         policy_keywords = ["policy", "regulation", "legislation", "law", "government", "standard", "standards"]
-        research_keywords = ["research", "study", "studies", "report", "findings", "evidence"]
+        research_keywords = ["research", "study", "studies", "report", "findings", "evidence", "published"]
         data_keywords = ["statistics", "stats", "data", "trends", "analysis", "deaths", "mortality", "how many", "list"]
-        
-        # Exclude simple definitional questions
-        basic_definition = any(q in message_lower for q in ["what is", "what are", "define", "explain"]) and len(message.split()) < 12
-        
-        # Search if: temporal, policy, research, data keywords present OR not a basic definition
+
+        # If it's an educational question without search triggers, skip search
+        if is_educational and is_short:
+            has_search_trigger = any(k in message_lower for k in temporal_keywords + policy_keywords + research_keywords + data_keywords)
+            if not has_search_trigger:
+                logger.info(f"🎓 Educational question detected - no search needed: '{message[:50]}...'")
+                return {
+                    "requires_search": False,
+                    "search_query": None
+                }
+
+        # Search if: temporal, policy, research, data keywords present
         has_search_keyword = any(k in message_lower for k in temporal_keywords + policy_keywords + research_keywords + data_keywords)
-        
+
         # Log detection for debugging
         if has_search_keyword:
             matched_keywords = [k for k in temporal_keywords + policy_keywords + research_keywords + data_keywords if k in message_lower]
             logger.info(f"🔍 Search keywords detected: {matched_keywords}")
-        
-        requires_search = has_search_keyword or not basic_definition
-        
+
+        requires_search = has_search_keyword
+
         # Generate focused search query
         search_query = message
         if any(k in message_lower for k in data_keywords):
             search_query += " WHO EPA statistics"
-        
-        logger.info(f"🔍 Search detection result: requires_search={requires_search}, query='{search_query[:50]}...'")
-        
+
+        logger.info(f"🔍 Search detection result: requires_search={requires_search}, query='{search_query[:50] if search_query else 'None'}...'")
+
         return {
             "requires_search": requires_search,
             "search_query": search_query if requires_search else None
@@ -593,11 +632,11 @@ class QueryAnalyzer:
                 - query_classification: Classification results
         """
         logger.info(f"🔍 Analyzing query: {message[:100]}...")
-        
+
         # STEP 1: Classify query intelligently
         classification = QueryAnalyzer.classify_query_type(message)
         logger.info(f"📊 Query type: {classification['query_type']} (confidence: {classification['confidence']:.2f})")
-        
+
         # STEP 2: Early return for educational queries (no tools needed)
         if classification["query_type"] == "educational" and classification["skip_ai_tools"]:
             logger.info("✅ Educational query - no tools needed")
@@ -618,6 +657,14 @@ class QueryAnalyzer:
         forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
         search_analysis = QueryAnalyzer.detect_search_query(message)
         data_analysis = QueryAnalyzer.detect_data_analysis_query(message)
+
+        # CRITICAL FIX: Detect composite queries with "AND" keyword
+        # Example: "Gulu (coords: 2.7747, 32.2994) AND Kampala" → call 2+ tools
+        has_and_keyword = " and " in message.lower()
+        has_multiple_locations = (
+            len(aq_analysis["cities"]) >= 2
+            or (aq_analysis["coordinates"] and len(aq_analysis["cities"]) >= 1)
+        )
 
         # Call air quality tools (optimized - only if location detected)
         if aq_analysis["is_air_quality"] and (aq_analysis["cities"] or aq_analysis["coordinates"]):
@@ -655,7 +702,7 @@ class QueryAnalyzer:
                 except Exception as e:
                     logger.error(f"Proactive tool call failed for {city}: {e}")
 
-            # Call for coordinates
+            # Call for coordinates (CRITICAL: Call this even if cities are present in composite queries)
             if aq_analysis["coordinates"]:
                 try:
                     coords = aq_analysis["coordinates"]
@@ -672,6 +719,10 @@ class QueryAnalyzer:
                     )
                 except Exception as e:
                     logger.error(f"Proactive tool call failed for coordinates: {e}")
+
+            # Log composite query detection
+            if has_and_keyword and has_multiple_locations:
+                logger.info(f"🔗 COMPOSITE QUERY DETECTED: Called {len(tools_called)} tools for multiple locations")
 
         # Call forecast tools
         if (
@@ -699,17 +750,17 @@ class QueryAnalyzer:
         # Call search tool intelligently (optimized to supplement, not overwhelm)
         # CRITICAL FIX: Ensure research and data_analysis queries ALWAYS trigger search
         should_search = (
-            search_analysis["requires_search"] 
+            search_analysis["requires_search"]
             or classification["query_type"] in ["data_analysis", "research"]
         )
-        
+
         # CRITICAL FIX: Generate search query if not provided but should_search is True
         search_query = search_analysis["search_query"]
         if should_search and not search_query:
             # Fallback: use the original message as search query
             search_query = message
             logger.info(f"🔍 Generated fallback search query from message: '{search_query[:50]}...'")
-        
+
         if should_search and search_query:
             try:
                 logger.info(
@@ -767,19 +818,19 @@ class QueryAnalyzer:
         import re
         url_pattern = r'https?://[^\s]+'
         urls = re.findall(url_pattern, message)
-        
+
         if urls:
             # Filter for relevant domains (WHO, EPA, government, research sites)
             relevant_domains = ['who.int', 'epa.gov', 'gov.', 'edu', 'org']
             relevant_urls = []
-            
+
             for url in urls:
                 if any(domain in url.lower() for domain in relevant_domains):
                     relevant_urls.append(url)
-            
+
             if relevant_urls:
                 logger.info(f"🔗 Detected {len(relevant_urls)} relevant URLs for scraping: {relevant_urls}")
-                
+
                 for url in relevant_urls[:2]:  # Limit to 2 URLs to avoid overload
                     try:
                         logger.info(f"🔧 PROACTIVE CALL: scrape_website for {url}")
@@ -990,125 +1041,3 @@ class QueryAnalyzer:
         except Exception as e:
             logger.error(f"Error generating chart from AQ data: {e}", exc_info=True)
             return None
-
-
-def format_air_quality_result(result: dict) -> str:
-    """Format air quality result for context injection."""
-    try:
-        import re
-
-        # Filter out internal identifiers from the result data
-        def filter_internal_ids(obj):
-            """Recursively filter out internal IDs from nested dict/list structures."""
-            if isinstance(obj, dict):
-                filtered = {}
-                for key, value in obj.items():
-                    # Skip keys that contain internal ID patterns
-                    if re.search(
-                        r"(?i)(site_id|device_id|station_id|sensor_id|location_id|monitor_id|node_id)",
-                        key,
-                    ):
-                        continue
-                    # Filter values that look like internal IDs (hex strings, long alphanumeric)
-                    if isinstance(value, str) and re.match(
-                        r"^[a-f0-9]{24}$|^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
-                        value,
-                    ):
-                        continue
-                    # Recursively filter nested structures
-                    filtered[key] = filter_internal_ids(value)
-                return filtered
-            elif isinstance(obj, list):
-                return [filter_internal_ids(item) for item in obj]
-            else:
-                return obj
-
-        # Filter the result to remove internal IDs
-        filtered_result = filter_internal_ids(result)
-
-        if isinstance(filtered_result, dict):
-            if filtered_result.get("success") and filtered_result.get("measurements"):
-                m = filtered_result["measurements"][0]
-                pm25 = m.get("pm2_5", {})
-                pm10 = m.get("pm10", {})
-                site = m.get("siteDetails", {})
-
-                formatted = f"AQI: {pm25.get('aqi', 'N/A')}\n"
-                formatted += f"PM2.5: {pm25.get('value', 'N/A')} µg/m³\n"
-                formatted += f"PM10: {pm10.get('value', 'N/A')} µg/m³\n"
-                formatted += f"Location: {site.get('name', 'Unknown')}\n"
-                formatted += f"Time: {m.get('time', 'Unknown')}\n"
-                return formatted
-            elif filtered_result.get("data"):
-                # OpenMeteo format
-                data = filtered_result["data"]
-                formatted = f"AQI: {data.get('aqi', 'N/A')}\n"
-                formatted += f"PM2.5: {data.get('pm2_5', 'N/A')} µg/m³\n"
-                formatted += f"PM10: {data.get('pm10', 'N/A')} µg/m³\n"
-                return formatted
-        return str(filtered_result)[:500]  # Truncate if too long
-    except Exception:
-        return str(result)[:500]
-
-
-def format_search_result(result: dict) -> str:
-    """Format search result for context injection."""
-    try:
-        if isinstance(result, dict) and result.get("results"):
-            formatted = ""
-            for i, item in enumerate(result["results"][:3], 1):  # Top 3 results
-                formatted += f"{i}. {item.get('title', 'No title')}\n"
-                formatted += f"   {item.get('snippet', 'No snippet')[:200]}...\n"
-                formatted += f"   Source: {item.get('url', 'N/A')}\n\n"
-            return formatted
-        return str(result)[:500]
-    except Exception:
-        return str(result)[:500]
-
-
-def format_scrape_result(result: dict) -> str:
-    """Format scrape result for context injection."""
-    try:
-        if isinstance(result, dict):
-            content = result.get("content", "")
-            return content[:1000] + "..." if len(content) > 1000 else content
-        return str(result)[:500]
-    except Exception:
-        return str(result)[:500]
-
-
-def format_forecast_result(result: dict) -> str:
-    """Format forecast result for context injection."""
-    try:
-        if isinstance(result, dict):
-            if result.get("success") and result.get("forecast"):
-                forecast_data = result["forecast"]
-                formatted = ""
-
-                # Handle different forecast formats
-                if isinstance(forecast_data, list) and len(forecast_data) > 0:
-                    # Take the first forecast entry (tomorrow)
-                    tomorrow = forecast_data[0]
-                    formatted += f"Date: {tomorrow.get('date', 'Unknown')}\n"
-                    formatted += f"AQI: {tomorrow.get('aqi', 'N/A')}\n"
-                    formatted += f"PM2.5: {tomorrow.get('pm25', 'N/A')} µg/m³\n"
-                    formatted += f"PM10: {tomorrow.get('pm10', 'N/A')} µg/m³\n"
-                    formatted += f"O3: {tomorrow.get('o3', 'N/A')} µg/m³\n"
-                    formatted += f"NO2: {tomorrow.get('no2', 'N/A')} µg/m³\n"
-                    formatted += f"SO2: {tomorrow.get('so2', 'N/A')} µg/m³\n"
-                    formatted += f"CO: {tomorrow.get('co', 'N/A')} µg/m³\n"
-                elif isinstance(forecast_data, dict):
-                    # Single forecast entry
-                    formatted += f"Date: {forecast_data.get('date', 'Unknown')}\n"
-                    formatted += f"AQI: {forecast_data.get('aqi', 'N/A')}\n"
-                    formatted += f"PM2.5: {forecast_data.get('pm25', 'N/A')} µg/m³\n"
-                    formatted += f"PM10: {forecast_data.get('pm10', 'N/A')} µg/m³\n"
-
-                # Add source information
-                if result.get("data_source"):
-                    formatted += f"Source: {result['data_source']}\n"
-
-                return formatted
-        return str(result)[:500]  # Truncate if too long
-    except Exception:
-        return str(result)[:500]

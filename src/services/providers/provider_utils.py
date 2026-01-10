@@ -6,30 +6,14 @@ Provides both synchronous and asynchronous utilities for maximum flexibility.
 """
 
 import asyncio
-import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Union
+from typing import Any, Awaitable, Callable
+
+# Import centralized formatters
 
 logger = logging.getLogger(__name__)
-
-
-def format_tool_result_as_json(result: Any) -> str:
-    """
-    Format tool result as readable JSON string.
-
-    Args:
-        result: Tool result to format (dict, list, or primitive)
-
-    Returns:
-        Formatted JSON string
-    """
-    try:
-        return json.dumps(result, indent=2, ensure_ascii=False)
-    except (TypeError, ValueError) as e:
-        logger.warning(f"Failed to format tool result as JSON: {e}")
-        return str(result)
 
 
 def retry_with_exponential_backoff(
@@ -310,7 +294,7 @@ def get_user_friendly_error_message(
     if "model" in error_msg_lower and (
         "not found" in error_msg_lower or "does not exist" in error_msg_lower
     ):
-        return f"The requested model is not available. Please check your model configuration."
+        return "The requested model is not available. Please check your model configuration."
 
     # Content policy/filtering errors
     if "content" in error_msg_lower and (

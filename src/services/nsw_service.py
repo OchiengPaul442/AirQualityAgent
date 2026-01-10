@@ -260,7 +260,7 @@ class NSWService:
         Returns:
             Pollutant data across all sites
         """
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         end_date = datetime.now()
         start_date = end_date - timedelta(hours=hours)

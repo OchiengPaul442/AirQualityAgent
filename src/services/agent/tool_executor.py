@@ -358,7 +358,7 @@ class ToolExecutor:
             "message": f"Unable to retrieve air quality data for {city}. This location may not have active monitoring coverage.",
             "suggestion": "search_web",
             "search_query": f"air quality {city} Africa",
-            "fallback_advice": f"Consider checking local environmental agencies or nearby cities with monitoring stations.",
+            "fallback_advice": "Consider checking local environmental agencies or nearby cities with monitoring stations.",
         }
 
     def execute(self, function_name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -391,7 +391,7 @@ class ToolExecutor:
                     result = self.waqi.search_stations(args.get("keyword"))
                     self._record_success("waqi")
                     return result
-                except Exception as e:
+                except Exception:
                     self._record_failure("waqi")
                     raise
 

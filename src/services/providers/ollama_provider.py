@@ -2,9 +2,9 @@
 Ollama Provider Implementation.
 
 Handles local Ollama deployment for air quality agent with enhanced error handling and rate limit detection.
+Now includes ModelAdapter support for models with weak or no tool-calling capabilities.
 """
 
-import asyncio
 import json
 import logging
 import time
@@ -13,6 +13,7 @@ from typing import Any
 
 import ollama
 
+from ..agent.model_adapter import ModelAdapter
 from .base_provider import BaseAIProvider
 
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ class OllamaProvider(BaseAIProvider):
         messages.append({"role": "user", "content": message})
 
         tools_used = []
-        
+
         # Track truncation status
         was_truncated = False
 
@@ -240,14 +241,14 @@ class OllamaProvider(BaseAIProvider):
                 logger.info(
                     f"Ollama response type: {type(response)}, keys: {response.keys() if isinstance(response, dict) else 'not dict'}"
                 )
-                
+
                 # Check if response was truncated
                 if isinstance(response, dict):
                     done_reason = response.get("done_reason")
                     if done_reason == "length":
                         logger.warning("Response was truncated due to max_tokens limit - will add notification")
                         was_truncated = True
-                
+
                 break  # Success, exit retry loop
 
             except ConnectionError as e:
@@ -289,7 +290,7 @@ class OllamaProvider(BaseAIProvider):
                     or "token" in error_msg
                     and "limit" in error_msg
                 ):
-                    logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
+                    logger.warning("⚠️ Token limit exceeded. Attempting intelligent truncation...")
 
                     # Try to intelligently truncate the context
                     messages = self._truncate_context_intelligently(messages, system_instruction)
@@ -348,7 +349,7 @@ class OllamaProvider(BaseAIProvider):
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                     }
-                
+
                 # Check for 500 Internal Server Error from Ollama
                 if "500" in error_msg or "Internal Server Error" in error_msg:
                     logger.error(f"Ollama returned 500 error: {e}")
@@ -449,12 +450,12 @@ class OllamaProvider(BaseAIProvider):
                 # Execute tool
                 try:
                     tool_result = self.tool_executor.execute(function_name, function_args)
-                    
+
                     # CRITICAL: Capture chart result if generate_chart was called
                     if function_name == "generate_chart" and isinstance(tool_result, dict):
                         chart_result = tool_result
                         logger.info("📊 Chart generation detected - captured result")
-                        
+
                 except Exception as e:
                     logger.error(f"Tool execution failed: {e}")
                     tool_result = {"error": str(e)}
@@ -511,43 +512,43 @@ class OllamaProvider(BaseAIProvider):
             except Exception as e:
                 error_msg = str(e).lower()
                 logger.error(f"Ollama final response error: {e}")
-                
+
                 # CRITICAL FIX: Handle common errors and return tool results if available
                 # 1. Handle token limit errors (prompt too long)
                 if "too long" in error_msg or "limit" in error_msg:
                     logger.warning("⚠️ Token limit exceeded - returning tool results directly")
-                    
+
                     # Build response from tool summaries
                     response_parts = []
                     for tool_result in tool_results:
                         summary = self._summarize_tool_result(tool_result)
                         if summary:
                             response_parts.append(summary)
-                    
+
                     if response_parts:
                         response_text = "\n\n".join(response_parts)
                     else:
                         response_text = "I've processed your request, but the response was too large. Please try a more specific query or smaller dataset."
-                    
+
                     result = {
                         "response": response_text,
                         "tools_used": tools_used,
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                     }
-                    
+
                     # Include chart_result if it was captured
                     if chart_result:
                         result["chart_result"] = chart_result
                         result["chart_generated"] = True
                         logger.info("📊 Chart data included in token limit error recovery")
-                    
+
                     return result
-                
+
                 # 2. Handle 500 errors but preserve chart results
                 if ("500" in error_msg or "internal server" in error_msg) and "generate_chart" in tools_used:
                     logger.warning("⚠️ Ollama 500 error but chart was generated - returning chart result")
-                    
+
                     # Build result dict with chart_result
                     result = {
                         "response": (
@@ -564,14 +565,14 @@ class OllamaProvider(BaseAIProvider):
                         "cost_estimate": 0.0,
                         "chart_generated": True,
                     }
-                    
+
                     # Include chart_result if it was captured
                     if chart_result:
                         result["chart_result"] = chart_result
                         logger.info("📊 Chart data included in 500 error recovery response")
-                    
+
                     return result
-                
+
                 return {
                     "response": "I was unable to process the data retrieved. Please try again with a different question.",
                     "tools_used": tools_used,
@@ -593,7 +594,7 @@ class OllamaProvider(BaseAIProvider):
 
         # Clean response
         response_text = self._clean_response(response_text)
-        
+
         # Add truncation notification if response was truncated
         if was_truncated:
             truncation_note = (
@@ -618,7 +619,7 @@ class OllamaProvider(BaseAIProvider):
         # CRITICAL FIX: If response is empty but tools were used successfully, generate fallback response
         if not cleaned_response and tools_used:
             logger.warning("⚠️ AI returned empty response after tool calls - generating fallback from tool results")
-            
+
             # Generate a basic response from tool results
             fallback_parts = []
             for i, tool_result in enumerate(tool_results):
@@ -635,13 +636,13 @@ class OllamaProvider(BaseAIProvider):
                             summary = self._summarize_tool_result(sub_result)
                             if summary:
                                 fallback_parts.append(summary)
-            
+
             if fallback_parts:
                 cleaned_response = "Here's the information I found:\n\n" + "\n\n".join(fallback_parts)
                 logger.info("✅ Generated fallback response from tool results")
             else:
                 cleaned_response = "I was unable to find the data needed to answer your question. Please try rephrasing or asking about a different topic."
-        
+
         # CRITICAL FIX: If no tools were used and response is empty/generic, provide helpful message
         if not tools_used and (not cleaned_response or len(cleaned_response) < 50):
             logger.warning("⚠️ No tools called and response is empty/short - may need data retrieval")
@@ -657,12 +658,12 @@ class OllamaProvider(BaseAIProvider):
             "tokens_used": 0,  # Ollama doesn't provide token counts
             "cost_estimate": 0.0,  # Local model, no cost
         }
-        
+
         # Add chart_result if chart was generated
         if chart_result:
             result["chart_result"] = chart_result
             logger.info("📊 Chart data included in Ollama response")
-        
+
         return result
 
     def _extract_thinking_steps(self, content: str) -> tuple[list[str], str]:
@@ -860,13 +861,13 @@ class OllamaProvider(BaseAIProvider):
         try:
             if not isinstance(result, dict):
                 return ""
-            
+
             # Handle scan_document results  (file upload analysis)
             if result.get("success") and result.get("file_type") and result.get("content"):
                 filename = result.get("filename", "document")
                 file_type = result.get("file_type", "file")
                 content = result.get("content", "")
-                
+
                 # Try to extract meaningful information from content
                 if isinstance(content, str):
                     lines = content.split('\n')[:10]  # First 10 lines
@@ -879,9 +880,9 @@ class OllamaProvider(BaseAIProvider):
                     summary = f"📊 Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
                 else:
                     summary = f"📄 Document '{filename}' ({file_type}) processed successfully."
-                
+
                 return summary
-            
+
             # Handle chart generation results
             if result.get("chart_data") and result.get("chart_type"):
                 chart_type = result.get("chart_type", "chart")
@@ -889,7 +890,7 @@ class OllamaProvider(BaseAIProvider):
                 original_rows = result.get("original_rows", data_rows)
                 data_sampled = result.get("data_sampled", False)
                 chart_data = result.get("chart_data", "")
-                
+
                 # CRITICAL: Embed chart in markdown response
                 summary = f"📊 {chart_type.title()} Chart Generated\n\n"
                 summary += f"![{chart_type.title()} Chart]({chart_data})\n\n"
@@ -898,7 +899,7 @@ class OllamaProvider(BaseAIProvider):
                     summary += f" (sampled from {original_rows} total rows for clarity)"
                 summary += ".\n\nThe visualization above shows the data trends. Review it for key insights!"
                 return summary
-            
+
             # Handle search_web results
             if result.get("results") and isinstance(result["results"], list):
                 results = result["results"][:3]  # Top 3 results
@@ -908,7 +909,7 @@ class OllamaProvider(BaseAIProvider):
                     snippet = r.get("snippet", "")[:150]
                     summary_parts.append(f"{idx}. {title}: {snippet}...")
                 return "\n".join(summary_parts)
-            
+
             # Handle failed tool calls with suggestions
             if not result.get("success"):
                 message = result.get("message", "")
@@ -959,3 +960,106 @@ class OllamaProvider(BaseAIProvider):
         except Exception:
             pass
         return ""
+
+    async def _handle_text_based_tool_extraction(
+        self,
+        response_text: str,
+        messages: list[dict],
+        temperature: float,
+        top_p: float,
+        tools: list[dict]
+    ) -> tuple[str, list[str]]:
+        """
+        Extract and execute tool calls from plain text responses.
+        
+        This is crucial for models that don't support native tool calling.
+        
+        Args:
+            response_text: Model's text response
+            messages: Conversation messages
+            temperature: Temperature setting
+            top_p: Top-p setting
+            tools: Available tools
+            
+        Returns:
+            Tuple of (final_response, tools_used)
+        """
+        tools_used = []
+
+        # Get list of available tool names
+        available_tools = [tool["function"]["name"] for tool in tools]
+
+        # Extract tool calls from text
+        extracted_calls = ModelAdapter.extract_tool_calls_from_text(
+            response_text,
+            available_tools
+        )
+
+        if not extracted_calls:
+            # No tool calls found, return original response
+            return response_text, tools_used
+
+        logger.info(f"🔍 Extracted {len(extracted_calls)} tool calls from text response")
+
+        # Execute extracted tool calls
+        tool_results = []
+        for call in extracted_calls:
+            try:
+                logger.info(f"🔧 Executing extracted tool: {call.name}")
+                result = self.tool_executor.execute(call.name, call.arguments)
+                tool_results.append(result)
+                tools_used.append(call.name)
+
+                # Add tool result to messages
+                summary = self._summarize_tool_result(result)
+                if summary:
+                    messages.append({
+                        "role": "tool",
+                        "content": summary
+                    })
+                else:
+                    messages.append({
+                        "role": "tool",
+                        "content": json.dumps(result)[:2000]  # Truncate large results
+                    })
+
+            except Exception as e:
+                logger.error(f"Failed to execute extracted tool {call.name}: {e}")
+                continue
+
+        if not tool_results:
+            # No successful tool executions
+            return response_text, tools_used
+
+        # Get final response with tool results
+        try:
+            logger.info("🔄 Generating final response with tool results...")
+            final_response = ollama.chat(
+                model=self.settings.AI_MODEL,
+                messages=messages,
+                options={
+                    "temperature": temperature,
+                    "top_p": top_p,
+                }
+            )
+
+            final_message = (
+                final_response.get("message")
+                if isinstance(final_response, dict)
+                else getattr(final_response, "message", None)
+            )
+
+            if final_message and final_message.content:
+                return final_message.content, tools_used
+            else:
+                # Fallback to summarizing tool results
+                logger.warning("No final response from model, summarizing tool results")
+                summaries = [self._summarize_tool_result(r) for r in tool_results if self._summarize_tool_result(r)]
+                return "\n\n".join(summaries), tools_used
+
+        except Exception as e:
+            logger.error(f"Failed to get final response: {e}")
+            # Return tool result summaries
+            summaries = [self._summarize_tool_result(r) for r in tool_results if self._summarize_tool_result(r)]
+            return "\n\n".join(summaries) if summaries else response_text, tools_used
+

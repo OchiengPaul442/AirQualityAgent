@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Aeris-AQ - Air Quality AI Assistant API"
     ENVIRONMENT: str = "development"  # development, production, testing
 
+    # Session Configuration
+    MAX_MESSAGES_PER_SESSION: int = 100  # Prompt user to start new session after this limit
+    SESSION_LIMIT_WARNING_THRESHOLD: int = 90  # Warn when approaching limit
+
     # Air Quality Data Sources
     WAQI_API_KEY: str = ""  # World Air Quality Index API key
     AIRQO_API_TOKEN: str = ""  # AirQo Analytics API token
@@ -88,20 +92,20 @@ class Settings(BaseSettings):
     MAX_TOKENS_GENERAL: int = 1500
     MAX_TOKENS_SIMPLE: int = 1200
     MAX_TOKENS_POLICY: int = 2000
-    
+
     # Style preset temperature/top_p (configurable per role)
     TEMPERATURE_EXECUTIVE: float = 0.3
     TEMPERATURE_TECHNICAL: float = 0.4
     TEMPERATURE_GENERAL: float = 0.5
     TEMPERATURE_SIMPLE: float = 0.6
     TEMPERATURE_POLICY: float = 0.35
-    
+
     TOP_P_EXECUTIVE: float = 0.85
     TOP_P_TECHNICAL: float = 0.88
     TOP_P_GENERAL: float = 0.9
     TOP_P_SIMPLE: float = 0.92
     TOP_P_POLICY: float = 0.87
-    
+
     # Image Upload Support
     SUPPORT_IMAGE_UPLOAD: bool = True  # Enable/disable image upload feature
     MAX_IMAGE_SIZE_MB: int = 10  # Maximum image size in megabytes

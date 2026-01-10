@@ -1,7 +1,7 @@
 [project]
 name = "airquality-agent"
-version = "2.9.6"
-description = "Aeris-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) - Production-ready air quality monitoring and AI assistant"
+version = "2.10.0"
+description = "Aeris-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) - Production-ready air quality monitoring and AI assistant with advanced orchestration"
 license = {text = "AGPL-3.0"}
 authors = [
     {name = "Paul Ochieng", email = "ochiengpaul442@gmail.com"}

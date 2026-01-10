@@ -1,9 +1,6 @@
-import asyncio
 import json
 import logging
 import os
-import time
-from typing import Any, Dict, List
 
 try:
     from ddgs import DDGS  # type: ignore
@@ -215,16 +212,16 @@ class SearchService:
             except ImportError:
                 logger.error("DashScope SDK not installed. Install with: pip install dashscope")
                 raise ImportError("DashScope SDK not installed")
-            
+
             # Get API key from environment
             api_key = os.getenv("DASHSCOPE_API_KEY", "")
             if not api_key:
                 logger.warning("DASHSCOPE_API_KEY not set, skipping DashScope search")
                 raise ValueError("DASHSCOPE_API_KEY not configured")
-            
+
             # Set API key
             dashscope.api_key = api_key
-            
+
             # Define the web_search tool for Qwen to use
             tools = [
                 {
@@ -245,7 +242,7 @@ class SearchService:
                     }
                 }
             ]
-            
+
             # Create a message that will trigger the web search
             messages = [
                 {
@@ -257,9 +254,9 @@ class SearchService:
                     "content": f"Search the internet for: {query}. Provide {max_results} relevant results with titles, URLs, and descriptions."
                 }
             ]
-            
+
             logger.info(f"Initiating DashScope web search for: {query}")
-            
+
             # Call Qwen model with tools
             response = Generation.call(
                 model="qwen-plus",  # Use qwen-plus for better tool calling
@@ -267,20 +264,20 @@ class SearchService:
                 tools=tools,
                 result_format="message"
             )
-            
+
             # Check response status
             if response.status_code != HTTPStatus.OK:
                 logger.error(f"DashScope API error: {response.code} - {response.message}")
                 raise Exception(f"DashScope API error: {response.message}")
-            
+
             # Parse the response
             results = []
-            
+
             # Check if the model made tool calls
             if hasattr(response.output, 'choices') and len(response.output.choices) > 0:
                 choice = response.output.choices[0]
                 message = choice.message
-                
+
                 # Check for tool calls in the response
                 if hasattr(message, 'tool_calls') and message.tool_calls:
                     for tool_call in message.tool_calls:
@@ -292,15 +289,15 @@ class SearchService:
                                 logger.info(f"DashScope tool call result: {tool_result}")
                             except json.JSONDecodeError:
                                 logger.warning("Could not parse tool call arguments")
-                
+
                 # Get the text content which contains the search results
                 if hasattr(message, 'content') and message.content:
                     content = message.content
-                    
+
                     # Parse the content to extract search results
                     # The model returns formatted text with search results
                     # We'll create structured results from the text response
-                    
+
                     # For now, create a single comprehensive result
                     # In production, you may want to parse this more carefully
                     results.append({
@@ -316,7 +313,7 @@ class SearchService:
                             "provider": "DashScope/Qwen"
                         }
                     })
-            
+
             # If we got results from DashScope
             if results:
                 logger.info(f"DashScope search returned {len(results)} results")
@@ -324,7 +321,7 @@ class SearchService:
             else:
                 logger.warning(f"No results from DashScope for query: {query}")
                 return []
-                
+
         except ImportError as e:
             logger.error(f"DashScope SDK import error: {e}")
             raise

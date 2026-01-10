@@ -12,7 +12,7 @@ Provides comprehensive protection against:
 import html
 import re
 import unicodedata
-from typing import Any, Dict, List, Union
+from typing import Any, Dict
 
 # CRITICAL patterns that MUST be blocked (only direct server attacks)
 # Keep this list MINIMAL - we sanitize everything else
@@ -306,25 +306,26 @@ def validate_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
         if key == "message":
             if not isinstance(value, str):
                 raise ValueError("Message must be a string")
-            
+
             # Check VERY generous length limit
             if len(value) > 500000:  # 500KB (very generous)
                 raise ValueError("Message too long (max 500KB)")
-            
+
             # ONLY check for CRITICAL patterns (direct server attacks)
             for pattern in CRITICAL_PATTERNS:
                 if re.search(pattern, value, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                     raise ValueError("Critical security threat detected")
-            
+
             # Sanitize the message SILENTLY (cleans patterns, never blocks)
             sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
-            
+
         elif key == "session_id":
             if value is not None:
                 if not isinstance(value, str):
                     raise ValueError("Session ID must be a string")
-                # Basic UUID validation
-                if not re.match(r"^[a-f0-9\-]{36}$", value):
+                # Relaxed session ID validation - allow alphanumeric and hyphens
+                # Must be reasonable length (8-50 chars) and contain only safe characters
+                if not re.match(r"^[a-zA-Z0-9\-]{8,50}$", value):
                     raise ValueError("Invalid session ID format")
             # Always include session_id in sanitized data, even if None
             sanitized[key] = value

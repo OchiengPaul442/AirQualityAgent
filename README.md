@@ -19,8 +19,12 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
 
 **Meet Aeris-AQ**: Your friendly, knowledgeable Air Quality AI Assistant dedicated to helping you understand air quality data, environmental health, and pollution monitoring. Simply address Aeris-AQ by name in your conversations!
 
-**Latest Updates (v2.9.4):**
+**Latest Updates (v2.10.0):**
 
+- **Advanced Orchestration**: Multi-tool orchestration layer with retry logic, fallback chains, and intelligent tool selection for optimal performance on low-end models
+- **Model Adapter**: Extract and execute tool calls from plain text responses - enables models without native tool-calling support to use tools effectively
+- **Response Validation**: Automatic quality checks and enhancement for consistent, high-quality outputs across all models
+- **Enhanced Reliability**: Circuit breakers, exponential backoff retries, and intelligent error recovery
 - **Cost Optimization**: Comprehensive model performance testing completed - identified best low-cost models
 - Security Enhancement: Environment-based logging controls to prevent AI response leakage in production
 - Rate Limiting: Endpoint-specific limits (30/minute for chat, 50/minute for queries) to prevent server abuse
@@ -46,6 +50,15 @@ Production-ready air quality monitoring and AI agent with industry-standard patt
 ---
 
 ## Features
+
+### Advanced Agent Orchestration
+
+- **Intelligent Tool Orchestration**: Multi-step reasoning with dependency-aware tool chaining
+- **Automatic Fallbacks**: Smart fallback chains when primary tools fail (e.g., AirQo → WAQI → OpenMeteo)
+- **Retry Logic**: Exponential backoff with circuit breakers for resilient operation
+- **Model Adapter**: Pattern detection and extraction for models without native tool-calling
+- **Response Validation**: Automatic quality checks and formatting enhancement
+- **Low-End Model Support**: Optimized for models with weak or no tool-calling capabilities
 
 ### AI Capabilities
 

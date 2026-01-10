@@ -27,6 +27,7 @@ from src.db.repository import (
     get_all_sessions,
     get_recent_session_history,
     get_session,
+    get_session_message_count,
 )
 from src.services.agent_service import AgentService
 from src.services.airqo_service import AirQoService
@@ -484,11 +485,31 @@ async def chat(
                 logger.info(
                     f"Retrieved {len(history_objs)} messages from session history for context"
                 )
+
+            # Check session message limit
+            message_count = get_session_message_count(db, session_id)
+            session_warning = None
+
+            if message_count >= settings.MAX_MESSAGES_PER_SESSION:
+                session_warning = (
+                    f"⚠️ **Session Limit Reached ({message_count} messages)** - "
+                    "Please start a new session for optimal performance. "
+                    "Long sessions may cause slower responses and increased costs."
+                )
+                logger.warning(f"Session {session_id} has reached limit: {message_count} messages")
+            elif message_count >= settings.SESSION_LIMIT_WARNING_THRESHOLD:
+                session_warning = (
+                    f"ℹ️ **Approaching Session Limit** ({message_count}/{settings.MAX_MESSAGES_PER_SESSION} messages) - "
+                    "Consider starting a new session soon for better performance."
+                )
+                logger.info(f"Session {session_id} approaching limit: {message_count} messages")
+
         except Exception as db_error:
             logger.warning(
                 f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
             )
             history_objs = []
+            session_warning = None
 
         # Convert to format expected by agent
         history: list[dict[str, str]] = [
@@ -546,7 +567,7 @@ async def chat(
 
         # Process message with timing for cost tracking and timeout protection
         start_time = time.time()
-        
+
         # Add timeout protection for agent processing (110 seconds, slightly less than client timeout)
         try:
             import asyncio
@@ -570,7 +591,7 @@ async def chat(
                 status_code=504,
                 detail="Request processing timed out. Please try a simpler query or smaller document."
             )
-        
+
         processing_time = time.time() - start_time
 
         final_response = sanitize_response(result["response"])
@@ -635,6 +656,10 @@ async def chat(
         # Extract chart data if present in result
         chart_data = result.get("chart_data")
         chart_metadata = result.get("chart_metadata")
+
+        # Prepend session warning to response if needed
+        if session_warning:
+            final_response = f"{session_warning}\n\n{final_response}"
 
         return ChatResponse(
             response=final_response,

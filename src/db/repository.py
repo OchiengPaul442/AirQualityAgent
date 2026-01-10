@@ -83,6 +83,21 @@ def get_session_history(
     return query.all()
 
 
+def get_session_message_count(db: Session, session_id: str) -> int:
+    """
+    Get the total number of messages in a session.
+    Used for enforcing session limits.
+
+    Args:
+        db: Database session
+        session_id: Session identifier
+
+    Returns:
+        Total message count in the session
+    """
+    return db.query(ChatMessage).filter(ChatMessage.session_id == session_id).count()
+
+
 def get_recent_session_history(
     db: Session, session_id: str, max_messages: int = 20
 ) -> list[ChatMessage]:

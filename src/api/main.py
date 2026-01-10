@@ -3,11 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from src.api.error_handlers import register_error_handlers

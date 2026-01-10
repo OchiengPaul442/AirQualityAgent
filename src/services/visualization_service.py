@@ -16,7 +16,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import seaborn as sns
 
 # Use non-interactive backend for server environments
@@ -96,35 +95,35 @@ class VisualizationService:
                 df = pd.DataFrame(data)
             else:
                 df = data.copy()
-            
+
             # OPTIMIZATION: Limit data size to prevent timeout and memory issues
             # For chart visualization, prioritize recent/relevant data
             MAX_ROWS = 1000  # Reduced from 5000 for faster processing
             original_row_count = len(df)
             data_was_sampled = False
-            
+
             if len(df) > MAX_ROWS:
                 logger.warning(f"Large dataset ({len(df)} rows) detected. Sampling to {MAX_ROWS} rows for visualization.")
                 data_was_sampled = True
-                
+
                 # Intelligent sampling: prioritize recent data for time-series
                 # Keep last 70%, first 20%, sample middle 10%
                 last_count = int(MAX_ROWS * 0.7)
                 first_count = int(MAX_ROWS * 0.2)
                 middle_count = MAX_ROWS - last_count - first_count
-                
+
                 last_part = df.tail(last_count)
                 first_part = df.head(first_count)
-                
+
                 if len(df) > (first_count + last_count + 10):
                     middle_part = df.iloc[first_count:-last_count].sample(
-                        min(middle_count, len(df) - first_count - last_count), 
+                        min(middle_count, len(df) - first_count - last_count),
                         random_state=42
                     )
                     df = pd.concat([first_part, middle_part, last_part]).sort_index()
                 else:
                     df = pd.concat([first_part, last_part]).sort_index()
-                
+
                 logger.info(f"Sampled dataset: {original_row_count} → {len(df)} rows (prioritizing recent data)")
 
             # Auto-detect columns if not provided

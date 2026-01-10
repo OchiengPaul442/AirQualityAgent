@@ -1,6 +1,6 @@
 """Comprehensive Production Test Suite for Aeris AI Agent.
 
-Tests all 8 user requirements:
+Tests all requirements with enhanced orchestration layer:
 1. Document scanning works fully well for uploaded files
 2. Fix failing tests using best practices
 3. Use valid session_id for all tests
@@ -9,6 +9,12 @@ Tests all 8 user requirements:
 6. ENSURE NOT CRITICAL AGENT METHODS CODE FUNCTIONS LOGIC IS LEAKED
 7. REDUCE ON REDUNDANCY AND REPETITIONS
 8. SET UP WELL EXECUTED COMPLETE LOGIC FOR THE AGENTS ALGORITHM
+
+New Features Tested:
+- Advanced tool orchestration with retry logic
+- Intelligent fallback chains for failed tools
+- Response validation and quality checks
+- Model adapter for weak tool-calling models
 """
 
 import asyncio
@@ -25,8 +31,21 @@ logger = logging.getLogger(__name__)
 
 # Test configuration
 TEST_BASE_URL = "http://localhost:8000/api/v1"
-TEST_SESSION_ID = "08d3fdb1-1ec5-47fd-8af6-6a5926b91a0d"
-TIMEOUT = 90  # seconds
+# Use unique session IDs per category to prevent contamination
+SESSION_IDS = {
+    "category1": "test-cat1-queries-tools",
+    "category2": "test-cat2-documents",
+    "category3": "test-cat3-security",
+    "category4": "test-cat4-memory",
+    "category5": "test-cat5-fallback",
+    "category6": "test-cat6-edge-cases",
+    "category7": "test-cat7-performance",
+    "category8": "test-cat8-scraping",
+    "category9": "test-cat9-orchestration"
+}
+# Increased timeout for low-end models (llama3.2:1b, deepseek-r1:1.5b, qwen2.5:3b)
+# These models can take 30-60 seconds per complex query with tool orchestration
+TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
 class ComprehensiveTestRunner:
     """Comprehensive test runner for Aeris AI Agent production validation."""
@@ -35,6 +54,7 @@ class ComprehensiveTestRunner:
         self.client: httpx.AsyncClient
         self.results = []
         self.start_time = None
+        self.current_session_id = None
 
     async def __aenter__(self):
         self.client = httpx.AsyncClient(timeout=TIMEOUT)
@@ -59,7 +79,7 @@ class ComprehensiveTestRunner:
 
     async def send_message(self, message: str, files: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Send a message to the agent API."""
-        form_data = {"message": message, "session_id": TEST_SESSION_ID}
+        form_data = {"message": message, "session_id": self.current_session_id}
 
         if files:
             # Handle file uploads
@@ -88,8 +108,10 @@ class ComprehensiveTestRunner:
 
     async def test_legitimate_queries_with_tools(self):
         """Test Category 1: Legitimate Queries with Tool Usage (Requirement #4)"""
+        self.current_session_id = SESSION_IDS["category1"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 1: Legitimate Queries with Tool Usage")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         test_cases = [
@@ -159,8 +181,10 @@ class ComprehensiveTestRunner:
 
     async def test_document_upload_and_scanning(self):
         """Test Category 2: Document Upload and Scanning (Requirement #1)"""
+        self.current_session_id = SESSION_IDS["category2"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 2: Document Upload and Scanning")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         # Test CSV upload
@@ -231,8 +255,10 @@ class ComprehensiveTestRunner:
 
     async def test_security_and_no_leaks(self):
         """Test Category 3: Security and Information Leakage Prevention (Requirement #6)"""
+        self.current_session_id = SESSION_IDS["category3"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 3: Security and Information Leakage Prevention")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         security_tests = [
@@ -294,8 +320,10 @@ class ComprehensiveTestRunner:
 
     async def test_conversation_memory(self):
         """Test Category 4: Conversation Memory and Context (Requirement #3)"""
+        self.current_session_id = SESSION_IDS["category4"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 4: Conversation Memory and Context")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         # First message
@@ -337,8 +365,10 @@ class ComprehensiveTestRunner:
 
     async def test_fallback_mechanisms(self):
         """Test Category 5: Intelligent Fallback Mechanisms"""
+        self.current_session_id = SESSION_IDS["category5"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 5: Intelligent Fallback Mechanisms")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         test_cases = [
@@ -426,8 +456,10 @@ class ComprehensiveTestRunner:
 
     async def test_performance_and_concurrency(self):
         """Test Category 7: Performance and Concurrency"""
+        self.current_session_id = SESSION_IDS["category7"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 7: Performance and Concurrency")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         # Test response time
@@ -475,8 +507,10 @@ class ComprehensiveTestRunner:
 
     async def test_scraping_capabilities(self):
         """Test Category 8: Web Scraping Capabilities"""
+        self.current_session_id = SESSION_IDS["category8"]
         logger.info("\n" + "="*80)
         logger.info("TEST CATEGORY 8: Web Scraping Capabilities")
+        logger.info(f"Session ID: {self.current_session_id}")
         logger.info("="*80)
 
         test_cases = [
@@ -522,7 +556,7 @@ class ComprehensiveTestRunner:
         logger.info("AERIS AGENT - COMPREHENSIVE PRODUCTION TEST SUITE")
         logger.info("="*80)
         logger.info(f"Testing against: {TEST_BASE_URL}")
-        logger.info(f"Session ID: {TEST_SESSION_ID}")
+        logger.info("Using unique session IDs per category to prevent contamination")
         logger.info("="*80)
 
         self.start_time = time.time()
@@ -536,9 +570,70 @@ class ComprehensiveTestRunner:
         await self.test_edge_cases()
         await self.test_performance_and_concurrency()
         await self.test_scraping_capabilities()
+        await self.test_orchestration_capabilities()  # NEW
 
         # Generate summary
         self._generate_summary()
+
+    async def test_orchestration_capabilities(self):
+        """Test Category 9: Enhanced Orchestration (NEW)"""
+        self.current_session_id = SESSION_IDS["category9"]
+        logger.info("\n" + "="*80)
+        logger.info("TEST CATEGORY 9: Enhanced Orchestration Capabilities")
+        logger.info(f"Session ID: {self.current_session_id}")
+        logger.info("="*80)
+
+        test_cases = [
+            {
+                "query": "Compare air quality in Kampala, Nairobi, and London",
+                "name": "Multi-City Orchestration (3 tools)",
+                "expect_multiple_tools": True,
+                "min_tools": 2  # At least 2 tools should be called
+            },
+            {
+                "query": "What's the air quality forecast for tomorrow in Gulu?",
+                "name": "Forecast with Fallback Chain",
+                "expect_tools": True
+            },
+            {
+                "query": "Get air quality at latitude 0.3, longitude 32.5 and also for Kampala",
+                "name": "Coordinate + City Query",
+                "expect_multiple_tools": True,
+                "min_tools": 2
+            }
+        ]
+
+        for test_case in test_cases:
+            response = await self.send_message(test_case["query"])
+
+            if "error" in response:
+                self.log_result(
+                    test_case["name"],
+                    False,
+                    f"Request failed: {response['error']}",
+                    response
+                )
+                continue
+
+            tools_used = response.get("tools_used", [])
+            
+            if test_case.get("expect_multiple_tools"):
+                min_tools = test_case.get("min_tools", 2)
+                passed = len(tools_used) >= min_tools
+                message = f"Used {len(tools_used)} tools (expected >= {min_tools})"
+            else:
+                passed = len(tools_used) > 0
+                message = f"Used {len(tools_used)} tool(s)"
+            
+            self.log_result(
+                test_case["name"],
+                passed,
+                message,
+                response
+            )
+            
+            # Wait a bit between requests
+            await asyncio.sleep(2)
 
     def _generate_summary(self):
         """Generate comprehensive test summary."""

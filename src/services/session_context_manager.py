@@ -7,8 +7,6 @@ This module provides intelligent context management for long conversations:
 - Session cleanup and memory leak prevention
 """
 
-import hashlib
-import json
 import logging
 import time
 from typing import Any

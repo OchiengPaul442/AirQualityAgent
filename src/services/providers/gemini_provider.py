@@ -114,7 +114,7 @@ class GeminiProvider(BaseAIProvider):
         # Sanitize all text inputs to prevent UTF-8 encoding errors
         system_instruction = self._sanitize_text(system_instruction)
         message = self._sanitize_text(message)
-        
+
         # Initialize simple reasoning tracker (optional feature)
         class SimpleReasoning:
             def __init__(self):
@@ -123,7 +123,7 @@ class GeminiProvider(BaseAIProvider):
                 self.steps.append({"title": title, "description": description, "type": step_type})
             def get_all_steps(self):
                 return self.steps
-        
+
         reasoning = SimpleReasoning()
 
         # Convert history to Gemini format
@@ -208,7 +208,7 @@ class GeminiProvider(BaseAIProvider):
                     "token" in error_msg
                     and ("limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg)
                 ) or "context length" in error_msg:
-                    logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
+                    logger.warning("⚠️ Token limit exceeded. Attempting intelligent truncation...")
 
                     # Convert messages back to dict format for truncation
                     messages_dict = [{"role": "system", "content": system_instruction}]
@@ -594,7 +594,7 @@ class GeminiProvider(BaseAIProvider):
                 filename = result.get("filename", "document")
                 file_type = result.get("file_type", "file")
                 content = result.get("content", "")
-                
+
                 # Try to extract meaningful information from content
                 if isinstance(content, str):
                     lines = content.split('\n')[:10]  # First 10 lines
@@ -607,9 +607,9 @@ class GeminiProvider(BaseAIProvider):
                     summary = f"📊 Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
                 else:
                     summary = f"📄 Document '{filename}' ({file_type}) processed successfully."
-                
+
                 return summary
-            
+
             # Handle chart generation results
             if result.get("chart_data") and result.get("chart_type"):
                 chart_type = result.get("chart_type", "chart")
@@ -617,7 +617,7 @@ class GeminiProvider(BaseAIProvider):
                 original_rows = result.get("original_rows", data_rows)
                 data_sampled = result.get("data_sampled", False)
                 chart_data = result.get("chart_data", "")
-                
+
                 # CRITICAL: Embed chart in markdown response
                 summary = f"📊 {chart_type.title()} Chart Generated\n\n"
                 summary += f"![{chart_type.title()} Chart]({chart_data})\n\n"

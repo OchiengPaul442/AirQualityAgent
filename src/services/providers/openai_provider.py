@@ -12,9 +12,10 @@ from typing import Any
 
 import openai
 
+from src.utils.result_formatters import format_tool_result_as_json
+
 from ..tool_definitions import openai_tools
 from .base_provider import BaseAIProvider
-from .provider_utils import format_tool_result_as_json
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +456,7 @@ class OpenAIProvider(BaseAIProvider):
                 if "token" in error_msg and (
                     "limit" in error_msg or "maximum" in error_msg or "exceed" in error_msg
                 ):
-                    logger.warning(f"⚠️ Token limit exceeded. Attempting intelligent truncation...")
+                    logger.warning("⚠️ Token limit exceeded. Attempting intelligent truncation...")
 
                     # Try to intelligently truncate the context
                     messages = self._truncate_context_intelligently(messages, system_instruction)
@@ -535,7 +536,7 @@ class OpenAIProvider(BaseAIProvider):
 
             # Execute tools
             tool_results = await self._execute_tools(tool_calls, tools_used)
-            
+
             # Extract chart data if generate_chart was called
             chart_result = None
             for tool_result in tool_results:
@@ -626,7 +627,7 @@ class OpenAIProvider(BaseAIProvider):
                 except Exception as e:
                     error_msg = str(e).lower()
                     logger.error(f"Final API call failed: {e}")
-                    
+
                     # If error occurs and chart was generated, provide helpful response
                     if "generate_chart" in tools_used:
                         return {
@@ -642,7 +643,7 @@ class OpenAIProvider(BaseAIProvider):
                             "tools_used": tools_used,
                             "chart_result": chart_result if chart_result else None,
                         }
-                    
+
                     return {
                         "response": f"I executed the tools successfully but encountered an error generating the final response: {str(e)}",
                         "tools_used": tools_used,
@@ -699,11 +700,11 @@ class OpenAIProvider(BaseAIProvider):
             or "I was unable to generate a response. Please try again.",
             "tools_used": tools_used,
         }
-        
+
         if "chart_result" in locals() and chart_result:
             result["chart_result"] = chart_result
             logger.info("📊 Chart data added to OpenAI response")
-        
+
         return result
 
     def _should_force_search_tool(self, message: str) -> bool:
@@ -893,7 +894,7 @@ class OpenAIProvider(BaseAIProvider):
                 filename = result.get("filename", "document")
                 file_type = result.get("file_type", "file")
                 content = result.get("content", "")
-                
+
                 # Try to extract meaningful information from content
                 if isinstance(content, str):
                     lines = content.split('\n')[:10]  # First 10 lines
@@ -906,9 +907,9 @@ class OpenAIProvider(BaseAIProvider):
                     summary = f"📊 Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
                 else:
                     summary = f"📄 Document '{filename}' ({file_type}) processed successfully."
-                
+
                 return summary
-            
+
             # Handle chart generation results
             if result.get("chart_data") and result.get("chart_type"):
                 chart_type = result.get("chart_type", "chart")
@@ -916,7 +917,7 @@ class OpenAIProvider(BaseAIProvider):
                 original_rows = result.get("original_rows", data_rows)
                 data_sampled = result.get("data_sampled", False)
                 chart_data = result.get("chart_data", "")
-                
+
                 # CRITICAL: Embed chart in markdown response
                 summary = f"📊 {chart_type.title()} Chart Generated\n\n"
                 summary += f"![{chart_type.title()} Chart]({chart_data})\n\n"

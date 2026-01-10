@@ -10,13 +10,13 @@ Refactored to use modular architecture:
 
 import hashlib
 import inspect
-import json
 import logging
-from typing import Any, Awaitable
+from typing import Any
 
 from src.config import get_settings
 from src.mcp.client import MCPClient
 from src.services.agent.cost_tracker import CostTracker
+from src.services.agent.orchestrator import ToolOrchestrator
 from src.services.agent.query_analyzer import QueryAnalyzer
 from src.services.agent.tool_executor import ToolExecutor
 from src.services.airqo_service import AirQoService
@@ -107,6 +107,16 @@ class AgentService:
             self.document_scanner,
             self.geocoding,
         )
+
+        # Initialize advanced orchestration layer for low-end models
+        self.orchestrator = ToolOrchestrator(
+            tool_executor=self.tool_executor,
+            max_retries=3,
+            retry_delay=1.0,
+            enable_fallbacks=True,
+            timeout_per_tool=30.0
+        )
+        logger.info("Advanced orchestration layer initialized for optimized tool execution")
 
         # Initialize cost tracker with provider-specific limits
         # For local models (Ollama), use higher limits since there's no cost
@@ -202,19 +212,19 @@ class AgentService:
                     f"AI response loop detected: same response {recent_ai_responses.count(last_ai)} times"
                 )
                 return True
-        
+
         # Check for phrase-level repetition (detecting "The user wants..." loops)
         if len(recent_ai_responses) >= 2:
             last_response = recent_ai_responses[-1] if recent_ai_responses else ""
             # Extract first 50 chars as signature
             signature = last_response[:50].lower().strip()
-            
+
             # Count how many recent responses start with similar signature
             similar_starts = sum(
-                1 for resp in recent_ai_responses[-5:] 
+                1 for resp in recent_ai_responses[-5:]
                 if resp[:50].lower().strip() == signature and len(signature) > 10
             )
-            
+
             if similar_starts >= 3:
                 logger.warning(f"Phrase-level loop detected: similar response start {similar_starts} times")
                 return True
@@ -231,12 +241,12 @@ class AgentService:
         # Only check if response is suspiciously short (likely pure reasoning, not actual answer)
         if len(response.strip()) < 50:
             return False  # Too short to contain reasoning patterns meaningfully
-        
+
         # Patterns that indicate internal reasoning exposure IN USER-FACING RESPONSE
         # These should only trigger if they appear at start of response (first 200 chars)
         # to avoid false positives from phrases like "The WHO guidelines should..."
         response_start = response[:200].lower().strip()
-        
+
         exposure_patterns = [
             "the user wants",
             "the user might",
@@ -248,12 +258,12 @@ class AgentService:
             "i'll need to",
             "we need to first",
         ]
-        
+
         for pattern in exposure_patterns:
             if pattern in response_start:
                 logger.warning(f"Reasoning exposure detected: '{pattern}' found in response start")
                 return True
-        
+
         return False
 
     def _manage_memory(self):
@@ -573,7 +583,7 @@ class AgentService:
             Fresh cached response or None if cache should not be used
         """
         import time
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         # Get cached data with metadata
         cached_data = self.cache.get("agent", cache_key)
@@ -873,13 +883,13 @@ class AgentService:
         )
 
         if has_consent and is_location_query:
-            message = f"User has already consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
+            message = "User has already consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
             logger.info(
                 f"Detected location consent in history and location query, modified message: '{original_message}' -> '{message}'"
             )
         elif is_consent_response and not is_location_query:
             # User is responding to consent request with just "yes" - treat as location query
-            message = f"User has consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
+            message = "User has consented to location sharing. Get air quality data for my current location using the get_location_from_ip tool."
             logger.info(
                 f"Detected consent response without explicit location query, treating as location request: '{original_message}' -> '{message}'"
             )
@@ -939,7 +949,7 @@ class AgentService:
         document_injection = ""
         if accumulated_docs:
             self.tool_executor.documents_provided = True
-            logger.info(f"Documents provided - injecting content into user message for visibility")
+            logger.info("Documents provided - injecting content into user message for visibility")
 
             # Build compact document summary for injection
             doc_summaries = []
@@ -1084,8 +1094,8 @@ class AgentService:
         # INTELLIGENT PROACTIVE TOOL CALLING SYSTEM
         # Optimized for: low-quality models, speed, accuracy
         # Uses smart classification to skip unnecessary tool calls
-        logger.info(f"🔍 Analyzing query for intelligent tool selection...")
-        
+        logger.info("🔍 Analyzing query for intelligent tool selection...")
+
         # SPECIAL HANDLING: Detect chart/visualization requests early
         chart_request = any(keyword in message.lower() for keyword in [
             "chart", "visualiz", "graph", "plot", "show me", "display"
@@ -1098,7 +1108,7 @@ class AgentService:
         tools_called_proactively = proactive_results.get("tools_called", [])
         context_injection = proactive_results.get("context_injection", "")
         classification = proactive_results.get("query_classification", {})
-        
+
         query_type = classification.get("query_type", "general")
         logger.info(f"📊 Query classified as: {query_type}")
 
@@ -1109,7 +1119,7 @@ class AgentService:
             # Inject tool results into system instruction
             if context_injection:
                 system_instruction += context_injection
-                logger.info(f"📝 Injected tool results into context")
+                logger.info("📝 Injected tool results into context")
         else:
             logger.info(f"ℹ️ No tools needed (query type: {query_type})")
 
@@ -1148,13 +1158,13 @@ class AgentService:
             all_tools_used = list(
                 set(tools_called_proactively + (provider_tools if provider_tools else []))
             )
-            
+
             # CRITICAL FIX: If document_data was provided during upload, add scan_document to tools_used
             # This ensures tests pass even though the document was pre-scanned during upload
             if document_data:
                 all_tools_used.append("scan_document")
                 logger.info("📄 Document data provided - adding scan_document to tools_used for test compatibility")
-            
+
             response_data["tools_used"] = all_tools_used
 
             if all_tools_used:
@@ -1167,18 +1177,18 @@ class AgentService:
             if "generate_chart" in all_tools_used:
                 # First check if it's in provider response (direct AI call)
                 chart_result = response_data.get("chart_result")
-                
+
                 # If not found, check proactive tool results
                 if not chart_result:
                     proactive_tool_results = proactive_results.get("tool_results", {})
                     chart_result = proactive_tool_results.get("generate_chart")
                     logger.info(f"Looking for chart in proactive results: {chart_result is not None}")
-                
+
                 # KEEP chart markdown embedded in response for automatic rendering
                 # Charts are now embedded directly in markdown for frontend rendering
                 # No need to strip them - this allows markdown formatters to display them
                 logger.info("📊 Chart kept embedded in markdown response for automatic rendering")
-                
+
                 if chart_result and isinstance(chart_result, dict):
                     response_data["chart_data"] = chart_result.get("chart_data")
                     response_data["chart_metadata"] = {
@@ -1190,19 +1200,19 @@ class AgentService:
                         "format": chart_result.get("format"),
                         "engine": chart_result.get("engine"),
                     }
-                    
+
                     # Add sampling notice to response if data was sampled
                     if chart_result.get("data_sampled") and chart_result.get("sampling_notice"):
                         sampling_msg = f"\n\n{chart_result.get('sampling_notice')}"
                         if "response" in response_data:
                             response_data["response"] += sampling_msg
-                    
+
                     logger.info(
                         f"📊 Chart generated: {chart_result.get('chart_type')} with {chart_result.get('data_rows')} rows"
                         f" (sampled from {chart_result.get('original_rows')})" if chart_result.get('data_sampled') else ""
                     )
                 else:
-                    logger.warning(f"⚠️ generate_chart was called but no chart_result found")
+                    logger.warning("⚠️ generate_chart was called but no chart_result found")
                     # Provide helpful fallback message
                     if "response" in response_data and response_data["response"]:
                         response_data["response"] += (
@@ -1292,7 +1302,7 @@ class AgentService:
             # REMOVED: Static fallback messages that override AI responses
             # AI should generate dynamic responses based on actual tool results
             if is_inadequate and len(tools_used) > 0:
-                logger.info(f"Response is inadequate but tools were used. AI will handle with available context.")
+                logger.info("Response is inadequate but tools were used. AI will handle with available context.")
 
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")
@@ -1396,7 +1406,7 @@ class AgentService:
                 "⚠️ Maintain context across documents for comprehensive analysis.\n"
             )
         else:
-            context_parts.append(f"\n📄 YOU HAVE ACCESS TO 1 DOCUMENT (see content below):\n")
+            context_parts.append("\n📄 YOU HAVE ACCESS TO 1 DOCUMENT (see content below):\n")
 
         for idx, doc in enumerate(unique_documents, 1):
             # Skip if not a dictionary
@@ -1413,7 +1423,7 @@ class AgentService:
             # Build document header
             context_parts.append(f"\n📄 Document {idx}: {filename}")
             context_parts.append(f"File Type: {file_type.upper()}")
-            context_parts.append(f"Status: ✅ Scanned and Ready")
+            context_parts.append("Status: ✅ Scanned and Ready")
 
             # Add metadata if available
             metadata = doc.get("metadata", {})

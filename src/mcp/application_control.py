@@ -15,11 +15,10 @@ This module enables the AI agent to:
 4. Handle different application types (web, mobile, desktop)
 """
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
