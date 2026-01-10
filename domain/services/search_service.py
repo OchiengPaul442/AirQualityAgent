@@ -152,13 +152,26 @@ class SearchService:
 
     def _search_duckduckgo(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
         """
-        Search using DuckDuckGo with enhanced metadata.
+        Search using DuckDuckGo with enhanced metadata and timeout protection.
 
         Returns results with: title, href, body, and metadata (source, timestamp, relevance)
         """
         try:
-            with DDGS() as ddgs:
-                raw_results = list(ddgs.text(query, max_results=max_results))
+            # Use threading timeout for Windows compatibility
+            import concurrent.futures
+            
+            def search_operation():
+                with DDGS() as ddgs:
+                    return list(ddgs.text(query, max_results=max_results))
+            
+            # Execute with timeout
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(search_operation)
+                try:
+                    raw_results = future.result(timeout=15.0)  # 15 second timeout
+                except concurrent.futures.TimeoutError:
+                    logger.error(f"DuckDuckGo search timed out after 15s for '{query}'")
+                    return []  # Return empty results instead of failing
 
             if not raw_results:
                 logger.warning(f"No search results found for query: {query}")
@@ -186,7 +199,7 @@ class SearchService:
 
         except Exception as e:
             logger.error(f"DuckDuckGo search failed for '{query}': {e}")
-            raise
+            return []  # Return empty results instead of failing
 
     def _search_dashscope(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
         """

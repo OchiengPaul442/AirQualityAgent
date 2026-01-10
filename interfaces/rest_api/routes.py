@@ -597,7 +597,7 @@ async def chat(
         # Process message with timing for cost tracking and timeout protection
         start_time = time.time()
 
-        # Add timeout protection for agent processing (60 seconds for streaming, faster UX)
+        # Add timeout protection for agent processing (120 seconds for comprehensive processing)
         try:
             import asyncio
             result = await asyncio.wait_for(
@@ -612,13 +612,13 @@ async def chat(
                     location_data=location_data,
                     session_id=session_id,
                 ),
-                timeout=60.0  # 60 second timeout for regular endpoint
+                timeout=120.0  # 120 second timeout for comprehensive processing
             )
-        except TimeoutError:
-            logger.error(f"Agent processing timed out after 60 seconds for message: {message[:100]}")
+        except asyncio.TimeoutError:
+            logger.error(f"Agent processing timed out after 120 seconds for message: {message[:100]}")
             raise HTTPException(
                 status_code=504,
-                detail="Request processing timed out. Please try a simpler query or smaller document."
+                detail="Request processing timed out after 120 seconds. Please try a simpler query or smaller document."
             )
 
         processing_time = time.time() - start_time

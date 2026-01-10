@@ -274,7 +274,8 @@ class OllamaProvider(BaseAIProvider):
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)  # Exponential backoff
                     logger.info(f"Retrying in {delay} seconds...")
-                    time.sleep(delay)
+                    import asyncio
+                    await asyncio.sleep(delay)
                 else:
                     return {
                         "response": "Unable to connect to the local Ollama service. Please ensure Ollama is running.",
@@ -288,7 +289,8 @@ class OllamaProvider(BaseAIProvider):
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
-                    time.sleep(delay)
+                    import asyncio
+                    await asyncio.sleep(delay)
                 else:
                     return {
                         "response": "The Ollama service is taking too long to respond. Please try again with a simpler question.",
@@ -382,7 +384,8 @@ class OllamaProvider(BaseAIProvider):
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay} seconds...")
-                    time.sleep(delay)
+                    import asyncio
+                    await asyncio.sleep(delay)
                 else:
                     # Return user-friendly errors
                     if "connection" in error_msg:

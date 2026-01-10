@@ -80,7 +80,7 @@ class ToolOrchestrator:
         max_retries: int = 1,  # Reduced to 1 for speed
         retry_delay: float = 0.3,  # Reduced to 0.3 for speed
         enable_fallbacks: bool = True,
-        timeout_per_tool: float = 10.0  # Reduced to 10 for speed
+        timeout_per_tool: float = 20.0  # Increased to 20 for reliability
     ):
         """
         Initialize the orchestrator.
@@ -90,7 +90,7 @@ class ToolOrchestrator:
             max_retries: Maximum retry attempts per tool
             retry_delay: Initial delay between retries (exponential backoff)
             enable_fallbacks: Enable automatic fallback to alternative tools
-            timeout_per_tool: Timeout for each tool execution
+            timeout_per_tool: Timeout for each tool execution (20s for web searches)
         """
         self.tool_executor = tool_executor
         self.max_retries = max_retries

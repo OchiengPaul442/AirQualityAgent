@@ -419,7 +419,7 @@ class AgentService:
 
         return provider_class(self.settings, self.tool_executor)
 
-    def _get_or_create_langchain_memory(self, session_id: str) -> LangChainSessionMemory:
+    def _get_or_create_langchain_memory(self, session_id: str) -> LangChainSessionMemory | None:
         """
         Get or create LangChain memory for a session.
         
@@ -427,16 +427,23 @@ class AgentService:
             session_id: Unique session identifier
             
         Returns:
-            LangChainSessionMemory instance for the session
+            LangChainSessionMemory instance for the session, or None if unavailable
         """
-        if session_id not in self.langchain_memories:
-            self.langchain_memories[session_id] = create_session_memory(
-                session_id=session_id,
-                use_summarization=False,  # Start with token buffer
-                max_tokens=2000  # Align with context limits
-            )
-            logger.info(f"Created LangChain memory for session {session_id}")
-        return self.langchain_memories[session_id]
+        try:
+            if session_id not in self.langchain_memories:
+                self.langchain_memories[session_id] = create_session_memory(
+                    session_id=session_id,
+                    use_summarization=False,  # Start with token buffer
+                    max_tokens=2000  # Align with context limits
+                )
+                logger.info(f"Created LangChain memory for session {session_id}")
+            return self.langchain_memories[session_id]
+        except ImportError as e:
+            logger.warning(f"LangChain not available: {e}. Memory features disabled.")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to create LangChain memory for session {session_id}: {e}")
+            return None
 
     def _has_location_consent(self, history: list[dict[str, Any]]) -> bool:
         """
@@ -891,15 +898,16 @@ class AgentService:
         if session_id:
             try:
                 lc_memory = self._get_or_create_langchain_memory(session_id)
-                langchain_history = lc_memory.get_history()
-                if langchain_history:
-                    logger.info(f"📚 Loaded {len(langchain_history)} messages from LangChain memory for session {session_id}")
-                    # Merge histories, prioritizing database history if both exist
-                    if not history:
-                        history = langchain_history
-                    else:
-                        # Database history takes precedence, but supplement with LangChain if needed
-                        logger.info(f"Using database history ({len(history)} messages), LangChain available as backup")
+                if lc_memory:  # Check if LangChain memory is available
+                    langchain_history = lc_memory.get_history()
+                    if langchain_history:
+                        logger.info(f"📚 Loaded {len(langchain_history)} messages from LangChain memory for session {session_id}")
+                        # Merge histories, prioritizing database history if both exist
+                        if not history:
+                            history = langchain_history
+                        else:
+                            # Database history takes precedence, but supplement with LangChain if needed
+                            logger.info(f"Using database history ({len(history)} messages), LangChain available as backup")
             except Exception as e:
                 logger.warning(f"Failed to load LangChain memory for session {session_id}: {e}")
 
@@ -1469,14 +1477,15 @@ class AgentService:
             if session_id:
                 try:
                     lc_memory = self._get_or_create_langchain_memory(session_id)
-                    lc_memory.add_user_message(message)
-                    lc_memory.add_ai_message(ai_response)
+                    if lc_memory:  # Check if LangChain memory is available
+                        lc_memory.add_user_message(message)
+                        lc_memory.add_ai_message(ai_response)
 
-                    # Add memory stats to response (optional)
-                    token_count = lc_memory.get_token_count()
-                    if token_count:
-                        response_data["memory_tokens"] = token_count
-                        logger.info(f"📊 Session {session_id} memory: {token_count} tokens tracked by LangChain")
+                        # Add memory stats to response (optional)
+                        token_count = lc_memory.get_token_count()
+                        if token_count:
+                            response_data["memory_tokens"] = token_count
+                            logger.info(f"📊 Session {session_id} memory: {token_count} tokens tracked by LangChain")
                 except Exception as e:
                     logger.warning(f"LangChain memory tracking failed for session {session_id}: {e}")
                     # Continue processing - memory tracking is not critical
