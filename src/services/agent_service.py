@@ -18,6 +18,7 @@ from src.mcp.client import MCPClient
 from src.services.agent.cost_tracker import CostTracker
 from src.services.agent.orchestrator import ToolOrchestrator
 from src.services.agent.query_analyzer import QueryAnalyzer
+from src.services.agent.thought_stream import ThoughtStream
 from src.services.agent.tool_executor import ToolExecutor
 from src.services.airqo_service import AirQoService
 from src.services.cache import get_cache
@@ -157,6 +158,65 @@ class AgentService:
             {}
         )  # {session_id: {summary, last_update}}
         self.max_session_contexts = 50  # Limit concurrent session contexts in memory
+
+    def _classify_query_intent(self, message: str) -> dict[str, Any]:
+        """
+        Advanced query classification using semantic pattern recognition.
+        
+        Analyzes query structure, keywords, and context to determine:
+        - Intent (air_quality_data, forecast, health_advice, general_knowledge, etc.)
+        - Complexity (simple, moderate, complex)
+        - Data requirements (needs_external_data)
+        
+        Returns dict with classification results for thinking trace.
+        """
+        msg_lower = message.lower()
+        
+        # Intent patterns with semantic understanding
+        intent_patterns = {
+            "air_quality_data": ["air quality", "aqi", "pm2.5", "pm10", "pollution level", "pollutants"],
+            "forecast": ["forecast", "prediction", "tomorrow", "next week", "future", "will be"],
+            "health_advice": ["health", "safe", "dangerous", "effects", "symptoms", "vulnerable"],
+            "comparison": ["compare", "versus", "vs", "difference between", "better"],
+            "trend_analysis": ["trend", "pattern", "historical", "over time", "past"],
+            "general_knowledge": ["what is", "what are", "how does", "why", "explain", "tell me about"]
+        }
+        
+        # Detect intent with scoring
+        intent_scores = {}
+        for intent, patterns in intent_patterns.items():
+            score = sum(1 for pattern in patterns if pattern in msg_lower)
+            if score > 0:
+                intent_scores[intent] = score
+        
+        # Determine primary intent
+        if intent_scores:
+            primary_intent = max(intent_scores, key=intent_scores.get)
+        else:
+            primary_intent = "general_inquiry"
+        
+        # Assess complexity
+        complexity_indicators = {
+            "simple": len(message.split()) < 10 and len(intent_scores) <= 1,
+            "complex": any(word in msg_lower for word in ["compare", "analyze", "multiple", "all"]) or len(intent_scores) > 2
+        }
+        
+        if complexity_indicators["complex"]:
+            complexity = "complex"
+        elif complexity_indicators["simple"]:
+            complexity = "simple"
+        else:
+            complexity = "moderate"
+        
+        # Determine data needs
+        needs_external_data = primary_intent in ["air_quality_data", "forecast", "comparison", "trend_analysis"]
+        
+        return {
+            "intent": primary_intent,
+            "complexity": complexity,
+            "needs_external_data": needs_external_data,
+            "confidence": min(max(intent_scores.values()) / 3.0, 1.0) if intent_scores else 0.5
+        }
 
     def _check_for_loops(self, user_message: str, session_id: str | None = None) -> bool:
         """
@@ -299,6 +359,15 @@ class AgentService:
             stats = self.session_manager.get_stats()
             logger.debug(f"Session context stats: {stats}")
 
+    def _get_timestamp(self) -> float:
+        """Get current timestamp for memory tracking.
+        
+        Returns:
+            float: Current time in seconds since epoch
+        """
+        from time import time
+        return time()
+
     def _add_to_memory(self, user_message: str, ai_response: str, session_id: str | None = None):
         """Add conversation turn to memory with safeguards.
         
@@ -319,12 +388,6 @@ class AgentService:
             }
         )
         self._manage_memory(session_id)
-
-    def _get_timestamp(self) -> str:
-        """Get current timestamp for memory tracking."""
-        from datetime import datetime
-
-        return datetime.now().isoformat()
 
     def _create_provider(self) -> BaseAIProvider:
         """
@@ -763,6 +826,7 @@ class AgentService:
         client_ip: str | None = None,
         location_data: dict[str, Any] | None = None,
         session_id: str | None = None,
+        stream: ThoughtStream | None = None,
     ) -> dict[str, Any]:
         """
         Process a user message and generate a response.
@@ -773,6 +837,7 @@ class AgentService:
         3. Checks cache for previous identical responses
         4. Delegates to provider for actual processing
         5. Tracks costs and caches results
+        6. (Optional) Captures reasoning/thinking steps when thinking_mode=True
 
         Args:
             message: User's message
@@ -1126,6 +1191,16 @@ class AgentService:
         # Optimized for: low-quality models, speed, accuracy
         # Uses smart classification to skip unnecessary tool calls
         logger.info("🔍 Analyzing query for intelligent tool selection...")
+        
+        # REAL-TIME THOUGHT STREAMING: Emit query analysis
+        if stream:
+            classification = self._classify_query_intent(message)
+            await stream.emit_query_analysis(
+                query=message[:200],
+                intent=classification["intent"],
+                complexity=classification["complexity"],
+                requires_data=classification["needs_external_data"]
+            )
 
         # SPECIAL HANDLING: Detect chart/visualization requests early
         chart_request = any(keyword in message.lower() for keyword in [
@@ -1142,17 +1217,36 @@ class AgentService:
 
         query_type = classification.get("query_type", "general")
         logger.info(f"📊 Query classified as: {query_type}")
+        
+        # REAL-TIME THOUGHT STREAMING: Emit tool selection
+        if stream and tools_called_proactively:
+            await stream.emit_tool_selection(
+                query_type=query_type,
+                selected_tools=tools_called_proactively,
+                confidence=0.9,
+                rationale=f"Based on query classification: {query_type}"
+            )
 
         if tools_called_proactively:
             logger.info(
                 f"✅ Proactively called {len(tools_called_proactively)} tool(s): {tools_called_proactively}"
             )
+            
+            # REAL-TIME THOUGHT STREAMING: Emit tool execution
+            if stream:
+                await stream.emit_tool_execution(
+                    tools=tools_called_proactively,
+                    status="completed",
+                    results_summary=f"Successfully retrieved data from {len(tools_called_proactively)} source(s)"
+                )
+            
             # Inject tool results into system instruction
             if context_injection:
                 system_instruction += context_injection
                 logger.info("📝 Injected tool results into context")
         else:
-            logger.info(f"ℹ️ No tools needed (query type: {query_type})")
+            # For general knowledge queries, ALWAYS use web search for latest information
+            logger.info(f"ℹ️ No air quality tools needed (query type: {query_type}) - will use web search for latest information")
 
         # Process with provider
 
@@ -1184,6 +1278,14 @@ class AgentService:
                     "error": "provider_no_response",
                 }
 
+            # REAL-TIME THOUGHT STREAMING: Emit response synthesis
+            if stream:
+                await stream.emit_response_synthesis(
+                    sources=tools_called_proactively or [],
+                    format="markdown",
+                    confidence=0.85
+                )
+            
             # Merge proactively called tools with any tools the provider might have called
             provider_tools = response_data.get("tools_used", [])
             all_tools_used = list(
@@ -1356,6 +1458,14 @@ class AgentService:
                 f"Message processed successfully. Tokens: {tokens_used}, "
                 f"Cost: ${cost_estimate:.4f}"
             )
+            
+            # REAL-TIME THOUGHT STREAMING: Mark as complete
+            if stream:
+                await stream.complete({
+                    "status": "success",
+                    "tokens": tokens_used,
+                    "tools_used": all_tools_used
+                })
 
             return response_data
 

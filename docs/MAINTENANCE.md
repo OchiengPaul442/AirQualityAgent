@@ -333,6 +333,93 @@ CREATE INDEX IF NOT EXISTS idx_messages_session
 sqlite3 data/aeris_agent.db "VACUUM;"
 ```
 
+### AI Provider Optimization
+
+#### Ollama (Local Models)
+
+**Low-End Model Optimization**: The system automatically detects and optimizes for low-end models (1B-3B parameters):
+
+**Automatic Optimizations Applied**:
+
+```python
+# When model name contains ":1b", ":3b", or ":0.5b"
+max_tokens = 800        # vs 1200 for larger models
+temperature = 0.35      # vs 0.45
+top_p = 0.8            # vs 0.9
+top_k = 40             # limited vocabulary
+history = 8 messages   # vs 32 for larger models
+retry_delay = 2.0s     # vs 1.0s
+```
+
+**Performance Tuning**:
+
+```bash
+# In .env file
+AI_MODEL=qwen2.5:3b
+
+# Ollama configuration (optional)
+# Edit ~/.ollama/config.json
+{
+  "num_ctx": 8192,        # Context window (default: 2048)
+  "num_thread": 8,        # CPU threads
+  "num_gpu": 1,           # GPU layers (0 = CPU only)
+  "temperature": 0.35     # Override default
+}
+```
+
+**Memory Management**:
+
+- **3B models**: ~2GB RAM required
+- **7B models**: ~4GB RAM required
+- **13B+ models**: ~8GB+ RAM required
+
+**GPU Acceleration** (optional):
+
+```bash
+# Install CUDA support for Ollama
+# Windows: Download from Ollama website
+# Linux: Run with CUDA-enabled Docker image
+
+# Verify GPU usage
+nvidia-smi  # Check GPU memory usage during inference
+```
+
+#### OpenAI Compatible APIs
+
+**Rate Limit Management**:
+
+```python
+# In src/config.py
+OPENAI_MAX_RETRIES = 5
+OPENAI_RETRY_DELAY = 2.0  # seconds
+OPENAI_TIMEOUT = 60       # request timeout
+```
+
+**Cost Optimization**:
+
+- Use caching aggressively (5-minute TTL for air quality data)
+- Route simple queries to cheaper models (GPT-3.5-turbo vs GPT-4o)
+- Set conservative max_tokens limits per style preset
+
+#### Gemini Provider
+
+**Quota Management**:
+
+```python
+# Monitor rate limits in logs
+grep "GEMINI RATE LIMIT" logs/app.log
+
+# Implement backoff strategy
+GEMINI_RETRY_DELAY = 2.0
+GEMINI_MAX_RETRIES = 3
+```
+
+**Context Window Optimization**:
+
+- Gemini automatically truncates context intelligently
+- Start new sessions after 50+ messages to prevent token overflow
+- Use session cleanup endpoint: `DELETE /sessions/{session_id}`
+
 ### Caching Strategy
 
 **Current Implementation**: In-memory cache with TTL
@@ -395,7 +482,34 @@ ollama pull qwen2.5:3b
 
 # Remove old version
 ollama rm old-model:tag
+
+# Verify model works
+curl http://localhost:11434/api/generate -d '{
+  "model": "qwen2.5:3b",
+  "prompt": "Test",
+  "stream": false
+}'
 ```
+
+**Recommended Local Models by Use Case**:
+
+**Low-End Hardware (2-4GB VRAM)**:
+
+- `qwen2.5:3b` - Best quality for 3B size (recommended)
+- `phi-3-mini` - Microsoft's efficient 3B model
+- `gemma:2b` - Google's lightweight option
+
+**Mid-Range Hardware (6-8GB VRAM)**:
+
+- `qwen2.5:7b` - Excellent balance of quality/speed
+- `mistral:7b` - Strong reasoning capabilities
+- `llama3:8b` - Meta's latest 8B model
+
+**High-End Hardware (12GB+ VRAM)**:
+
+- `qwen2.5:14b` - Best quality without cloud
+- `mixtral:8x7b` - MoE for complex reasoning
+- `llama3:70b` - Enterprise-grade quality
 
 **Cloud Models**:
 Update model names in `.env`:

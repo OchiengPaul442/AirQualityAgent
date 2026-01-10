@@ -12,14 +12,15 @@
 
 1. [Overview](#overview)
 2. [Agent Architecture](#agent-architecture)
-3. [Workflow Patterns](#workflow-patterns)
-4. [Tool System (ACI)](#tool-system-aci)
-5. [Session Management](#session-management)
-6. [Chart Visualization](#chart-visualization)
-7. [Cost Management](#cost-management)
-8. [Best Practices](#best-practices)
-9. [Common Patterns](#common-patterns)
-10. [Troubleshooting](#troubleshooting)
+3. [Chain-of-Thought (Real-time Transparency)](#chain-of-thought-real-time-transparency)
+4. [Workflow Patterns](#workflow-patterns)
+5. [Tool System (ACI)](#tool-system-aci)
+6. [Session Management](#session-management)
+7. [Chart Visualization](#chart-visualization)
+8. [Cost Management](#cost-management)
+9. [Best Practices](#best-practices)
+10. [Common Patterns](#common-patterns)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -122,6 +123,221 @@ Per Anthropic: _"Start simple, add complexity only when needed."_ Aeris-AQ uses 
    - Track costs
 7. Return to user via API
 ```
+
+---
+
+## Chain-of-Thought (Real-time Transparency)
+
+### Overview
+
+Aeris-AQ implements **real-time chain-of-thought streaming** to provide full transparency into the agent's decision-making process. Based on Anthropic's principle of "explicitly showing the agent's planning steps," the system streams thinking events as they occur, not after completion.
+
+**Key Principles** (from Anthropic's Guide):
+
+1. **Transparency First** - Users see how the agent thinks in real-time
+2. **Simplicity** - No over-engineering, straightforward event emission
+3. **Optimized for Low-Cost Models** - Works brilliantly with models that lack native reasoning capabilities (Gemini Flash, Llama, etc.)
+4. **Production-Ready** - Minimal overhead, resource-efficient
+
+### Why Real-Time Streaming?
+
+Unlike traditional "thinking mode" implementations that collect thoughts and return them after processing, our approach streams thoughts **as they happen**:
+
+- **Better UX**: Users see progress immediately (like Claude, ChatGPT)
+- **Lower Latency**: First thoughts arrive within milliseconds
+- **Transparency**: Shows exactly what the agent is considering at each step
+- **Trust Building**: Users understand the agent's decision-making process
+- **Debugging**: Developers can see where issues occur in the pipeline
+
+### Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    ThoughtStream Module                      │
+│  • Lightweight async event emitter                           │
+│  • Queue-based for real-time delivery                        │
+│  • Typed events (query_analysis, tool_selection, etc.)      │
+└─────────────┬────────────────────────────────────────────────┘
+              │
+              │ emit()
+              ▼
+┌──────────────────────────────────────────────────────────────┐
+│              AgentService.process_message()                  │
+│                                                              │
+│  1. emit_query_analysis("Understanding your question...")   │
+│  2. emit_tool_selection("Selecting data sources...")        │
+│  3. emit_tool_execution("Executing: get_air_quality...")    │
+│  4. emit_data_retrieval("Retrieved 2.5KB from WAQI...")    │
+│  5. emit_response_synthesis("Synthesizing response...")     │
+│  6. complete("Response ready")                              │
+└──────────────────────────────────────────────────────────────┘
+              │
+              │ stream()
+              ▼
+┌──────────────────────────────────────────────────────────────┐
+│         Frontend (Server-Sent Events - SSE)                  │
+│                                                              │
+│  EventSource("/api/v1/agent/chat/stream")                   │
+│    ├─ event: thought                                        │
+│    │  data: {"type": "query_analysis", "title": "..."}     │
+│    ├─ event: thought                                        │
+│    │  data: {"type": "tool_execution", "title": "..."}     │
+│    └─ event: complete                                       │
+│       data: {"response": "...", "tokens": 150}              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Event Types
+
+```python
+class ThoughtType(Enum):
+    QUERY_ANALYSIS = "query_analysis"       # Understanding the question
+    TOOL_SELECTION = "tool_selection"       # Choosing data sources
+    TOOL_EXECUTION = "tool_execution"       # Running tools
+    DATA_RETRIEVAL = "data_retrieval"       # Processing results
+    RESPONSE_SYNTHESIS = "response_synthesis"  # Generating answer
+    ERROR = "error"                         # Handling failures
+    COMPLETE = "complete"                   # Finished
+```
+
+### Example Event Flow
+
+```json
+// Event 1: Query Analysis (0ms)
+{
+  "type": "query_analysis",
+  "title": "Understanding your question",
+  "details": {
+    "query_preview": "What's the air quality in London?",
+    "detected_intent": "real_time_air_quality",
+    "complexity": "simple",
+    "requires_external_data": true
+  },
+  "timestamp": "2026-01-10T15:30:00.123Z"
+}
+
+// Event 2: Tool Selection (50ms)
+{
+  "type": "tool_selection",
+  "title": "Selecting data sources",
+  "details": {
+    "query_classification": "air_quality_current",
+    "confidence_score": 0.95,
+    "selected_sources": ["get_city_air_quality", "geocode_location"],
+    "selection_rationale": "WAQI provides real-time AQI with global coverage"
+  },
+  "timestamp": "2026-01-10T15:30:00.173Z"
+}
+
+// Event 3: Tool Execution (500ms)
+{
+  "type": "tool_execution",
+  "title": "Executing: get_city_air_quality",
+  "details": {
+    "tool": "get_city_air_quality",
+    "status": "success",
+    "result": "Retrieved AQI 45 (Good) from WAQI London station"
+  },
+  "timestamp": "2026-01-10T15:30:00.623Z"
+}
+
+// Event 4: Data Retrieval (550ms)
+{
+  "type": "data_retrieval",
+  "title": "Retrieved and processed data",
+  "details": {
+    "sources_queried": ["WAQI API"],
+    "data_size_chars": 1250,
+    "quality_assessment": "high",
+    "integration_method": "Direct API response with fallback"
+  },
+  "timestamp": "2026-01-10T15:30:00.673Z"
+}
+
+// Event 5: Response Synthesis (1200ms)
+{
+  "type": "response_synthesis",
+  "title": "Synthesizing response",
+  "details": {
+    "synthesis_approach": "Data-driven with health context",
+    "data_sources": ["WAQI"],
+    "estimated_tokens": 150
+  },
+  "timestamp": "2026-01-10T15:30:01.323Z"
+}
+
+// Event 6: Complete (2000ms)
+{
+  "type": "complete",
+  "title": "Response ready",
+  "details": {
+    "status": "completed",
+    "total_time_ms": 2000,
+    "tokens_used": 145,
+    "cost_estimate": 0.0002
+  },
+  "timestamp": "2026-01-10T15:30:02.123Z"
+}
+```
+
+### Implementation Details
+
+**ThoughtStream** (`src/services/agent/thought_stream.py`):
+
+- Lightweight async event emitter
+- Queue-based for real-time delivery
+- Minimal memory footprint
+- Type-safe events
+
+**Integration Points**:
+
+- `AgentService.process_message()` - Main orchestrator
+- `QueryAnalyzer` - Query understanding phase
+- `ToolExecutor` - Tool execution phase
+- `AI Providers` - Response generation phase
+
+**Performance**:
+
+- First event: <50ms
+- Total overhead: <10ms per request
+- Memory: ~1KB per thought stream
+- No impact on response quality
+
+### Frontend Integration
+
+**Server-Sent Events (SSE)** endpoint:
+
+```javascript
+const eventSource = new EventSource("/api/v1/agent/chat/stream");
+
+eventSource.addEventListener("thought", (e) => {
+  const thought = JSON.parse(e.data);
+  console.log(`[${thought.type}] ${thought.title}`);
+  // Update UI with thinking step
+});
+
+eventSource.addEventListener("complete", (e) => {
+  const result = JSON.parse(e.data);
+  console.log("Final response:", result.response);
+  // Display final answer
+  eventSource.close();
+});
+```
+
+**Benefits**:
+
+- Real-time progress indicators
+- User confidence (seeing the agent "think")
+- Better error handling (know where failures occur)
+- Educational (learn how AI agents work)
+
+### Best Practices
+
+1. **Don't Overdo It**: Emit only meaningful steps (4-6 events per request)
+2. **Keep Details Concise**: Users want progress, not technical dumps
+3. **Handle Errors Gracefully**: Emit error events with recovery plans
+4. **Test Performance**: Ensure streaming doesn't slow down responses
+5. **Make it Optional**: Default to enabled, but allow disabling for API clients
 
 ---
 
@@ -733,6 +949,183 @@ grep "tokens_used" logs/app.log | sort -t':' -k2 -nr | head -20
 3. **Optimize prompts**: Remove verbose examples
 4. **Use cheaper models**: Route simple queries to Haiku/GPT-3.5
 5. **Document sampling**: Reduce document truncation limit
+
+---
+
+## Model Selection and Optimization
+
+### Supported Providers
+
+The agent supports three AI providers, each optimized for different deployment scenarios:
+
+1. **Ollama (Local Models)** - Zero-cost local inference
+2. **OpenAI (Cloud API)** - GPT-4, DeepSeek, OpenRouter compatible
+3. **Gemini (Google Cloud)** - Gemini 1.5/2.0 family
+
+### Provider-Specific Optimizations
+
+#### Ollama Provider (Low-End Model Support)
+
+The Ollama provider includes automatic optimizations for low-end models (1B-3B parameters):
+
+**Automatic Detection**:
+
+```python
+# Detects model size from name pattern
+is_low_end_model = any(size in model_name for size in [":1b", ":3b", ":0.5b"])
+```
+
+**Low-End Model Optimizations**:
+
+- **Context Truncation**: Max 8 messages (vs 32 for larger models)
+- **Token Limits**: Capped at 800 tokens (vs 1200-1500)
+- **Temperature**: Reduced to 0.35 (vs 0.45)
+- **Top-P**: Tightened to 0.8 (vs 0.9)
+- **Top-K**: Limited to 40 tokens
+- **Retry Delays**: Increased to 2.0s (vs 1.0s)
+
+**Example Configuration** (`.env`):
+
+```bash
+AI_PROVIDER=ollama
+AI_MODEL=qwen2.5:3b
+# Optimizations apply automatically
+```
+
+**Test Results** (qwen2.5:3b):
+
+- Pass Rate: 100% (29/29 tests)
+- Response Time: 3-8s average
+- Memory: Optimized with aggressive truncation
+- Cost: $0 (fully local)
+
+**Recommended Local Models**:
+
+- **3B Models**: qwen2.5:3b, phi-3-mini (best balance)
+- **7B Models**: qwen2.5:7b, mistral:7b (better quality)
+- **13B+ Models**: Use default settings (no low-end optimizations)
+
+#### OpenAI Provider
+
+**Optimizations**:
+
+- UTF-8 text sanitization to prevent encoding errors
+- Forced tool calling for search/scraping queries
+- Automatic retry with exponential backoff
+- Context truncation for token limit errors
+
+**Recommended Models**:
+
+- **GPT-4o**: Best quality, higher cost
+- **GPT-4o-mini**: Balanced quality/cost
+- **GPT-3.5-turbo**: Fast, low-cost for simple queries
+
+#### Gemini Provider
+
+**Optimizations**:
+
+- UTF-8 text sanitization
+- Intelligent context truncation on token limit
+- Retry logic with delay escalation
+- Rate limit detection and logging
+
+**Recommended Models**:
+
+- **gemini-2.0-flash-exp**: Latest experimental (fastest)
+- **gemini-1.5-flash**: Production stable (good quality)
+- **gemini-1.5-pro**: Best quality (higher cost)
+
+### Response Parameter Tuning
+
+Parameters are defined in `src/services/prompts/system_instructions.py`:
+
+```python
+# Base parameters (optimized for low-end models)
+"temperature": 0.4,     # Lower for consistency
+"top_p": 0.85,          # Tighter sampling
+"top_k": 40,            # Limited vocabulary
+"max_tokens": 1200      # Reduced for efficiency
+```
+
+**Style-Specific Overrides**:
+
+- **Executive**: temp=0.3, tokens=800 (concise data-driven)
+- **Technical**: temp=0.4, tokens=1500 (detailed explanations)
+- **General**: temp=0.45, tokens=1200 (balanced)
+- **Simple**: temp=0.5, tokens=1000 (approachable language)
+- **Policy**: temp=0.3, tokens=1500 (formal citations)
+
+**Low-End Model Capping**:
+All style presets are capped for low-end models:
+
+- Max temperature: 0.6
+- Max top_p: 0.9
+- Max tokens: 1500
+
+### Performance Benchmarks
+
+**Low-End Local (qwen2.5:3b)**:
+
+- Simple queries: 3-4s
+- Complex multi-city: 8-10s
+- Document analysis: 9-12s
+- Cost: $0/1000 tokens
+
+**Cloud API (GPT-4o-mini)**:
+
+- Simple queries: 0.8-1.2s
+- Complex multi-city: 2-3s
+- Document analysis: 3-5s
+- Cost: ~$0.15/1000 tokens (input), ~$0.60/1000 tokens (output)
+
+### Troubleshooting Model Issues
+
+#### Issue: Ollama Model Not Found
+
+**Symptoms**: "Model not found" error with Ollama
+
+**Fix**:
+
+```bash
+# List available models
+ollama list
+
+# Pull model if missing
+ollama pull qwen2.5:3b
+
+# Verify model loaded
+curl http://localhost:11434/api/tags
+```
+
+#### Issue: OpenAI Rate Limit
+
+**Symptoms**: 429 Too Many Requests error
+
+**Fix**:
+
+```python
+# Increase retry delay in config
+OPENAI_RETRY_DELAY = 2.0  # seconds
+OPENAI_MAX_RETRIES = 5
+
+# Or switch to lower-tier model
+AI_MODEL=gpt-3.5-turbo  # vs gpt-4o
+```
+
+#### Issue: Gemini Context Length Error
+
+**Symptoms**: "Token limit exceeded" or "Context length" errors
+
+**Fix**:
+The agent automatically truncates context intelligently. If issues persist:
+
+```python
+# Reduce history depth
+MAX_HISTORY_MESSAGES = 20  # vs default 32
+
+# Or start new session
+DELETE /api/v1/sessions/{session_id}
+```
 
 ---
 

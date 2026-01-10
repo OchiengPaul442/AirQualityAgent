@@ -7,6 +7,7 @@ from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -689,7 +690,6 @@ async def chat(
             message_count=message_count,
             document_processed=bool(document_filenames or document_filename),
             document_filename=document_filenames[0] if document_filenames else document_filename,
-
         )
     except HTTPException:
         raise
@@ -731,6 +731,182 @@ async def chat(
                 del file_content
         except Exception:
             pass
+
+
+@router.post("/agent/chat/stream")
+async def chat_stream(
+    request: Request,
+    message: str = Form(..., description="User message"),
+    session_id: str = Form(None, description="Session ID for conversation continuity"),
+    style: str = Form("general", description="Response style preset"),
+    file: UploadFile = File(None, description="Optional document upload"),
+    db: Session = Depends(get_db),
+):
+    """
+    Real-time streaming endpoint for chain-of-thought transparency.
+    
+    This endpoint streams thought process events in real-time as the agent works,
+    providing complete transparency into decision-making. No frontend toggle needed
+    - thoughts are automatically streamed.
+    
+    **Streaming Format**: Server-Sent Events (SSE)
+    
+    **Event Types**:
+    - query_analysis: Query understanding and classification
+    - tool_selection: Which tools to use and why
+    - tool_execution: Tool execution status and results
+    - data_retrieval: Data fetching progress
+    - response_synthesis: Response generation progress
+    - complete: Final completion marker
+    
+    **Example Usage (Frontend)**:
+    ```javascript
+    const eventSource = new EventSource('/api/v1/agent/chat/stream?message=...');
+    
+    eventSource.addEventListener('thought', (e) => {
+        const thought = JSON.parse(e.data);
+        console.log(thought.type, thought.title, thought.details);
+    });
+    
+    eventSource.addEventListener('complete', (e) => {
+        eventSource.close();
+    });
+    ```
+    
+    **Response Stream**: Each event contains JSON with:
+    - type: Event type (query_analysis, tool_selection, etc.)
+    - title: Human-readable title
+    - details: Detailed information dict
+    - progress: Optional progress percentage
+    - timestamp: ISO timestamp
+    """
+    import json
+
+    from src.services.agent.thought_stream import ThoughtStream
+    
+    async def generate_thoughts():
+        """Generate SSE stream of thoughts and final response."""
+        stream = None
+        try:
+            # Validate inputs
+            if not message or not message.strip():
+                error_event = {
+                    "type": "error",
+                    "title": "Invalid Input",
+                    "details": {"error": "Message cannot be empty"},
+                    "timestamp": ""
+                }
+                yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                return
+            
+            # Create thought stream
+            stream = ThoughtStream()
+            stream.enable()
+            
+            # Get conversation history
+            history = []
+            if session_id:
+                try:
+                    history = get_recent_session_history(db, session_id, max_messages=10)
+                except Exception as e:
+                    logger.warning(f"Failed to load history: {e}")
+            
+            # Handle document upload (if provided)
+            document_data = None
+            if file and file.filename:
+                from io import BytesIO
+
+                from src.tools.document_scanner import DocumentScanner
+                
+                try:
+                    file_content = BytesIO()
+                    while chunk := await file.read(1024 * 1024):
+                        file_content.write(chunk)
+                    file_content.seek(0)
+                    
+                    scanner = DocumentScanner()
+                    doc_result = scanner.scan_document_from_bytes(file_content, file.filename)
+                    
+                    if doc_result.get("success"):
+                        document_data = [doc_result]
+                    
+                    file_content.close()
+                except Exception as e:
+                    logger.error(f"Document processing failed: {e}")
+            
+            # Process message with streaming
+            agent = get_agent()
+            
+            # Start async task to stream thoughts
+            import asyncio
+
+            # Define async processing function that returns result
+            async def process_and_respond_internal():
+                """Internal function to process message and return result."""
+                return await agent.process_message(
+                    message=message,
+                    history=history,
+                    document_data=document_data,
+                    style=style,
+                    session_id=session_id,
+                    stream=stream  # Pass stream for automatic thought emission
+                )
+            
+            # Create background task for processing - this enables TRUE CONCURRENCY
+            # Thoughts will stream in real-time WHILE the agent processes
+            processing_task = asyncio.create_task(process_and_respond_internal())
+            
+            # Stream thoughts as they arrive (non-blocking, concurrent with processing)
+            async for thought_event in stream.stream():
+                if thought_event.get('type') == 'complete':
+                    break  # Exit loop when processing completes
+                event_json = json.dumps(thought_event)
+                yield f"event: thought\ndata: {event_json}\n\n"
+            
+            # Wait for processing to complete and emit final response
+            result = await processing_task
+            final_event = {
+                "type": "response",
+                "data": {
+                    "response": result.get("response", ""),
+                    "tools_used": result.get("tools_used", []),
+                    "tokens_used": result.get("tokens_used", 0),
+                    "cached": result.get("cached", False)
+                }
+            }
+            yield f"event: response\ndata: {json.dumps(final_event)}\n\n"
+            
+            # Save to database
+            if session_id:
+                try:
+                    add_message(db, session_id=session_id, role="user", content=message)
+                    add_message(db, session_id=session_id, role="assistant", content=result.get("response", ""))
+                except Exception as e:
+                    logger.warning(f"Failed to save messages: {e}")
+                
+        except Exception as e:
+            logger.error(f"Stream error: {e}", exc_info=True)
+            error_event = {
+                "type": "error",
+                "title": "Processing Error",
+                "details": {"error": str(e)},
+                "timestamp": ""
+            }
+            yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+        
+        finally:
+            if stream:
+                stream.close()
+    
+    return StreamingResponse(
+        generate_thoughts(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
 
 
 @router.post("/air-quality/query")

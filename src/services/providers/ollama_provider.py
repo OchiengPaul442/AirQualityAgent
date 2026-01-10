@@ -160,6 +160,7 @@ class OllamaProvider(BaseAIProvider):
     ) -> dict[str, Any]:
         """
         Process a message with Ollama.
+        Optimized for low-end models like qwen2.5:3b.
 
         Args:
             message: User message
@@ -173,6 +174,22 @@ class OllamaProvider(BaseAIProvider):
         Returns:
             Dictionary with response and tools_used
         """
+        # Detect low-end model and apply optimizations
+        model_name = self.settings.AI_MODEL.lower()
+        is_low_end_model = any(size in model_name for size in [":1b", ":3b", ":0.5b"])
+        
+        if is_low_end_model:
+            logger.info(f"📊 Low-end model detected ({self.settings.AI_MODEL}) - applying optimizations")
+            # Optimize parameters for stability
+            max_tokens = min(max_tokens or 1200, 800)
+            temperature = min(temperature, 0.35)
+            top_p = min(top_p, 0.8)
+            top_k = top_k or 40
+            # Reduce history aggressively for low-end models
+            if len(history) > 8:
+                logger.info(f"Truncating history from {len(history)} to 8 messages for low-end model")
+                history = history[-8:]
+        
         # Sanitize all text inputs to prevent UTF-8 encoding errors
         system_instruction = self._sanitize_text(system_instruction)
         message = self._sanitize_text(message)
@@ -189,9 +206,9 @@ class OllamaProvider(BaseAIProvider):
         # Track truncation status
         was_truncated = False
 
-        # Retry configuration for network resilience
+        # Retry configuration with longer delays for low-end models
         max_retries = 3
-        base_delay = 1
+        base_delay = 2.0 if is_low_end_model else 1.0
         response = None  # Initialize response to prevent NoneType errors
 
         for attempt in range(max_retries):

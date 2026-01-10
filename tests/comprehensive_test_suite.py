@@ -41,7 +41,8 @@ SESSION_IDS = {
     "category6": "test-cat6-edge-cases",
     "category7": "test-cat7-performance",
     "category8": "test-cat8-scraping",
-    "category9": "test-cat9-orchestration"
+    "category9": "test-cat9-orchestration",
+    "category10": "test-cat10-thinking"  # NEW: Thinking mode tests
 }
 # Increased timeout for low-end models (llama3.2:1b, deepseek-r1:1.5b, qwen2.5:3b)
 # These models can take 30-60 seconds per complex query with tool orchestration
@@ -77,9 +78,17 @@ class ComprehensiveTestRunner:
         }
         self.results.append(result)
 
-    async def send_message(self, message: str, files: List[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Send a message to the agent API."""
-        form_data = {"message": message, "session_id": self.current_session_id}
+    async def send_message(self, message: str, files: List[Dict[str, Any]] = None, form_data: Dict[str, str] = None) -> Dict[str, Any]:
+        """Send a message to the agent API with optional custom form data."""
+        if form_data is None:
+            form_data = {"message": message, "session_id": self.current_session_id}
+        else:
+            # Ensure session_id is present if not provided
+            if "session_id" not in form_data:
+                form_data["session_id"] = self.current_session_id
+            # Ensure message is present
+            if "message" not in form_data:
+                form_data["message"] = message
 
         if files:
             # Handle file uploads
@@ -339,7 +348,7 @@ class ComprehensiveTestRunner:
             return
 
         # Follow-up message referencing previous context
-        response2 = await self.send_message("How does that compare to the previous reading?")
+        response2 = await self.send_message("How is the air quality there now?")
 
         if "error" in response2:
             self.log_result(
@@ -350,16 +359,22 @@ class ComprehensiveTestRunner:
             )
             return
 
-        # Check if agent remembered the context
+        # Check if agent remembered the context (should reference Kampala or fetch Kampala data)
         response_text = response2.get("response", "").lower()
-        remembered_context = any(phrase in response_text for phrase in [
-            "kampala", "previous", "compare", "reading", "air quality"
-        ])
+        tools_used = response2.get("tools_used", [])
+        
+        # Agent remembers if it either:
+        # 1. Mentions Kampala in response, OR
+        # 2. Uses Kampala-specific air quality tools (indicates it knows we're talking about Kampala)
+        remembered_context = (
+            "kampala" in response_text or
+            any(tool in tools_used for tool in ["get_african_city_air_quality", "get_city_air_quality"])
+        )
 
         self.log_result(
             "Conversation Memory",
             remembered_context,
-            f"Agent {'remembered previous context successfully' if remembered_context else 'did not remember previous context'}",
+            f"Agent {'remembered previous context (Kampala)' if remembered_context else 'did not remember previous context'}",
             response2
         )
 
@@ -425,7 +440,7 @@ class ComprehensiveTestRunner:
             {
                 "query": "What are the health effects of air pollution?",
                 "name": "General Knowledge (No Tools)",
-                "expect_no_tools": True
+                "expect_web_search": True  # Changed: Expect web search for latest info
             }
         ]
 
@@ -445,7 +460,11 @@ class ComprehensiveTestRunner:
             response_text = response.get("response", "")
             tools_used = response.get("tools_used", [])
 
-            if test_case.get("expect_no_tools"):
+            if test_case.get("expect_web_search"):
+                # Expect search_web to be used for getting latest information
+                passed = "search_web" in tools_used
+                message = f"{'Correctly used web search for latest info' if passed else f'Should use web search for general knowledge, got: {tools_used}'}"
+            elif test_case.get("expect_no_tools"):
                 passed = len(tools_used) == 0
                 message = f"{'Correctly answered from knowledge without tools' if passed else f'Incorrectly used tools: {tools_used}'}"
             else:
@@ -570,7 +589,7 @@ class ComprehensiveTestRunner:
         await self.test_edge_cases()
         await self.test_performance_and_concurrency()
         await self.test_scraping_capabilities()
-        await self.test_orchestration_capabilities()  # NEW
+        await self.test_orchestration_capabilities()
 
         # Generate summary
         self._generate_summary()

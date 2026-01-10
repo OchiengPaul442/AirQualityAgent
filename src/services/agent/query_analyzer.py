@@ -105,7 +105,7 @@ class QueryAnalyzer:
         
         Returns:
             Dict with:
-                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research'
+                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research' | 'general_knowledge'
                 - confidence: float (0-1)
                 - recommended_tools: list of tool names
                 - skip_ai_tools: bool (whether AI should call additional tools)
@@ -142,8 +142,33 @@ class QueryAnalyzer:
                 "skip_ai_tools": False,
             }
 
+        # CRITICAL: General knowledge queries about air pollution/health effects - ALWAYS use web search
+        # These need latest authoritative information from WHO, EPA, etc.
+        general_knowledge_patterns = [
+            r'\bhealth effects\b',
+            r'\bhealth impacts?\b',
+            r'\bhow does.*affect\b',
+            r'\bwhat are.*effects\b',
+            r'\bcauses?\b',
+            r'\bsymptoms?\b',
+            r'\brisks?\b',
+            r'\bwho guidelines?\b',
+            r'\bepa standards?\b',
+            r'\bair pollution.*health\b',
+        ]
+        
+        if any(re.search(pattern, message_lower) for pattern in general_knowledge_patterns):
+            # Verify it's not location-specific
+            if not any(city in message_lower for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES):
+                return {
+                    "query_type": "general_knowledge",
+                    "confidence": 0.9,
+                    "recommended_tools": ["search_web"],
+                    "skip_ai_tools": False,  # MUST use web search for latest info
+                }
+
         # Educational queries - No tools needed, pure AI knowledge
-        # CHECKED LAST to avoid false positives from "tell me about recent studies"
+        # CHECKED AFTER general_knowledge to avoid false positives
         educational_patterns = [
             r'\bwhat is\b',
             r'\bexplain\b',
@@ -638,6 +663,7 @@ class QueryAnalyzer:
         logger.info(f"📊 Query type: {classification['query_type']} (confidence: {classification['confidence']:.2f})")
 
         # STEP 2: Early return for educational queries (no tools needed)
+        # But NOT for general_knowledge queries (they need web search)
         if classification["query_type"] == "educational" and classification["skip_ai_tools"]:
             logger.info("✅ Educational query - no tools needed")
             return {
@@ -748,10 +774,10 @@ class QueryAnalyzer:
                     logger.error(f"Proactive forecast call failed for {city}: {e}")
 
         # Call search tool intelligently (optimized to supplement, not overwhelm)
-        # CRITICAL FIX: Ensure research and data_analysis queries ALWAYS trigger search
+        # CRITICAL FIX: Ensure research, data_analysis, and general_knowledge queries ALWAYS trigger search
         should_search = (
             search_analysis["requires_search"]
-            or classification["query_type"] in ["data_analysis", "research"]
+            or classification["query_type"] in ["data_analysis", "research", "general_knowledge"]
         )
 
         # CRITICAL FIX: Generate search query if not provided but should_search is True
