@@ -52,8 +52,12 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Copy application code (only what's needed)
-COPY src/ /app/src/
+# Copy application code (only what's needed for new structure)
+COPY core/ /app/core/
+COPY domain/ /app/domain/
+COPY infrastructure/ /app/infrastructure/
+COPY interfaces/ /app/interfaces/
+COPY shared/ /app/shared/
 COPY pyproject.toml /app/
 
 # Create non-root user for security and data directory for SQLite

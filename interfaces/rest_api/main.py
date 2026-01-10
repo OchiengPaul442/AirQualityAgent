@@ -35,7 +35,7 @@ def setup_logging():
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
         # Only log errors and warnings from providers, not debug info
-        logging.getLogger("src.services.providers").setLevel(logging.WARNING)
+        logging.getLogger("core.providers").setLevel(logging.WARNING)
     else:
         # In development, also reduce noise from libraries
         logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -44,7 +44,7 @@ def setup_logging():
         logging.getLogger("openai").setLevel(logging.WARNING)
         logging.getLogger("httpcore").setLevel(logging.WARNING)
         # Only log errors and warnings from providers, not debug info
-        logging.getLogger("src.services.providers").setLevel(logging.WARNING)
+        logging.getLogger("core.providers").setLevel(logging.WARNING)
 
 
 setup_logging()
