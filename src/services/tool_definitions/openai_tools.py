@@ -785,21 +785,9 @@ def get_visualization_tools() -> list[dict]:
 - area: Cumulative trends (stacked areas)
 - timeseries: Time-based data with date parsing
 
-🔄 RETURNS: Base64-encoded PNG image (data:image/png;base64,...) in chart_data field
+RETURNS: Base64-encoded PNG image embedded automatically in your response
 
-💡 HOW TO USE THE RESULT:
-1. Call this tool with your data
-2. Tool returns {"chart_data": "data:image/png;base64,...", "success": true}
-3. INCLUDE the chart in your response as: ![Chart](data:image/png;base64,...)
-4. This makes the chart render automatically in the frontend!
-
-📝 EXAMPLE WORKFLOW:
-User: "Plot PM2.5 levels from the uploaded data"
-→ Step 1: Call generate_chart with parsed data
-→ Step 2: Receive chart_data in response
-→ Step 3: Include in markdown: ![PM2.5 Trend](chart_data)
-
-The frontend markdown formatter will render the embedded image!""",
+USAGE: Call with data array and chart parameters. The chart will be embedded automatically as an image in the response.""",
                 "parameters": {
                     "type": "object",
                     "properties": {

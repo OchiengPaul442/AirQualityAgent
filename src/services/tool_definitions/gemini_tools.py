@@ -588,7 +588,7 @@ def get_visualization_tools() -> types.Tool:
         function_declarations=[
             types.FunctionDeclaration(
                 name="generate_chart",
-                description="🎨 Generate professional charts and graphs from data. Use this when the user requests visualizations like 'plot a chart', 'show me a graph', 'visualize this data', 'create a chart showing trends', etc. Returns a base64-encoded image (data:image/png;base64,...) in chart_data field that should be embedded in your response as ![Chart](data:image/png;base64,...) for automatic rendering. Supports line charts, bar charts, scatter plots, histograms, box plots, pie charts, area charts, and time series. IMPORTANT: After calling this tool, include the returned chart_data as a markdown image in your response so it displays inline!",
+                description="🎨 Generate professional charts and graphs from data. Use this when the user requests visualizations like 'plot a chart', 'show me a graph', 'visualize this data', 'create a chart showing trends', etc. Supports line charts, bar charts, scatter plots, histograms, box plots, pie charts, area charts, and time series. The generated chart will be automatically embedded in your response as an image.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={

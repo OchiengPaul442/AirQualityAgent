@@ -963,7 +963,7 @@ class AgentService:
                     f"\\n\\n--- DOCUMENT: {filename} ({file_type.upper()}) ---\\n{content}"
                 )
                 if truncated:
-                    doc_summary += f"\\n[... content truncated, use scan_document('{filename}') for full content ...]\\n"
+                    doc_summary += "\\n[... content truncated, full data available on request ...]\\n"
                 doc_summaries.append(doc_summary)
 
             document_injection = "\\n\\n".join(doc_summaries) + "\\n\\n--- END DOCUMENTS ---\\n\\n"
@@ -1385,13 +1385,13 @@ class AgentService:
             "🔔 DOCUMENTS ARE UPLOADED AND READY - READ THIS FIRST!",
             "=" * 80,
             "\n⚠️⚠️⚠️ CRITICAL: Documents have been uploaded and their content is provided below.",
-            "\n🚫 DO NOT call scan_document tool - the data is ALREADY HERE",
+            "\n🚫 DO NOT say 'I need the file' or 'please upload' - the data is ALREADY HERE",
             "🚫 DO NOT say 'I don't have access' - YOU DO HAVE ACCESS (see below)",
             "✅ ANALYZE the document content directly - it is ready for you",
-            "\n📊 IMPORTANT: If user asks for charts/graphs/visualization, USE generate_chart tool with this data",
+            "\n📊 IMPORTANT: If user asks for charts/graphs/visualization, generate them immediately",
             "   - Parse the data from the document content below",
-            "   - Call generate_chart with appropriate parameters",
-            "   - Example: extract columns like 'Date', 'PM2.5', then call generate_chart\n",
+            "   - Create appropriate visualization based on data structure",
+            "   - Example: extract columns like 'Date', 'PM2.5', then create trend chart\n",
         ]
 
         if len(unique_documents) > 1:
