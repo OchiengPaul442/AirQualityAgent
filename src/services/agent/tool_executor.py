@@ -868,3 +868,72 @@ class ToolExecutor:
         import asyncio
 
         return await asyncio.to_thread(self.execute, function_name, args)
+
+    async def execute_parallel(
+        self, tool_calls: list[tuple[str, dict[str, Any]]]
+    ) -> list[dict[str, Any]]:
+        """
+        Execute multiple tools in parallel using asyncio.gather().
+
+        This implements Anthropic's parallelization pattern for independent tool calls,
+        significantly reducing latency when multiple tools are needed simultaneously.
+
+        Pattern: Sectioning - breaking independent subtasks to run in parallel.
+
+        Args:
+            tool_calls: List of (function_name, args) tuples to execute
+
+        Returns:
+            List of result dictionaries, one per tool call (maintains order)
+
+        Example:
+            results = await executor.execute_parallel([
+                ("get_african_city_air_quality", {"city": "Kampala"}),
+                ("get_city_air_quality", {"city": "London"}),
+                ("get_openmeteo_current_air_quality", {"latitude": 0.3, "longitude": 32.5})
+            ])
+        """
+        import asyncio
+
+        if not tool_calls:
+            return []
+
+        logger.info(
+            f"Executing {len(tool_calls)} tools in parallel: "
+            f"{[name for name, _ in tool_calls]}"
+        )
+
+        start_time = time.time()
+
+        # Create tasks for all tool calls
+        tasks = [
+            self.execute_async(function_name, args) for function_name, args in tool_calls
+        ]
+
+        # Execute all in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Convert exceptions to error dictionaries
+        processed_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                function_name = tool_calls[i][0]
+                logger.error(f"Parallel execution failed for {function_name}: {result}")
+                processed_results.append(
+                    {
+                        "error": str(result),
+                        "error_type": type(result).__name__,
+                        "function_name": function_name,
+                        "guidance": "This tool failed during parallel execution. Please try again or use an alternative.",
+                    }
+                )
+            else:
+                processed_results.append(result)
+
+        elapsed = time.time() - start_time
+        logger.info(
+            f"Parallel execution completed: {len(tool_calls)} tools in {elapsed:.2f}s "
+            f"(vs ~{elapsed * len(tool_calls):.2f}s sequential)"
+        )
+
+        return processed_results

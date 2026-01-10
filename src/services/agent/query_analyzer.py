@@ -232,11 +232,11 @@ class QueryAnalyzer:
         coord_pattern_verbose = r'(?:latitude|lat)\s+(-?\d+\.?\d*)\s*,?\s*(?:longitude|lon)\s+(-?\d+\.?\d*)'
         # Format 2: Simple "X, Y"
         coord_pattern_simple = r'(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)'
-        
+
         coord_match = re.search(coord_pattern_verbose, message, re.IGNORECASE)
         if not coord_match:
             coord_match = re.search(coord_pattern_simple, message)
-        
+
         if coord_match:
             try:
                 lat = float(coord_match.group(1))
