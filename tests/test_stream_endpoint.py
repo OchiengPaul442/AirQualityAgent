@@ -11,16 +11,12 @@ Tests the /api/v1/agent/chat/stream endpoint to ensure:
 Based on Anthropic's best practices for building effective agents.
 """
 
-import asyncio
 import json
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
 
-from src.api.main import app
-from src.db.database import get_db
-from src.db.repository import add_message, create_session, get_session
+from interfaces.rest_api.main import app
 
 # Test session ID as specified by the user
 TEST_SESSION_ID = "ca02cea3-c17e-471b-8d04-0ecc9c823367"
@@ -55,7 +51,7 @@ class TestStreamEndpoint:
 
         # Verify event types
         event_types = [e["type"] for e in events]
-        
+
         # Should have at least: thoughts, response, done
         assert "thought" in event_types, "Should have thought events"
         assert "response" in event_types, "Should have response event"
@@ -67,7 +63,7 @@ class TestStreamEndpoint:
         # Verify response structure
         response_events = [e for e in events if e["type"] == "response"]
         assert len(response_events) == 1, "Should have exactly one response event"
-        
+
         response_data = response_events[0]["data"]["data"]  # Access nested data
         assert "response" in response_data, "Response should have 'response' field"
         assert "session_id" in response_data, "Response should have 'session_id' field"
@@ -102,10 +98,10 @@ class TestStreamEndpoint:
 
         # Check for expected thought types
         thought_types = [t["data"].get("type") for t in thought_events]
-        
+
         # Should have query analysis as first thought
         if len(thought_types) > 0:
-            assert any("query" in str(t).lower() or "analysis" in str(t).lower() 
+            assert any("query" in str(t).lower() or "analysis" in str(t).lower()
                       for t in thought_types), "Should have query analysis thought"
 
     def test_stream_completion_signal(self):
@@ -129,10 +125,10 @@ class TestStreamEndpoint:
 
         # Verify complete thought is emitted before response
         complete_thoughts = [
-            e for e in events 
+            e for e in events
             if e["type"] == "thought" and e["data"].get("type") == "complete"
         ]
-        
+
         if complete_thoughts:
             complete_idx = events.index(complete_thoughts[0])
             response_events = [e for e in events if e["type"] == "response"]
@@ -153,8 +149,8 @@ class TestStreamEndpoint:
 
         # Empty message should return 422 validation error, not SSE stream
         assert response.status_code == 422, "Should return validation error for empty message"
-        
-        # Test with whitespace-only message  
+
+        # Test with whitespace-only message
         response = self.client.post(
             "/api/v1/agent/chat/stream",
             data={
@@ -193,7 +189,7 @@ class TestStreamEndpoint:
 
         events1 = self._parse_sse_stream(response1.text)
         response_data1 = [e for e in events1 if e["type"] == "response"][0]["data"]["data"]
-        
+
         # Session ID should match
         assert response_data1["session_id"] == self.session_id
 
@@ -220,7 +216,7 @@ class TestStreamEndpoint:
         """Test streaming with document upload"""
         # Create a simple CSV file
         csv_content = b"location,aqi,pm25\nLondon,45,12.5\nParis,38,10.2"
-        
+
         response = self.client.post(
             "/api/v1/agent/chat/stream",
             data={
@@ -247,9 +243,9 @@ class TestStreamEndpoint:
     def test_stream_timeout_protection(self):
         """Test that stream has timeout protection"""
         import time
-        
+
         start_time = time.time()
-        
+
         response = self.client.post(
             "/api/v1/agent/chat/stream",
             data={
@@ -263,9 +259,9 @@ class TestStreamEndpoint:
 
         # Should complete within reasonable time
         assert duration < 120, f"Stream took too long: {duration}s"
-        
+
         events = self._parse_sse_stream(response.text)
-        
+
         # Should still complete properly
         assert any(e["type"] == "done" for e in events), "Should complete with done event"
 
@@ -292,13 +288,13 @@ class TestStreamEndpoint:
         ]
 
         start_time = time.time()
-        
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
                 executor.submit(make_request, msg, sess)
-                for msg, sess in zip(messages, sessions)
+                for msg, sess in zip(messages, sessions, strict=False)
             ]
-            
+
             responses = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         duration = time.time() - start_time
@@ -325,16 +321,16 @@ class TestStreamEndpoint:
 
         events = self._parse_sse_stream(response.text)
         response_events = [e for e in events if e["type"] == "response"]
-        
+
         assert len(response_events) == 1, "Should have exactly one response"
-        
+
         response_data = response_events[0]["data"]["data"]
         response_text = response_data["response"]
 
         # Quality checks
         assert len(response_text) > 100, "Response should be substantive (>100 chars)"
         assert len(response_text) < 10000, "Response should be reasonable length (<10k chars)"
-        
+
         # Should not contain reasoning artifacts
         forbidden_phrases = [
             "the user wants",
@@ -342,7 +338,7 @@ class TestStreamEndpoint:
             "i should respond",
             "let me think"
         ]
-        
+
         response_lower = response_text.lower()
         for phrase in forbidden_phrases:
             assert phrase not in response_lower, \
@@ -400,7 +396,7 @@ class TestStreamEndpoint:
 
         events = self._parse_sse_stream(response.text)
         response_events = [e for e in events if e["type"] == "response"]
-        
+
         response_data = response_events[0]["data"]["data"]
 
         # Required fields
@@ -434,21 +430,21 @@ class TestStreamEndpoint:
         """
         events = []
         lines = stream_text.split('\n')  # Don't strip to preserve final empty lines
-        
+
         current_event = None
         current_data = None
-        
+
         for line in lines:
             line = line.strip()
-            
+
             if line.startswith('event: '):
                 # New event type
                 current_event = line[7:].strip()
-                
+
             elif line.startswith('data: '):
                 # Event data
                 data_str = line[6:].strip()
-                
+
                 if data_str:
                     try:
                         current_data = json.loads(data_str)
@@ -457,7 +453,7 @@ class TestStreamEndpoint:
                 else:
                     # Empty data (like for done event)
                     current_data = {}
-                
+
             elif line == '':
                 # Empty line marks end of event
                 if current_event is not None:  # Allow empty data
@@ -467,14 +463,14 @@ class TestStreamEndpoint:
                     })
                     current_event = None
                     current_data = None
-        
+
         # Handle final event if stream doesn't end with empty line
         if current_event is not None:
             events.append({
                 "type": current_event,
                 "data": current_data
             })
-        
+
         return events
 
 
@@ -484,7 +480,7 @@ class TestStreamIntegration:
     def test_stream_database_persistence(self):
         """Test that streamed messages are saved to database"""
         client = TestClient(app)
-        
+
         # Send streaming request
         response = client.post(
             "/api/v1/agent/chat/stream",
@@ -499,10 +495,10 @@ class TestStreamIntegration:
         # Check database
         # Note: This requires access to the database session
         # In a real test, you'd mock the database or use a test database
-        
+
         # For now, just verify the session exists via API
         session_response = client.get(f"/api/v1/sessions/{TEST_SESSION_ID}")
-        
+
         if session_response.status_code == 200:
             session_data = session_response.json()
             assert len(session_data["messages"]) >= 2, \
@@ -511,7 +507,7 @@ class TestStreamIntegration:
     def test_stream_cost_tracking(self):
         """Test that streaming requests are tracked for cost"""
         client = TestClient(app)
-        
+
         # Make multiple streaming requests
         for i in range(3):
             response = client.post(
@@ -535,14 +531,13 @@ class TestStreamAsync:
 
     async def test_stream_async_client(self):
         """Test streaming with async HTTP client"""
-        from httpx import AsyncClient
 
         # Use TestClient's transport for async testing
         from starlette.testclient import TestClient
 
-        from src.api.main import app as test_app
+        from interfaces.rest_api.main import app as test_app
         test_client = TestClient(test_app)
-        
+
         # For now, use sync client as AsyncClient with TestClient is tricky
         response = test_client.post(
             "/api/v1/agent/chat/stream",
@@ -562,19 +557,19 @@ class TestStreamAsync:
         """Helper to parse SSE stream"""
         events = []
         lines = stream_text.split('\n')  # Don't strip to preserve final empty lines
-        
+
         current_event = None
         current_data = None
-        
+
         for line in lines:
             line = line.strip()
-            
+
             if line.startswith('event: '):
                 current_event = line[7:].strip()
-                
+
             elif line.startswith('data: '):
                 data_str = line[6:].strip()
-                
+
                 if data_str:
                     try:
                         current_data = json.loads(data_str)
@@ -583,7 +578,7 @@ class TestStreamAsync:
                 else:
                     # Empty data (like for done event)
                     current_data = {}
-                
+
             elif line == '':
                 if current_event is not None:  # Allow empty data
                     events.append({
@@ -592,14 +587,14 @@ class TestStreamAsync:
                     })
                     current_event = None
                     current_data = None
-        
+
         # Handle final event if stream doesn't end with empty line
         if current_event is not None:
             events.append({
                 "type": current_event,
                 "data": current_data
             })
-        
+
         return events
 
 

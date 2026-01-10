@@ -13,6 +13,43 @@
 
 AERIS-AQ is an AI-powered air quality consultation agent built following Anthropic's best practices for effective agents. The system employs a hybrid workflow-agent architecture optimized for reliability, performance, and cost-efficiency.
 
+### New Professional Architecture Structure
+
+**Following AI Agent Best Practices** (Based on Anthropic Guidelines):
+
+```
+AirQualityAgent/
+├── core/                      # 🧠 Core agent infrastructure
+│   ├── agent/                 # Agent orchestration & reasoning
+│   ├── providers/             # LLM provider abstractions
+│   ├── memory/                # Conversation memory & context
+│   └── tools/                 # Tool execution & definitions
+├── domain/                    # 🌍 Business logic (Air Quality domain)
+│   ├── services/              # Air quality data services
+│   └── models/                # Domain models & schemas
+├── infrastructure/            # 🔌 External integrations & data
+│   ├── api/                   # API clients (WAQI, AirQo, etc.)
+│   ├── database/              # Database layer
+│   └── cache/                 # Caching layer
+├── interfaces/                # 🌐 User-facing interfaces
+│   ├── rest_api/              # FastAPI REST interface
+│   └── mcp/                   # MCP protocol interface
+├── shared/                    # 🛠️ Shared utilities
+│   ├── utils/                 # Common utilities
+│   ├── config/                # Configuration
+│   └── monitoring/            # Logging & monitoring
+└── tests/                     # 🧪 Comprehensive test suite
+```
+
+**Architectural Benefits**:
+
+- **Clean Separation of Concerns**: Each layer has a single, well-defined responsibility
+- **Scalability**: Components can be independently scaled and deployed
+- **Maintainability**: Clear module boundaries reduce coupling and increase cohesion
+- **Testability**: Isolated components are easier to unit test and mock
+- **Extensibility**: New providers, tools, and interfaces can be added without affecting core logic
+- **Professional Standards**: Follows industry best practices for AI agent architecture
+
 ### Key Capabilities
 
 - Real-time air quality data retrieval from multiple global sources
@@ -47,7 +84,7 @@ Query Classifier
     +--- Data Analysis --> Search + Visualization Tools
 ```
 
-**Implementation**: `src/services/agent/query_analyzer.py`
+**Implementation**: `core/agent/query_analyzer.py`
 
 **Benefits**:
 
@@ -123,7 +160,7 @@ Complex tasks decompose into sequential steps:
 
 ### 1. Agent Service Layer
 
-**File**: `src/services/agent_service.py`
+**File**: `domain/services/agent_service.py`
 
 **Responsibilities**:
 
@@ -142,7 +179,7 @@ Complex tasks decompose into sequential steps:
 
 ### 2. Query Analyzer
 
-**File**: `src/services/agent/query_analyzer.py`
+**File**: `core/agent/query_analyzer.py`
 
 **Responsibilities**:
 
@@ -166,7 +203,7 @@ Complex tasks decompose into sequential steps:
 
 ### 3. Tool Executor
 
-**File**: `src/services/agent/tool_executor.py`
+**File**: `core/agent/tool_executor.py`
 
 **Responsibilities**:
 
@@ -204,9 +241,9 @@ results = await executor.execute_parallel([
 
 **Files**:
 
-- `src/services/providers/openai_provider.py` (OpenAI, Azure OpenAI)
-- `src/services/providers/gemini_provider.py` (Google Gemini)
-- `src/services/providers/ollama_provider.py` (Local models)
+- `core/providers/openai_provider.py` (OpenAI, Azure OpenAI)
+- `core/providers/gemini_provider.py` (Google Gemini)
+- `core/providers/ollama_provider.py` (Local models)
 
 **Responsibilities**:
 
@@ -232,7 +269,7 @@ results = await executor.execute_parallel([
 
 ### 5. Session Management
 
-**File**: `src/db/repository.py`, `src/api/routes.py`
+**File**: `infrastructure/database/repository.py`, `interfaces/rest_api/routes.py`
 
 **Design Philosophy**: Based on Anthropic's best practices for maintaining effective context windows while preventing cost escalation and performance degradation.
 
@@ -249,7 +286,7 @@ The 100-message limit is carefully calibrated:
 **Configuration**:
 
 ```python
-# src/config.py
+# shared/config/settings.py
 MAX_MESSAGES_PER_SESSION = 100          # Hard limit (returns HTTP 429)
 SESSION_LIMIT_WARNING_THRESHOLD = 90    # Soft warning
 DISABLE_SESSION_LIMIT = False           # Bypass for testing (use cautiously)
@@ -285,7 +322,7 @@ DISABLE_SESSION_LIMIT = False           # Bypass for testing (use cautiously)
 
 ### 6. Data Services Layer
 
-**Files**: `src/services/*_service.py`
+**Files**: `infrastructure/api/*_service.py`
 
 **Design Pattern**: Base class inheritance (eliminates 71% code duplication)
 

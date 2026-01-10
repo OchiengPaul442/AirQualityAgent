@@ -1,0 +1,1 @@
+"""\nshared.config package\n"""

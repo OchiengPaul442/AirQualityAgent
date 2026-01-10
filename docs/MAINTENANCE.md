@@ -71,7 +71,7 @@ find . -name "*.gz" -mtime +30 -delete
 **Manual Cleanup**:
 
 ```python
-from src.db.repository import AgentRepository
+from infrastructure.database.repository import AgentRepository
 
 async def cleanup_old_sessions():
     repo = AgentRepository()
@@ -225,14 +225,14 @@ sqlite3 data/aeris_agent.db "PRAGMA integrity_check;"
 **Enable Debug Logging**:
 
 ```python
-# In src/config.py
+# In shared/config/settings.py
 LOG_LEVEL = "DEBUG"
 ```
 
 **Run in Debug Mode**:
 
 ```bash
-uvicorn src.api.main:app --reload --log-level debug
+uvicorn interfaces.rest_api.main:app --reload --log-level debug
 ```
 
 **Analyze Logs**:
@@ -252,7 +252,7 @@ grep "ERROR" logs/app.log | cut -d':' -f4 | sort | uniq -c
 
 ### Configuration Optimization
 
-**File**: `src/config.py`
+**File**: `shared/config/settings.py`
 
 ```python
 # Connection pool settings
@@ -389,7 +389,7 @@ nvidia-smi  # Check GPU memory usage during inference
 **Rate Limit Management**:
 
 ```python
-# In src/config.py
+# In shared/config/settings.py
 OPENAI_MAX_RETRIES = 5
 OPENAI_RETRY_DELAY = 2.0  # seconds
 OPENAI_TIMEOUT = 60       # request timeout
@@ -582,7 +582,7 @@ sudo apt install postgresql postgresql-contrib
 sudo -u postgres createdb aeris_agent
 
 # 3. Update config
-# src/config.py
+# shared/config/settings.py
 DATABASE_URL = "postgresql://user:pass@localhost/aeris_agent"
 
 # 4. Run migration
@@ -820,7 +820,7 @@ netstat -an | grep 8000 | wc -l
 
 # 2. Scale up
 # Option A: Increase worker processes
-uvicorn src.api.main:app --workers 4
+uvicorn interfaces.rest_api.main:app --workers 4
 
 # Option B: Add load balancer + more servers
 # (requires infrastructure changes)
@@ -841,9 +841,9 @@ watch 'curl -s http://localhost:8000/health | jq'
 **Before Release**:
 
 - [ ] Run full test suite: `python tests/comprehensive_test_suite.py`
-- [ ] Run lint checks: `python -m ruff check src/`
+- [ ] Run lint checks: `python -m ruff check . --fix`
 - [ ] Update CHANGELOG.md
-- [ ] Update version in `src/__init__.py`
+- [ ] Update version in `shared/config/settings.py`
 - [ ] Tag release: `git tag v2.10.1`
 
 **After Release**:
@@ -878,5 +878,5 @@ python tests/comprehensive_test_suite.py
 - Architecture Documentation: `docs/ARCHITECTURE.md`
 - API Documentation: `http://localhost:8000/docs`
 - Test Suite: `tests/comprehensive_test_suite.py`
-- Configuration: `src/config.py`
+- Configuration: `shared/config/settings.py`
 - Logs: `logs/app.log`, `logs/errors.json`

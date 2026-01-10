@@ -22,7 +22,6 @@ Generates detailed performance report at: tests/stress_test_report.json
 import asyncio
 import io
 import json
-import os
 import sys
 import time
 import uuid
@@ -31,11 +30,9 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import pandas as pd
-from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -180,6 +177,7 @@ class StressTestRunner:
             thought_count = 0
             response_received = False
             done_received = False
+            thought_types = []
 
             async with self.client.stream(
                 "POST",
@@ -193,6 +191,17 @@ class StressTestRunner:
                 async for line in response.aiter_lines():
                     if line.startswith("event: thought"):
                         thought_count += 1
+                        # Parse the thought to see what type it is
+                        try:
+                            next_line = await response.aiter_lines().__anext__()
+                            if next_line.startswith("data: "):
+                                import json as json_module
+                                thought_data = json_module.loads(next_line[6:])
+                                thought_type = thought_data.get("type", "unknown")
+                                thought_types.append(thought_type)
+                                print(f"  💭 Thought {thought_count}: {thought_type} - {thought_data.get('title', 'N/A')}")
+                        except Exception as e:
+                            print(f"  Could not parse thought data: {e}")
                     elif line.startswith("event: response"):
                         response_received = True
                     elif line.startswith("event: done"):
@@ -201,22 +210,38 @@ class StressTestRunner:
 
             duration = time.time() - start
 
-            if response_received and done_received:
+            # Check if we got expected thought types
+            expected_types = ["query_analysis", "tool_selection", "response_synthesis", "complete"]
+            missing_types = [t for t in expected_types if t not in thought_types]
+
+            if response_received and done_received and thought_count > 0:
                 self.log(
                     f"✓ Streaming passed ({duration:.2f}s, {thought_count} thoughts)",
                     "SUCCESS"
                 )
+                if missing_types:
+                    self.log(f"  ⚠️  Missing thought types: {missing_types}", "WARNING")
                 return {
                     "test": "streaming_endpoint",
                     "status": "PASSED",
                     "duration": duration,
                     "thought_count": thought_count,
+                    "thought_types": thought_types,
+                    "missing_types": missing_types,
                     "response_received": response_received,
                     "done_received": done_received
                 }
             else:
+                error_parts = []
+                if thought_count == 0:
+                    error_parts.append("NO THOUGHTS EMITTED")
+                if not response_received:
+                    error_parts.append("no response")
+                if not done_received:
+                    error_parts.append("no done signal")
+
                 self.log(
-                    f"✗ Streaming incomplete (response: {response_received}, done: {done_received})",
+                    f"✗ Streaming incomplete: {', '.join(error_parts)}",
                     "ERROR"
                 )
                 return {
@@ -224,7 +249,8 @@ class StressTestRunner:
                     "status": "FAILED",
                     "duration": duration,
                     "thought_count": thought_count,
-                    "error": "Incomplete stream"
+                    "thought_types": thought_types,
+                    "error": f"Incomplete stream: {', '.join(error_parts)}"
                 }
         except Exception as e:
             self.log(f"✗ Streaming exception: {e}", "ERROR")
@@ -429,6 +455,105 @@ class StressTestRunner:
                 "error": str(e)
             }
 
+    async def test_langchain_memory_integration(self) -> dict[str, Any]:
+        """Test 6b: LangChain Memory Integration"""
+        self.log("Test 6b: LangChain Memory Integration", "HEADER")
+        start = time.time()
+
+        try:
+            session_id = f"langchain_test_{uuid.uuid4().hex[:8]}"
+            self.session_ids["langchain_test"] = session_id
+
+            # Step 1: Initial message
+            data1 = {
+                "message": "My name is Alice and I live in Seattle.",
+                "session_id": session_id
+            }
+            response1 = await self.client.post(f"{BASE_URL}/agent/chat", data=data1)
+
+            if response1.status_code != 200:
+                raise Exception(f"First message failed: {response1.status_code}")
+
+            # Step 2: Check if memory was stored (ask about stored info)
+            data2 = {
+                "message": "What's my name and where do I live?",
+                "session_id": session_id
+            }
+            response2 = await self.client.post(f"{BASE_URL}/agent/chat", data=data2)
+
+            if response2.status_code != 200:
+                raise Exception(f"Second message failed: {response2.status_code}")
+
+            result2 = response2.json()
+            response_text = result2.get("response", "").lower()
+
+            # Check if LangChain memory is working
+            has_name = "alice" in response_text
+            has_location = "seattle" in response_text
+            memory_tokens = result2.get("memory_tokens", 0)
+
+            # Step 3: Check long conversation memory management
+            messages = [
+                "Tell me about air quality in my city.",
+                "What's the AQI today?",
+                "How does it compare to yesterday?",
+                "What about last week?",
+                "Should I exercise outdoors?"
+            ]
+
+            for msg in messages:
+                data = {"message": msg, "session_id": session_id}
+                await self.client.post(f"{BASE_URL}/agent/chat", data=data)
+
+            # Final check - does it still remember?
+            data_final = {
+                "message": "Just to confirm, what city was I asking about?",
+                "session_id": session_id
+            }
+            response_final = await self.client.post(f"{BASE_URL}/agent/chat", data=data_final)
+            result_final = response_final.json()
+            final_text = result_final.get("response", "").lower()
+            still_remembers = "seattle" in final_text
+
+            duration = time.time() - start
+
+            if has_name and has_location and still_remembers:
+                self.log(
+                    f"✓ LangChain memory passed ({duration:.2f}s, {memory_tokens} tokens tracked)",
+                    "SUCCESS"
+                )
+                return {
+                    "test": "langchain_memory",
+                    "status": "PASSED",
+                    "duration": duration,
+                    "has_name": has_name,
+                    "has_location": has_location,
+                    "still_remembers_after_conversation": still_remembers,
+                    "memory_tokens": memory_tokens
+                }
+            else:
+                self.log(
+                    f"✗ LangChain memory failed (name: {has_name}, location: {has_location}, persistence: {still_remembers})",
+                    "ERROR"
+                )
+                return {
+                    "test": "langchain_memory",
+                    "status": "FAILED",
+                    "duration": duration,
+                    "has_name": has_name,
+                    "has_location": has_location,
+                    "still_remembers_after_conversation": still_remembers,
+                    "error": "Memory recall failed"
+                }
+        except Exception as e:
+            self.log(f"✗ LangChain memory exception: {e}", "ERROR")
+            return {
+                "test": "langchain_memory",
+                "status": "FAILED",
+                "duration": time.time() - start,
+                "error": str(e)
+            }
+
     async def test_security_input_validation(self) -> dict[str, Any]:
         """Test 7: Security - input validation"""
         self.log("Test 7: Security Input Validation", "HEADER")
@@ -478,7 +603,7 @@ class StressTestRunner:
                 "results": results
             }
         else:
-            self.log(f"✗ Security validation failed", "ERROR")
+            self.log("✗ Security validation failed", "ERROR")
             return {
                 "test": "security_validation",
                 "status": "FAILED",
@@ -873,6 +998,7 @@ class StressTestRunner:
             self.test_document_upload_csv(),
             self.test_document_upload_pdf(),
             self.test_context_retention(),
+            self.test_langchain_memory_integration(),  # NEW: LangChain memory test
             self.test_security_input_validation(),
             self.test_complex_naaqs_question(),
             self.test_ozone_formation_question(),

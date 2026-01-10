@@ -76,5 +76,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Run the application with single worker to avoid SQLite locking issues
 # Use --workers 1 for SQLite, or increase if using PostgreSQL/MySQL
-CMD ["/opt/venv/bin/uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "75"]
+CMD ["/opt/venv/bin/uvicorn", "interfaces.rest_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "75"]
 

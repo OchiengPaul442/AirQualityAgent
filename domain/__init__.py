@@ -1,0 +1,1 @@
+"""\ndomain package\n"""

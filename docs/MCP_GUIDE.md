@@ -29,7 +29,7 @@ Aeris supports MCP in two ways:
 1. Start the MCP server:
 
    ```bash
-   python src/mcp/server.py
+   python interfaces/mcp/server.py
    ```
 
 2. Configure Claude Desktop to use the server.
@@ -41,7 +41,7 @@ Aeris supports MCP in two ways:
      "mcpServers": {
        "airquality": {
          "command": "python",
-         "args": ["path/to/AirQualityAgent/src/mcp/server.py"]
+         "args": ["path/to/AirQualityAgent/interfaces/mcp/server.py"]
        }
      }
    }
@@ -297,8 +297,8 @@ Pass environment variables to MCP servers:
 
 ### Implementation
 
-- **System**: [`system_instructions.py`](../src/services/prompts/system_instructions.py) - Rules + examples
-- **Runtime**: [`agent_service.py`](../src/services/agent_service.py) - Detection + filtering
+- **System**: [`system_instructions.py`](../core/memory/prompts/system_instructions.py) - Rules + examples
+- **Runtime**: [`agent_service.py`](../domain/services/agent_service.py) - Detection + filtering
 - **Tests**: `pytest tests/test_agent.py -v`
 
 ### Key Principles

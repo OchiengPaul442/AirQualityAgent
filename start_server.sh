@@ -11,10 +11,10 @@ echo "   To enable auto-reload for development, add --reload flag"
 echo ""
 
 # Start the server without auto-reload
-# python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+# python -m uvicorn interfaces.rest_api.main:app --host 0.0.0.0 --port 8000
 
 # To run the MCP Server:
-# python src/mcp/server.py
+# python interfaces/mcp/server.py
 
 # For now, we default to the API server, but you can switch or run both.
 echo "Select mode:"
@@ -24,9 +24,9 @@ read -p "Enter choice [1]: " choice
 choice=${choice:-1}
 
 if [ "$choice" -eq 1 ]; then
-    python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    python -m uvicorn interfaces.rest_api.main:app --host 0.0.0.0 --port 8000
 elif [ "$choice" -eq 2 ]; then
-    python src/mcp/server.py
+    python interfaces/mcp/server.py
 else
     echo "Invalid choice"
     exit 1

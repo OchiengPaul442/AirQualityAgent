@@ -329,7 +329,7 @@ class ThoughtType(Enum):
 
 ### Implementation Details
 
-**ThoughtStream** (`src/services/agent/thought_stream.py`):
+**ThoughtStream** (`core/agent/thought_stream.py`):
 
 - Lightweight async event emitter
 - Queue-based for real-time delivery
@@ -919,7 +919,7 @@ result = get_african_city_air_quality(city="Lagos")
 
 ```bash
 # Verify system prompt
-grep "NEVER show code" src/services/prompts/system_instructions.py
+grep "NEVER show code" core/memory/prompts/system_instructions.py
 
 # Check query classification
 # Add logging to QueryAnalyzer.analyze_comprehensive()
@@ -961,7 +961,7 @@ curl -X POST /api/v1/agent/chat \
 **Diagnosis**:
 
 1. Check session message count: `GET /api/v1/agent/sessions/{session_id}`
-2. Verify context window size: `grep "max_messages" src/services/session_context_manager.py`
+2. Verify context window size: `grep "max_messages" core/memory/context_manager.py`
 3. Check truncation logs: `grep "Truncating context" logs/app.log`
 
 **Fix**:
@@ -1084,7 +1084,7 @@ AI_MODEL=qwen2.5:3b
 
 ### Response Parameter Tuning
 
-Parameters are defined in `src/services/prompts/system_instructions.py`:
+Parameters are defined in `core/memory/prompts/system_instructions.py`:
 
 ```python
 # Base parameters (optimized for low-end models)

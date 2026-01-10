@@ -153,10 +153,10 @@ DATABASE_URL=sqlite:///data/aeris_agent.db
 
 ```bash
 # API Server (REST endpoints)
-python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn interfaces.rest_api.main:app --host 0.0.0.0 --port 8000
 
 # MCP Server (Claude Desktop integration)
-python -m src.mcp.server
+python interfaces/mcp/server.py
 
 # Run Tests
 python tests/comprehensive_test_suite.py
@@ -198,6 +198,85 @@ python tests/comprehensive_test_suite.py
 │ • OpenMeteo  │  │ • Route       │  │ • API  │  │• Limits    │
 │ • Weather    │  │               │  │        │  │            │
 └──────────────┘  └───────────────┘  └────────┘  └────────────┘
+```
+
+### Project Structure
+
+**Professional AI Agent Architecture** (Following Anthropic Best Practices):
+
+```
+AirQualityAgent/
+├── core/                      # 🧠 Core agent infrastructure
+│   ├── agent/                 # Agent orchestration & reasoning
+│   │   ├── orchestrator.py    # Main agent orchestrator
+│   │   ├── thought_stream.py  # Reasoning transparency
+│   │   ├── cost_optimizer.py  # Cost tracking & optimization
+│   │   ├── cost_tracker.py    # Token usage monitoring
+│   │   ├── query_analyzer.py  # Query classification & routing
+│   │   ├── tool_executor.py   # Tool execution & parallelization
+│   │   └── model_adapter.py   # LLM provider abstraction
+│   ├── providers/             # LLM provider implementations
+│   │   ├── openai_provider.py # OpenAI & Azure OpenAI
+│   │   ├── gemini_provider.py # Google Gemini
+│   │   ├── ollama_provider.py # Local models (Ollama)
+│   │   └── provider_utils.py  # Common provider utilities
+│   ├── memory/                # Conversation memory & context
+│   │   ├── langchain_memory.py# LangChain session management
+│   │   ├── context_manager.py # Session context handling
+│   │   └── prompts/           # System prompts & instructions
+│   └── tools/                 # Tool execution framework
+│       ├── document_scanner.py# PDF/document analysis
+│       ├── robust_scraper.py  # Web scraping utilities
+│       └── definitions/       # Tool definitions (OpenAI/Gemini format)
+├── domain/                    # 🌍 Business logic (Air Quality domain)
+│   ├── services/              # Core business services
+│   │   ├── agent_service.py   # Main agent business logic
+│   │   └── search_service.py  # Search & research capabilities
+│   └── models/                # Domain models & schemas
+│       └── schemas.py         # Pydantic models for API
+├── infrastructure/            # 🔌 External integrations & data
+│   ├── api/                   # External API clients
+│   │   ├── waqi.py           # World Air Quality Index
+│   │   ├── airqo.py          # AirQo (Africa-focused)
+│   │   ├── openmeteo.py      # Weather & forecast data
+│   │   ├── defra.py          # UK air quality data
+│   │   ├── nsw.py            # Australia NSW air quality
+│   │   ├── uba.py            # Germany air quality
+│   │   ├── carbon_intensity.py# UK carbon intensity
+│   │   ├── geocoding.py      # Location resolution
+│   │   ├── weather.py        # Weather data integration
+│   │   └── visualization.py  # Chart generation service
+│   ├── database/             # Database layer & models
+│   │   ├── database.py       # SQLAlchemy setup & connections
+│   │   ├── models.py         # Database schema definitions
+│   │   └── repository.py     # Data access layer
+│   └── cache/                # Caching layer & strategies
+│       ├── cache_service.py  # Redis/memory cache implementation
+│       └── base_service.py   # Base caching service class
+├── interfaces/                # 🌐 User-facing interfaces
+│   ├── rest_api/             # FastAPI REST interface
+│   │   ├── main.py           # FastAPI application setup
+│   │   ├── routes.py         # API endpoint definitions
+│   │   ├── dependencies.py   # Dependency injection
+│   │   └── error_handlers.py # Global error handling
+│   └── mcp/                  # Model Context Protocol interface
+│       ├── server.py         # MCP server implementation
+│       ├── client.py         # MCP client utilities
+│       └── application_control.py # Application lifecycle
+├── shared/                    # 🛠️ Shared utilities & configuration
+│   ├── config/               # Configuration management
+│   │   └── settings.py       # Environment-based configuration
+│   ├── monitoring/           # Logging & monitoring
+│   │   └── error_logger.py   # Structured error logging
+│   └── utils/                # Common utilities
+│       ├── aqi_converter.py  # Air quality index conversions
+│       ├── data_formatter.py # Data formatting utilities
+│       ├── security.py       # Input validation & sanitization
+│       └── api/              # API-specific utilities
+└── tests/                     # 🧪 Comprehensive test suite
+    ├── test_langchain_memory.py     # Memory system tests
+    ├── test_stream_endpoint.py      # API streaming tests
+    └── comprehensive_test_suite.py  # Full integration tests
 ```
 
 **Key Components**:
@@ -637,7 +716,7 @@ Contributions welcome. Please follow these guidelines:
 
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature/your-feature`
-3. Follow code style: Run `python -m ruff check src/ --fix`
+3. Follow code style: Run `python -m ruff check . --fix`
 4. Write tests: Add tests in `tests/` for new features
 5. Run test suite: `python tests/comprehensive_test_suite.py`
 6. Commit changes: `git commit -m "Add feature: description"`
@@ -702,7 +781,7 @@ Contributions welcome. Please follow these guidelines:
 **Issue: "High latency"**
 
 - Enable parallel execution (already implemented)
-- Increase cache TTL in `src/config.py`
+- Increase cache TTL in `shared/config/settings.py`
 - Use faster model (qwen2.5:3b vs gpt-4o)
 - Check concurrent request limits
 
