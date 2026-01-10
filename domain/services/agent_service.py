@@ -17,7 +17,8 @@ from typing import Any
 from core.agent.cost_tracker import CostTracker
 from core.agent.orchestrator import ToolOrchestrator
 from core.agent.query_analyzer import QueryAnalyzer
-from core.agent.thought_stream import ThoughtStream
+
+# ThoughtStream removed - use logging and observability tools instead
 from core.agent.tool_executor import ToolExecutor
 from core.memory.context_manager import SessionContextManager
 from core.memory.langchain_memory import LangChainSessionMemory, create_session_memory
@@ -852,7 +853,6 @@ class AgentService:
         client_ip: str | None = None,
         location_data: dict[str, Any] | None = None,
         session_id: str | None = None,
-        stream: ThoughtStream | None = None,
     ) -> dict[str, Any]:
         """
         Process a user message and generate a response.
@@ -1233,25 +1233,6 @@ class AgentService:
         # Uses smart classification to skip unnecessary tool calls
         logger.info("🔍 Analyzing query for intelligent tool selection...")
 
-        # REAL-TIME THOUGHT STREAMING: Emit query analysis
-        if stream:
-            if stream.is_enabled():
-                classification = self._classify_query_intent(message)
-                try:
-                    await stream.emit_query_analysis(
-                        query=message[:200],
-                        intent=classification["intent"],
-                        complexity=classification["complexity"],
-                        requires_data=classification["needs_external_data"]
-                    )
-                    logger.info("💭 ✅ Emitted query analysis thought")
-                except Exception as e:
-                    logger.error(f"❌ Failed to emit query analysis thought: {e}")
-            else:
-                logger.warning(f"⚠️ Stream exists but NOT ENABLED! enabled={stream._enabled}, closed={stream._closed}")
-        else:
-            logger.info("ℹ️ No stream provided - thoughts will not be emitted")
-
         # SPECIAL HANDLING: Detect chart/visualization requests early
         chart_request = any(keyword in message.lower() for keyword in [
             "chart", "visualiz", "graph", "plot", "show me", "display"
@@ -1275,46 +1256,10 @@ class AgentService:
         query_type = classification.get("query_type", "general")
         logger.info(f"📊 Query classified as: {query_type}")
 
-        # REAL-TIME THOUGHT STREAMING: Emit tool selection (even if no tools)
-        if stream and stream.is_enabled():
-            try:
-                if tools_called_proactively:
-                    await stream.emit_tool_selection(
-                        query_type=query_type,
-                        selected_tools=tools_called_proactively,
-                        confidence=0.9,
-                        rationale=f"Based on query classification: {query_type}"
-                    )
-                    logger.info(f"💭 ✅ Emitted tool selection thought ({len(tools_called_proactively)} tools)")
-                else:
-                    # Still emit thought even if no tools needed
-                    await stream.emit_tool_selection(
-                        query_type=query_type,
-                        selected_tools=[],
-                        confidence=0.95,
-                        rationale=f"No external data needed - using LLM knowledge for {query_type} query"
-                    )
-                    logger.info("💭 ✅ Emitted tool selection thought (no tools needed)")
-            except Exception as e:
-                logger.error(f"❌ Failed to emit tool selection thought: {e}")
-
         if tools_called_proactively:
             logger.info(
                 f"✅ Proactively called {len(tools_called_proactively)} tool(s): {tools_called_proactively}"
             )
-
-            # REAL-TIME THOUGHT STREAMING: Emit tool execution
-            if stream and stream.is_enabled():
-                try:
-                    tools_list = ", ".join(tools_called_proactively)
-                    await stream.emit_tool_execution(
-                        tool_name=tools_list if tools_list else "data_sources",
-                        status="completed",
-                        result_summary=f"Successfully retrieved data from {len(tools_called_proactively)} source(s)"
-                    )
-                    logger.info("💭 ✅ Emitted tool execution thought")
-                except Exception as e:
-                    logger.error(f"❌ Failed to emit tool execution thought: {e}")
 
             # Inject tool results into system instruction
             if context_injection:
@@ -1353,18 +1298,6 @@ class AgentService:
                     "cost_estimate": 0.0,
                     "error": "provider_no_response",
                 }
-
-            # REAL-TIME THOUGHT STREAMING: Emit response synthesis
-            if stream and stream.is_enabled():
-                try:
-                    await stream.emit_response_synthesis(
-                        approach="markdown",
-                        sources_used=tools_called_proactively or [],
-                        token_usage=response_data.get("tokens_used")
-                    )
-                    logger.info("💭 ✅ Emitted response synthesis thought")
-                except Exception as e:
-                    logger.error(f"❌ Failed to emit response synthesis thought: {e}")
 
             # Merge proactively called tools with any tools the provider might have called
             provider_tools = response_data.get("tools_used", [])
@@ -1553,34 +1486,10 @@ class AgentService:
                 f"Cost: ${cost_estimate:.4f}"
             )
 
-            # REAL-TIME THOUGHT STREAMING: Mark as complete
-            if stream and not stream._closed:
-                try:
-                    await stream.complete({
-                        "status": "success",
-                        "tokens_used": tokens_used,
-                        "tools_used": all_tools_used
-                    })
-                    logger.info(f"💭 ✅ Stream completed successfully with {tokens_used} tokens")
-                except Exception as e:
-                    logger.error(f"❌ Failed to complete stream: {e}")
-
             return response_data
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
-
-            # REAL-TIME THOUGHT STREAMING: Mark as complete even on error
-            if stream:
-                await stream.emit_error(
-                    error_message=str(e),
-                    recoverable=False
-                )
-                await stream.complete({
-                    "status": "error",
-                    "error": str(e)
-                })
-                logger.info(f"💭 Stream completed with error: {str(e)}")
 
             return {
                 "response": (

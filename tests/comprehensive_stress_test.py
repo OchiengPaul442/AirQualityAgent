@@ -1002,7 +1002,7 @@ class StressTestRunner:
         tests = [
             self.test_health_check(),
             self.test_simple_chat(),
-            self.test_streaming_endpoint(),
+            # Streaming test removed - not an industry standard practice
             self.test_document_upload_csv(),
             self.test_document_upload_pdf(),
             self.test_context_retention(),
