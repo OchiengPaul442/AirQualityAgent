@@ -170,8 +170,8 @@ class StressTestRunner:
 
         try:
             data = {
-                "message": "What are the key differences between primary and secondary National Ambient Air Quality Standards (NAAQS)?",
-                "style": "policy"
+                "message": "What is the current air quality in New York City and what are the health implications?",
+                "style": "general"
             }
 
             thought_count = 0
@@ -179,34 +179,42 @@ class StressTestRunner:
             done_received = False
             thought_types = []
 
-            async with self.client.stream(
-                "POST",
+            response = await self.client.post(
                 f"{BASE_URL}/agent/chat/stream",
                 data=data,
                 timeout=TIMEOUT
-            ) as response:
-                if response.status_code != 200:
-                    raise Exception(f"Status {response.status_code}")
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"Status {response.status_code}")
 
-                async for line in response.aiter_lines():
-                    if line.startswith("event: thought"):
+            # Parse SSE format properly
+            lines = response.text.strip().split('\n')
+            event_type = None
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('event: '):
+                    event_type = line[7:]
+                elif line.startswith('data: '):
+                    data_content = line[6:]
+                    
+                    if event_type == 'thought' and data_content:
                         thought_count += 1
-                        # Parse the thought to see what type it is
                         try:
-                            next_line = await response.aiter_lines().__anext__()
-                            if next_line.startswith("data: "):
-                                import json as json_module
-                                thought_data = json_module.loads(next_line[6:])
-                                thought_type = thought_data.get("type", "unknown")
-                                thought_types.append(thought_type)
-                                print(f"  💭 Thought {thought_count}: {thought_type} - {thought_data.get('title', 'N/A')}")
+                            import json as json_module
+                            thought_data = json_module.loads(data_content)
+                            thought_type = thought_data.get("type", "unknown")
+                            thought_types.append(thought_type)
+                            print(f"  💭 Thought {thought_count}: {thought_type} - {thought_data.get('title', 'N/A')}")
                         except Exception as e:
                             print(f"  Could not parse thought data: {e}")
-                    elif line.startswith("event: response"):
+                    elif event_type == 'response':
                         response_received = True
-                    elif line.startswith("event: done"):
+                    elif event_type == 'done':
                         done_received = True
-                        break
+                    
+                    event_type = None  # Reset after processing
 
             duration = time.time() - start
 
