@@ -145,8 +145,8 @@ class AgentService:
 
         logger.info(f"AgentService initialized with provider: {self.settings.AI_PROVIDER}")
 
-        # Memory management and loop prevention
-        self.conversation_memory: list[dict] = []
+        # Memory management and loop prevention (per-session)
+        self.conversation_memory: dict[str, list[dict]] = {}  # {session_id: [messages]}
         self.max_conversation_length = 30  # Prevent memory bloat (reduced from 50)
         self.loop_detection_window = 8  # Check last N messages for loops (reduced from 10)
         self.max_response_length = 6000  # Prevent extremely long responses (reduced from 8000)
@@ -158,19 +158,26 @@ class AgentService:
         )  # {session_id: {summary, last_update}}
         self.max_session_contexts = 50  # Limit concurrent session contexts in memory
 
-    def _check_for_loops(self, user_message: str) -> bool:
+    def _check_for_loops(self, user_message: str, session_id: str | None = None) -> bool:
         """
         Check for potential conversation loops or repetitive patterns.
         Uses semantic similarity to avoid false positives on new questions.
 
+        Args:
+            user_message: Current user message to check
+            session_id: Session ID for memory isolation
+
         Returns True if a loop is detected, False otherwise.
         """
-        if len(self.conversation_memory) < self.loop_detection_window:
+        # Get session-specific memory, or use default if no session
+        session_memory = self.conversation_memory.get(session_id or "default", [])
+        
+        if len(session_memory) < self.loop_detection_window:
             return False
 
         # Get recent user messages
         recent_messages = [
-            msg.get("user", "") for msg in self.conversation_memory[-self.loop_detection_window :]
+            msg.get("user", "") for msg in session_memory[-self.loop_detection_window :]
         ]
 
         # Check for exact message repetition (must be exact and repeated 3+ times)
@@ -203,7 +210,7 @@ class AgentService:
             return True
 
         # Check for AI repetition (same AI response multiple times in a row)
-        recent_ai_responses = [msg.get("ai", "") for msg in self.conversation_memory[-5:]]
+        recent_ai_responses = [msg.get("ai", "") for msg in session_memory[-5:]]
         if len(recent_ai_responses) >= 3:
             # Check if AI is giving the same response repeatedly
             last_ai = recent_ai_responses[-1] if recent_ai_responses else ""
@@ -266,28 +273,52 @@ class AgentService:
 
         return False
 
-    def _manage_memory(self):
-        """Manage conversation memory to prevent bloat and loops."""
-        if len(self.conversation_memory) > self.max_conversation_length:
+    def _manage_memory(self, session_id: str | None = None):
+        """Manage conversation memory to prevent bloat and loops.
+        
+        Args:
+            session_id: Session ID for memory management
+        """
+        session_key = session_id or "default"
+        session_memory = self.conversation_memory.get(session_key, [])
+        
+        if len(session_memory) > self.max_conversation_length:
             # Keep only the most recent messages
-            self.conversation_memory = self.conversation_memory[-self.max_conversation_length :]
+            self.conversation_memory[session_key] = session_memory[-self.max_conversation_length :]
+        
+        # Cleanup old sessions to prevent memory bloat
+        if len(self.conversation_memory) > self.max_session_contexts:
+            # Remove oldest sessions (simple FIFO)
+            oldest_session = min(self.conversation_memory.keys(), key=lambda k: len(self.conversation_memory[k]))
+            del self.conversation_memory[oldest_session]
+            logger.debug(f"Removed conversation memory for session: {oldest_session}")
 
         # Session context manager handles its own cleanup automatically
         # Log session context stats periodically
-        if len(self.conversation_memory) % 10 == 0:  # Every 10 messages
+        if len(session_memory) % 10 == 0:  # Every 10 messages
             stats = self.session_manager.get_stats()
             logger.debug(f"Session context stats: {stats}")
 
-    def _add_to_memory(self, user_message: str, ai_response: str):
-        """Add conversation turn to memory with safeguards."""
-        self.conversation_memory.append(
+    def _add_to_memory(self, user_message: str, ai_response: str, session_id: str | None = None):
+        """Add conversation turn to memory with safeguards.
+        
+        Args:
+            user_message: User's message
+            ai_response: AI's response
+            session_id: Session ID for memory isolation
+        """
+        session_key = session_id or "default"
+        if session_key not in self.conversation_memory:
+            self.conversation_memory[session_key] = []
+        
+        self.conversation_memory[session_key].append(
             {
                 "user": user_message[:1000],  # Limit message length
                 "ai": ai_response[:2000],  # Limit response length
                 "timestamp": self._get_timestamp(),
             }
         )
-        self._manage_memory()
+        self._manage_memory(session_id)
 
     def _get_timestamp(self) -> str:
         """Get current timestamp for memory tracking."""
@@ -1073,9 +1104,9 @@ class AgentService:
                 "security_filtered": True,
             }
 
-        # Check for conversation loops before processing
-        if self._check_for_loops(message):
-            logger.warning("Conversation loop detected, providing helpful capabilities reminder")
+        # Check for conversation loops before processing (per session)
+        if self._check_for_loops(message, session_id):
+            logger.warning(f"Conversation loop detected in session {session_id or 'default'}, providing helpful capabilities reminder")
             return {
                 "response": (
                     "Let me help you differently. I can assist with:\n\n"
@@ -1319,7 +1350,7 @@ class AgentService:
                 response_data["truncated"] = True
                 logger.info(f"Response truncated from {len(response_data.get('response', ''))} to {len(ai_response)} chars")
 
-            self._add_to_memory(message, ai_response)
+            self._add_to_memory(message, ai_response, session_id)
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "

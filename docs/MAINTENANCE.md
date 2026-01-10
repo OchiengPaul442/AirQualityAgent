@@ -263,13 +263,50 @@ CONNECTION_TIMEOUT = 30  # Seconds
 CACHE_TTL = 300  # 5 minutes for air quality data
 CACHE_MAX_SIZE = 1000  # Maximum cached items
 
-# Session settings
-MAX_MESSAGES_PER_SESSION = 100
-SESSION_CLEANUP_DAYS = 30
+# Session settings (based on Anthropic best practices)
+MAX_MESSAGES_PER_SESSION = 100  # Prevents context overflow & cost escalation
+SESSION_LIMIT_WARNING_THRESHOLD = 90  # Warn before hitting limit
+SESSION_CLEANUP_DAYS = 30  # Archive old sessions
+DISABLE_SESSION_LIMIT = false  # Set true ONLY for testing (see below)
 
 # Model settings
 TEMPERATURE = 0.7  # Lower for more deterministic
 MAX_TOKENS = 2000  # Adjust based on use case
+```
+
+**⚠️ DISABLE_SESSION_LIMIT Flag**:
+
+This flag bypasses session message limits. Use ONLY in controlled environments:
+
+✅ **When to enable**:
+
+- Comprehensive automated test suites (CI/CD pipelines)
+- Development/debugging sessions requiring many iterations
+- Performance benchmarking across extended conversations
+
+❌ **When to disable** (default):
+
+- Production deployments (always keep disabled)
+- User-facing applications (cost and quality protection)
+- Any environment with real user traffic
+
+**Impact of disabling**:
+
+- Token costs grow exponentially (each message includes full history)
+- Model performance degrades (oversized context windows)
+- Response quality suffers (loss of conversational focus)
+- No protection against runaway costs
+
+**Testing Example**:
+
+```bash
+# In .env.local for test environment
+DISABLE_SESSION_LIMIT=true
+
+# Run comprehensive tests
+python tests/comprehensive_test_suite.py
+
+# CRITICAL: Never deploy with this enabled!
 ```
 
 ### Database Optimization

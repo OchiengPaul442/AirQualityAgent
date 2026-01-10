@@ -485,31 +485,51 @@ async def chat(
                 logger.info(
                     f"Retrieved {len(history_objs)} messages from session history for context"
                 )
+        except Exception as db_error:
+            logger.warning(
+                f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
+            )
+            history_objs = []
 
-            # Check session message limit
-            message_count = get_session_message_count(db, session_id)
-            session_warning = None
+        # Check session message limit - CRITICAL: Stop processing if limit exceeded
+        # This must be OUTSIDE the try-except to prevent catching HTTPException
+        # Can be disabled for testing via DISABLE_SESSION_LIMIT=True in config
+        message_count = get_session_message_count(db, session_id)
+        session_warning = None
 
+        # Only enforce session limits if not disabled (useful for comprehensive tests)
+        if not settings.DISABLE_SESSION_LIMIT:
             if message_count >= settings.MAX_MESSAGES_PER_SESSION:
-                session_warning = (
-                    f"⚠️ **Session Limit Reached ({message_count} messages)** - "
-                    "Please start a new session for optimal performance. "
-                    "Long sessions may cause slower responses and increased costs."
+                # STOP PROCESSING - Session limit reached
+                logger.error(f"Session {session_id} has exceeded limit: {message_count} messages")
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "session_limit_exceeded",
+                        "message": (
+                            f"Session limit reached ({message_count}/{settings.MAX_MESSAGES_PER_SESSION} messages). "
+                            f"Please start a new session to continue. Long sessions affect performance and cost. "
+                            f"Use DELETE /sessions/{session_id} to close this session, then start a fresh conversation."
+                        ),
+                        "session_id": session_id,
+                        "message_count": message_count,
+                        "max_messages": settings.MAX_MESSAGES_PER_SESSION,
+                        "action_required": "start_new_session"
+                    }
                 )
-                logger.warning(f"Session {session_id} has reached limit: {message_count} messages")
             elif message_count >= settings.SESSION_LIMIT_WARNING_THRESHOLD:
                 session_warning = (
                     f"ℹ️ **Approaching Session Limit** ({message_count}/{settings.MAX_MESSAGES_PER_SESSION} messages) - "
                     "Consider starting a new session soon for better performance."
                 )
                 logger.info(f"Session {session_id} approaching limit: {message_count} messages")
-
-        except Exception as db_error:
-            logger.warning(
-                f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
-            )
-            history_objs = []
-            session_warning = None
+        else:
+            # Session limits disabled - log for debugging
+            if message_count >= settings.MAX_MESSAGES_PER_SESSION:
+                logger.warning(
+                    f"Session {session_id} has {message_count} messages (exceeds limit of {settings.MAX_MESSAGES_PER_SESSION}), "
+                    "but DISABLE_SESSION_LIMIT=True"
+                )
 
         # Convert to format expected by agent
         history: list[dict[str, str]] = [

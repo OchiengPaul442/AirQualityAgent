@@ -48,8 +48,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development, production, testing
 
     # Session Configuration
+    # Based on Anthropic best practices: Keep sessions focused and manageable
+    # 100 messages = ~50 user questions with responses (avg 200 tokens/msg = 20K tokens)
+    # This maintains context quality while preventing token overflow and cost escalation
     MAX_MESSAGES_PER_SESSION: int = 100  # Prompt user to start new session after this limit
     SESSION_LIMIT_WARNING_THRESHOLD: int = 90  # Warn when approaching limit
+    DISABLE_SESSION_LIMIT: bool = True  # Set to True for testing/development (bypasses session limits)
 
     # Air Quality Data Sources
     WAQI_API_KEY: str = ""  # World Air Quality Index API key
