@@ -20,7 +20,7 @@ The thought stream exposes:
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, AsyncIterator, Callable, Optional
 
@@ -105,7 +105,7 @@ class ThoughtStream:
             "type": thought_type.value,
             "title": title,
             "details": details,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "progress": progress
         }
         
@@ -254,18 +254,35 @@ class ThoughtStream:
         Yields:
             Thought event dictionaries as they occur
         """
+        timeout_count = 0
+        max_timeouts = 300  # 30 seconds max wait (300 * 0.1s)
+        
         while not self._closed:
             try:
                 # Wait for next event with timeout
                 event = await asyncio.wait_for(self._queue.get(), timeout=0.1)
+                timeout_count = 0  # Reset timeout counter on successful event
+                
                 yield event
                 
                 # Check if this is the completion event
                 if event.get("type") == ThoughtType.COMPLETE.value:
+                    logger.debug("Received COMPLETE event, ending stream")
                     break
                     
             except asyncio.TimeoutError:
                 # No events yet, continue waiting
+                timeout_count += 1
+                
+                # If we've been waiting too long and stream is not enabled, break
+                if timeout_count > max_timeouts:
+                    logger.warning(f"Stream timeout after {max_timeouts * 0.1}s, ending stream")
+                    break
+                    
+                # If stream is closed, break immediately
+                if self._closed:
+                    break
+                    
                 continue
             except Exception as e:
                 logger.error(f"Error streaming thought: {e}")

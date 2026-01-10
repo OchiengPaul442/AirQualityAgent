@@ -1234,10 +1234,11 @@ class AgentService:
             
             # REAL-TIME THOUGHT STREAMING: Emit tool execution
             if stream:
+                tools_list = ", ".join(tools_called_proactively)
                 await stream.emit_tool_execution(
-                    tools=tools_called_proactively,
+                    tool_name=tools_list if tools_list else "data_sources",
                     status="completed",
-                    results_summary=f"Successfully retrieved data from {len(tools_called_proactively)} source(s)"
+                    result_summary=f"Successfully retrieved data from {len(tools_called_proactively)} source(s)"
                 )
             
             # Inject tool results into system instruction
@@ -1281,9 +1282,9 @@ class AgentService:
             # REAL-TIME THOUGHT STREAMING: Emit response synthesis
             if stream:
                 await stream.emit_response_synthesis(
-                    sources=tools_called_proactively or [],
-                    format="markdown",
-                    confidence=0.85
+                    approach="markdown",
+                    sources_used=tools_called_proactively or [],
+                    token_usage=response_data.get("tokens_used")
                 )
             
             # Merge proactively called tools with any tools the provider might have called
@@ -1471,6 +1472,18 @@ class AgentService:
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
+            
+            # REAL-TIME THOUGHT STREAMING: Mark as complete even on error
+            if stream:
+                await stream.emit_error(
+                    error_message=str(e),
+                    recoverable=False
+                )
+                await stream.complete({
+                    "status": "error",
+                    "error": str(e)
+                })
+            
             return {
                 "response": (
                     "I apologize, but I encountered an error processing your request. "

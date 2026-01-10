@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -385,9 +386,11 @@ async def chat(
     curl -X DELETE http://localhost:8000/api/v1/sessions/abc-123
     ```
     """
+    # Initialize variables at the start to prevent UnboundLocalError
     document_data: list[dict[str, Any]] | None = None
     document_filename: str | None = None
     file_content: BytesIO | None = None
+    document_filenames: list[str] = []
     MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB limit
 
     try:
@@ -482,15 +485,20 @@ async def chat(
         # Fetch more messages to ensure long conversations maintain context
         try:
             history_objs = get_recent_session_history(db, session_id, max_messages=100)
-            if len(history_objs) > 0:
+            # Convert ORM objects to dicts
+            history = [
+                {"role": msg.role, "content": msg.content}
+                for msg in history_objs
+            ]
+            if len(history) > 0:
                 logger.info(
-                    f"Retrieved {len(history_objs)} messages from session history for context"
+                    f"Retrieved {len(history)} messages from session history for context"
                 )
         except Exception as db_error:
             logger.warning(
                 f"Failed to fetch session history for {session_id}, starting with empty history: {db_error}"
             )
-            history_objs = []
+            history = []
 
         # Check session message limit - CRITICAL: Stop processing if limit exceeded
         # This must be OUTSIDE the try-except to prevent catching HTTPException
@@ -681,6 +689,11 @@ async def chat(
         if session_warning:
             final_response = f"{session_warning}\n\n{final_response}"
 
+        # Handle reasoning_content - convert dict to JSON string if needed
+        reasoning_content = result.get("reasoning_content")
+        if isinstance(reasoning_content, dict):
+            reasoning_content = json.dumps(reasoning_content)
+
         return ChatResponse(
             response=final_response,
             session_id=session_id,
@@ -690,6 +703,7 @@ async def chat(
             message_count=message_count,
             document_processed=bool(document_filenames or document_filename),
             document_filename=document_filenames[0] if document_filenames else document_filename,
+            reasoning_content=reasoning_content,
         )
     except HTTPException:
         raise
@@ -743,42 +757,148 @@ async def chat_stream(
     db: Session = Depends(get_db),
 ):
     """
-    Real-time streaming endpoint for chain-of-thought transparency.
+    🌊 Real-time streaming endpoint with chain-of-thought transparency.
     
-    This endpoint streams thought process events in real-time as the agent works,
-    providing complete transparency into decision-making. No frontend toggle needed
-    - thoughts are automatically streamed.
+    This endpoint provides a COMPLETE streaming experience:
+    1. Streams thought process in real-time (query analysis, tool selection, execution)
+    2. Sends the FINAL AI response after processing completes
+    3. Signals completion so the frontend knows when to close the connection
+    
+    **Use this endpoint when you want:**
+    - Real-time transparency into the agent's thinking process
+    - Progressive UI updates as the agent works
+    - Full visibility into tool selection and execution
+    
+    **Use /chat endpoint when you want:**
+    - Simple request/response (no streaming)
+    - Minimal latency (no thought events)
+    - Traditional REST API behavior
     
     **Streaming Format**: Server-Sent Events (SSE)
     
-    **Event Types**:
-    - query_analysis: Query understanding and classification
-    - tool_selection: Which tools to use and why
-    - tool_execution: Tool execution status and results
-    - data_retrieval: Data fetching progress
-    - response_synthesis: Response generation progress
-    - complete: Final completion marker
+    **Event Types (in order of emission)**:
+    1. `thought` events - Real-time thinking process:
+       - query_analysis: Understanding the user's question
+       - tool_selection: Choosing which tools/data sources to use
+       - tool_execution: Executing each tool (with status)
+       - data_retrieval: Data fetching progress
+       - response_synthesis: Generating the final response
+       - complete: Thought process finished (internal signal)
+       
+    2. `response` event - The FINAL AI response:
+       - Contains the actual answer to the user's question
+       - Includes metadata (tools used, tokens, cost, session_id)
+       
+    3. `done` event - Stream completion signal:
+       - Indicates the stream has ended
+       - Frontend should close the EventSource after receiving this
+       
+    4. `error` event - If something goes wrong:
+       - Contains error details
+       - Still followed by `done` event
     
-    **Example Usage (Frontend)**:
+    **Frontend Implementation (React/Next.js)**:
     ```javascript
-    const eventSource = new EventSource('/api/v1/agent/chat/stream?message=...');
+    const [thoughts, setThoughts] = useState([]);
+    const [response, setResponse] = useState(null);
+    const [loading, setLoading] = useState(false);
     
-    eventSource.addEventListener('thought', (e) => {
-        const thought = JSON.parse(e.data);
-        console.log(thought.type, thought.title, thought.details);
-    });
-    
-    eventSource.addEventListener('complete', (e) => {
-        eventSource.close();
-    });
+    const streamQuery = async (message, sessionId) => {
+      setLoading(true);
+      setThoughts([]);
+      setResponse(null);
+      
+      const formData = new FormData();
+      formData.append('message', message);
+      if (sessionId) formData.append('session_id', sessionId);
+      
+      const response = await fetch('/api/v1/agent/chat/stream', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              const eventType = line.substring(7);
+              const dataLine = lines[lines.indexOf(line) + 1];
+              
+              if (dataLine?.startsWith('data: ')) {
+                const data = JSON.parse(dataLine.substring(6));
+                
+                if (eventType === 'thought') {
+                  setThoughts(prev => [...prev, data]);
+                } else if (eventType === 'response') {
+                  setResponse(data.data);
+                } else if (eventType === 'done') {
+                  setLoading(false);
+                  return data.data; // Return the response
+                } else if (eventType === 'error') {
+                  console.error('Stream error:', data);
+                  setLoading(false);
+                }
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    };
     ```
     
-    **Response Stream**: Each event contains JSON with:
-    - type: Event type (query_analysis, tool_selection, etc.)
-    - title: Human-readable title
-    - details: Detailed information dict
-    - progress: Optional progress percentage
-    - timestamp: ISO timestamp
+    **Event Data Structures**:
+    
+    Thought event:
+    ```json
+    {
+      "type": "query_analysis",
+      "title": "Understanding your question",
+      "details": {
+        "query_preview": "What's the air quality in...",
+        "detected_intent": "air_quality_data",
+        "complexity": "simple",
+        "requires_external_data": true
+      },
+      "timestamp": "2026-01-10T10:30:00Z",
+      "progress": 0.2
+    }
+    ```
+    
+    Response event:
+    ```json
+    {
+      "type": "response",
+      "data": {
+        "response": "# Air Quality in Kampala\\n\\n...",
+        "tools_used": ["get_city_air_quality"],
+        "tokens_used": 1234,
+        "cost_estimate": 0.0012,
+        "cached": false,
+        "session_id": "abc-123-..."
+      }
+    }
+    ```
+    
+    Done event:
+    ```json
+    {}
+    ```
+    
+    **Session Management**: Same as /chat endpoint
+    - First request: Omit session_id, server creates one
+    - Subsequent requests: Include session_id from response
+    - Close session: DELETE /sessions/{session_id}
     """
     import json
 
@@ -797,6 +917,7 @@ async def chat_stream(
                     "timestamp": ""
                 }
                 yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+                yield "event: done\ndata: {}\n\n"  # Signal completion
                 return
             
             # Create thought stream
@@ -807,7 +928,12 @@ async def chat_stream(
             history = []
             if session_id:
                 try:
-                    history = get_recent_session_history(db, session_id, max_messages=10)
+                    history_objs = get_recent_session_history(db, session_id, max_messages=10)
+                    # Convert ORM objects to dicts
+                    history = [
+                        {"role": msg.role, "content": msg.content}
+                        for msg in history_objs
+                    ]
                 except Exception as e:
                     logger.warning(f"Failed to load history: {e}")
             
@@ -857,32 +983,97 @@ async def chat_stream(
             processing_task = asyncio.create_task(process_and_respond_internal())
             
             # Stream thoughts as they arrive (non-blocking, concurrent with processing)
-            async for thought_event in stream.stream():
-                if thought_event.get('type') == 'complete':
-                    break  # Exit loop when processing completes
-                event_json = json.dumps(thought_event)
-                yield f"event: thought\ndata: {event_json}\n\n"
+            thought_count = 0
+            stream_completed = False
             
-            # Wait for processing to complete and emit final response
-            result = await processing_task
-            final_event = {
-                "type": "response",
-                "data": {
+            try:
+                async for thought_event in stream.stream():
+                    thought_count += 1
+                    event_json = json.dumps(thought_event)
+                    yield f"event: thought\ndata: {event_json}\n\n"
+                    
+                    # Break on complete event
+                    if thought_event.get('type') == 'complete':
+                        logger.info(f"Stream received completion signal after {thought_count} thoughts")
+                        stream_completed = True
+                        break
+                
+                # Wait for processing to complete and emit final response
+                result = await processing_task
+                
+                if result is None:
+                    raise Exception("Processing returned no result")
+                
+                # Emit final response event
+                response_data = {
                     "response": result.get("response", ""),
                     "tools_used": result.get("tools_used", []),
                     "tokens_used": result.get("tokens_used", 0),
-                    "cached": result.get("cached", False)
+                    "cost_estimate": result.get("cost_estimate", 0.0),
+                    "cached": result.get("cached", False),
+                    "session_id": session_id
                 }
-            }
-            yield f"event: response\ndata: {json.dumps(final_event)}\n\n"
+                
+                response_json = json.dumps({"data": response_data})
+                yield f"event: response\ndata: {response_json}\n\n"
+                
+                # Save to database
+                if session_id:
+                    try:
+                        add_message(db, session_id=session_id, role="user", content=message)
+                        add_message(db, session_id=session_id, role="assistant", content=result.get("response", ""))
+                    except Exception as e:
+                        logger.warning(f"Failed to save messages: {e}")
+                
+            except asyncio.CancelledError:
+                logger.info("Stream was cancelled by client")
+                if not processing_task.done():
+                    processing_task.cancel()
+                raise
+            except Exception as stream_error:
+                logger.error(f"Stream processing error: {stream_error}", exc_info=True)
+                # Try to get result if processing completed successfully
+                if processing_task.done() and not processing_task.exception():
+                    try:
+                        result = processing_task.result()
+                        response_data = {
+                            "response": result.get("response", "I encountered an issue while streaming my thoughts, but I was able to process your request."),
+                            "tools_used": result.get("tools_used", []),
+                            "tokens_used": result.get("tokens_used", 0),
+                            "cost_estimate": result.get("cost_estimate", 0.0),
+                            "cached": result.get("cached", False),
+                            "session_id": session_id
+                        }
+                        response_json = json.dumps({"data": response_data})
+                        yield f"event: response\ndata: {response_json}\n\n"
+                    except Exception as e:
+                        logger.error(f"Failed to extract result after stream error: {e}")
+                        error_response = {
+                            "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                            "tools_used": [],
+                            "tokens_used": 0,
+                            "cost_estimate": 0.0,
+                            "cached": False,
+                            "session_id": session_id
+                        }
+                        response_json = json.dumps({"data": error_response})
+                        yield f"event: response\ndata: {response_json}\n\n"
+                else:
+                    # Processing also failed
+                    error_response = {
+                        "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                        "tools_used": [],
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                        "cached": False,
+                        "session_id": session_id
+                    }
+                    response_json = json.dumps({"data": error_response})
+                    yield f"event: response\ndata: {response_json}\n\n"
             
-            # Save to database
-            if session_id:
-                try:
-                    add_message(db, session_id=session_id, role="user", content=message)
-                    add_message(db, session_id=session_id, role="assistant", content=result.get("response", ""))
-                except Exception as e:
-                    logger.warning(f"Failed to save messages: {e}")
+            # CRITICAL: Always send final 'done' event to signal stream completion
+            yield "event: done\ndata: {}\n\n"
+            logger.info(f"Stream completed with {thought_count} thoughts (stream_completed: {stream_completed})")
                 
         except Exception as e:
             logger.error(f"Stream error: {e}", exc_info=True)
@@ -893,10 +1084,29 @@ async def chat_stream(
                 "timestamp": ""
             }
             yield f"event: error\ndata: {json.dumps(error_event)}\n\n"
+            
+            # Provide a basic error response
+            error_response = {
+                "response": "I apologize, but I encountered an error processing your request. Please try again.",
+                "tools_used": [],
+                "tokens_used": 0,
+                "cost_estimate": 0.0,
+                "cached": False,
+                "session_id": session_id
+            }
+            response_json = json.dumps({"data": error_response})
+            yield f"event: response\ndata: {response_json}\n\n"
+            
+            # Always send done event even on error
+            yield "event: done\ndata: {}\n\n"
         
         finally:
-            if stream:
-                stream.close()
+            # Clean up stream if it hasn't been completed by the agent
+            if stream and not stream._closed:
+                try:
+                    await stream.complete({"status": "cleanup"})
+                except Exception as cleanup_error:
+                    logger.warning(f"Stream cleanup error: {cleanup_error}")
     
     return StreamingResponse(
         generate_thoughts(),

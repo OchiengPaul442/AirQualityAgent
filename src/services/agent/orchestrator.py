@@ -77,10 +77,10 @@ class ToolOrchestrator:
     def __init__(
         self,
         tool_executor: Any,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
+        max_retries: int = 2,  # Reduced from 3 for speed
+        retry_delay: float = 0.5,  # Reduced from 1.0 for speed
         enable_fallbacks: bool = True,
-        timeout_per_tool: float = 30.0
+        timeout_per_tool: float = 15.0  # Reduced from 30.0 for speed
     ):
         """
         Initialize the orchestrator.

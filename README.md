@@ -72,6 +72,15 @@ AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) 
 
 ## Quick Start
 
+### ⚠️ PERFORMANCE NOTICE
+
+**For production use with <3 second response times:**
+
+- ✅ Use **Gemini 1.5 Flash** (recommended - fast & cheap) or **GPT-4 Turbo**
+- ❌ **DO NOT** use Ollama local models in production (10-20x slower)
+
+**Ollama is for development/testing only.** See [Performance Guide](docs/PERFORMANCE_GUIDE.md) for optimization details.
+
 ### Prerequisites
 
 - Python 3.9+ (tested on 3.9, 3.10, 3.11, 3.12)

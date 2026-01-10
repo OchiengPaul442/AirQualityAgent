@@ -47,12 +47,12 @@ class ServiceUnavailableError(HTTPClientError):
     pass
 
 
-# Configure default timeout (connect, read, write, pool)
+# Configure default timeout (connect, read, write, pool) - OPTIMIZED FOR SPEED
 DEFAULT_TIMEOUT = httpx.Timeout(
-    connect=10.0,  # Time to establish connection
-    read=30.0,  # Time to read response
-    write=10.0,  # Time to write request
-    pool=5.0,  # Time to get connection from pool
+    connect=5.0,  # Time to establish connection - reduced from 10s
+    read=10.0,  # Time to read response - reduced from 30s
+    write=5.0,  # Time to write request - reduced from 10s
+    pool=2.0,  # Time to get connection from pool - reduced from 5s
 )
 
 

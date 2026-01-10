@@ -873,29 +873,39 @@ class QueryAnalyzer:
                     except Exception as e:
                         logger.error(f"Proactive scrape call failed for {url}: {e}")
 
-        # CRITICAL FIX: Generate charts if user explicitly requests visualization AND we have location data
+        # ENHANCED CHART GENERATION: Auto-generate charts for air quality requests
+        has_air_quality_data = tools_called and any("air_quality" in tool for tool in tools_called)
+        
+        # Explicit visualization keywords
         viz_keywords = ["chart", "graph", "plot", "visualize", "trend", "show me"]
-        if any(keyword in message.lower() for keyword in viz_keywords):
-            # Check if we have air quality data from previous tool calls
-            if tools_called and any(
-                "air_quality" in tool for tool in tools_called
-            ):
-                logger.info(
-                    "📊 Visualization requested with air quality data - attempting to generate chart..."
+        explicit_viz_request = any(keyword in message.lower() for keyword in viz_keywords)
+        
+        # Auto-chart for simple air quality requests (unless it's just definitional)
+        definitional_keywords = ["what is", "define", "explain", "meaning", "difference between"]
+        is_definitional = any(keyword in message.lower() for keyword in definitional_keywords)
+        
+        should_generate_chart = has_air_quality_data and (
+            explicit_viz_request or 
+            (not is_definitional and len(message.split()) <= 10)  # Short, direct air quality queries
+        )
+        
+        if should_generate_chart:
+            logger.info(
+                f"📊 Generating chart for air quality data (explicit_viz: {explicit_viz_request}, definitional: {is_definitional})"
+            )
+            try:
+                # Try to extract data from tool results and generate chart
+                chart_data = await QueryAnalyzer._generate_chart_from_aq_data(
+                    tool_results, message, tool_executor
                 )
-                try:
-                    # Try to extract data from tool results and generate chart
-                    chart_data = await QueryAnalyzer._generate_chart_from_aq_data(
-                        tool_results, message, tool_executor
+                if chart_data:
+                    tool_results["generate_chart"] = chart_data
+                    tools_called.append("generate_chart")
+                    context_parts.append(
+                        f"\n**CHART GENERATED**: {chart_data.get('message', 'Chart created successfully')}\n"
                     )
-                    if chart_data:
-                        tool_results["generate_chart"] = chart_data
-                        tools_called.append("generate_chart")
-                        context_parts.append(
-                            f"\n**CHART GENERATED**: {chart_data.get('message', 'Chart created successfully')}\n"
-                        )
-                except Exception as e:
-                    logger.error(f"Chart generation failed: {e}")
+            except Exception as e:
+                logger.error(f"Chart generation failed: {e}")
 
         # Build context injection
         context_injection = ""
