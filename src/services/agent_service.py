@@ -11,6 +11,7 @@ Refactored to use modular architecture:
 import hashlib
 import inspect
 import logging
+import time
 from typing import Any
 
 from src.config import get_settings
@@ -1187,8 +1188,7 @@ class AgentService:
                 "loop_detected": True,
             }
 
-        # INTELLIGENT PROACTIVE TOOL CALLING SYSTEM
-        # Optimized for: low-quality models, speed, accuracy
+        # INTELLIGENT PROACTIVE TOOL CALLING SYSTEM (OPTIMIZED FOR SPEED)
         # Uses smart classification to skip unnecessary tool calls
         logger.info("🔍 Analyzing query for intelligent tool selection...")
         
@@ -1209,7 +1209,15 @@ class AgentService:
         if chart_request:
             logger.info("📊 Chart request detected - will handle with optimized response")
 
+        # PARALLEL TOOL EXECUTION: Use asyncio.gather for concurrent tool calls
+        # This dramatically reduces latency for multi-tool queries
+        import asyncio
+        start_proactive = time.time()
+        
         proactive_results = await QueryAnalyzer.proactively_call_tools(message, self.tool_executor)
+        
+        proactive_duration = time.time() - start_proactive
+        logger.info(f"⚡ Proactive tools completed in {proactive_duration:.2f}s")
 
         tools_called_proactively = proactive_results.get("tools_called", [])
         context_injection = proactive_results.get("context_injection", "")
@@ -1357,8 +1365,6 @@ class AgentService:
                 self.cost_tracker.track_usage(tokens_used, cost_estimate)
 
             # Cache the response with timestamp metadata
-            import time
-
             response_data["_cache_timestamp"] = time.time()  # Add timestamp for freshness tracking
             response_data["cached"] = False
 

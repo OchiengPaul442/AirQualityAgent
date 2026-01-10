@@ -216,7 +216,7 @@ class OllamaProvider(BaseAIProvider):
                 # Call Ollama with tools
                 options = {
                     "temperature": temperature,
-                    "timeout": 300,  # Increased timeout to 5 minutes for slower computers
+                    "timeout": 45,  # Reduced to 45 seconds for faster responses
                 }
 
                 # Add optional parameters if provided

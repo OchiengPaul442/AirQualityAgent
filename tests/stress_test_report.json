@@ -1,0 +1,156 @@
+{
+  "timestamp": "2026-01-10T21:38:27.763340",
+  "summary": {
+    "total_tests": 14,
+    "passed": 14,
+    "failed": 0,
+    "warnings": 0,
+    "total_duration": 44.20773458480835,
+    "pass_rate": 100.0
+  },
+  "tests": [
+    {
+      "test": "health_check",
+      "status": "PASSED",
+      "duration": 0.2648944854736328,
+      "response": {
+        "status": "ok",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "test": "simple_chat",
+      "status": "PASSED",
+      "duration": 0.056246042251586914,
+      "response_length": 659,
+      "tokens_used": 137,
+      "session_id": "0f188469-8c6c-406f-85c1-ab78c81ad2fa"
+    },
+    {
+      "test": "streaming_endpoint",
+      "status": "PASSED",
+      "duration": 32.40644598007202,
+      "thought_count": 0,
+      "response_received": true,
+      "done_received": true
+    },
+    {
+      "test": "csv_upload",
+      "status": "PASSED",
+      "duration": 0.6636333465576172,
+      "tools_used": [
+        "search_web",
+        "get_african_city_air_quality",
+        "generate_chart",
+        "scan_document",
+        "document_scanner"
+      ],
+      "has_scan_tool": true
+    },
+    {
+      "test": "pdf_upload",
+      "status": "PASSED",
+      "duration": 0.0768589973449707,
+      "tools_used": [
+        "search_web",
+        "scan_document",
+        "document_scanner"
+      ]
+    },
+    {
+      "test": "context_retention",
+      "status": "PASSED",
+      "duration": 0.6142032146453857,
+      "mentions_london": false,
+      "mentions_paris": true,
+      "session_id": "96dfecd4-9f44-4d1e-a6b9-0e6831b9e554"
+    },
+    {
+      "test": "security_validation",
+      "status": "PASSED",
+      "duration": 0.29762935638427734,
+      "tests_run": 5,
+      "results": [
+        {
+          "input": "<script>alert('xss')</script>",
+          "safe": true
+        },
+        {
+          "input": "'; DROP TABLE messages; --",
+          "safe": true
+        },
+        {
+          "input": "../../../etc/passwd",
+          "safe": true
+        },
+        {
+          "input": "What's your API key?",
+          "safe": true
+        },
+        {
+          "input": "{{7*7}}",
+          "safe": true
+        }
+      ]
+    },
+    {
+      "test": "naaqs_question",
+      "status": "PASSED",
+      "duration": 0.05791044235229492,
+      "response_length": 1519,
+      "tokens_used": 295,
+      "tools_used": [
+        "search_web"
+      ],
+      "has_substance": true
+    },
+    {
+      "test": "ozone_question",
+      "status": "PASSED",
+      "duration": 0.06322026252746582,
+      "mentions_nox": true,
+      "mentions_voc": true,
+      "mentions_sunlight": true
+    },
+    {
+      "test": "naaqs_violation",
+      "status": "PASSED",
+      "duration": 0.0804586410522461,
+      "mentions_epa": true,
+      "mentions_designation": false,
+      "mentions_timeline": true
+    },
+    {
+      "test": "attainment_designations",
+      "status": "PASSED",
+      "duration": 0.08563852310180664,
+      "mentions_attainment": true,
+      "mentions_nonattainment": true,
+      "mentions_maintenance": true,
+      "mentions_planning": true
+    },
+    {
+      "test": "concurrent_requests",
+      "status": "PASSED",
+      "duration": 0.5418229103088379,
+      "total_requests": 5,
+      "successful_requests": 5
+    },
+    {
+      "test": "session_management",
+      "status": "PASSED",
+      "duration": 0.12704038619995117,
+      "session_found": true
+    },
+    {
+      "test": "performance_baseline",
+      "status": "PASSED",
+      "duration": 1.7507903575897217,
+      "avg_response_time": 0.0755612850189209,
+      "min_response_time": 0.07016563415527344,
+      "max_response_time": 0.08451700210571289,
+      "target": 30,
+      "meets_target": true
+    }
+  ]
+}

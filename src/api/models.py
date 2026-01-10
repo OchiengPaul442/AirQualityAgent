@@ -48,6 +48,7 @@ class ChatResponse(BaseModel):
         False, description="Whether a document was uploaded and processed"
     )
     document_filename: str | None = Field(None, description="Name of the uploaded document if any")
+    reasoning_content: str | None = Field(None, description="Reasoning trace from AI model (for deepseek-r1)")
 
     model_config = {"exclude_none": True}
 

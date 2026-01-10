@@ -482,9 +482,9 @@ async def chat(
                 ) from e
 
         # Get conversation history BEFORE adding new message
-        # Fetch more messages to ensure long conversations maintain context
+        # Limit to recent messages for performance (streaming needs to be fast)
         try:
-            history_objs = get_recent_session_history(db, session_id, max_messages=100)
+            history_objs = get_recent_session_history(db, session_id, max_messages=20)
             # Convert ORM objects to dicts
             history = [
                 {"role": msg.role, "content": msg.content}
@@ -597,7 +597,7 @@ async def chat(
         # Process message with timing for cost tracking and timeout protection
         start_time = time.time()
 
-        # Add timeout protection for agent processing (110 seconds, slightly less than client timeout)
+        # Add timeout protection for agent processing (60 seconds for streaming, faster UX)
         try:
             import asyncio
             result = await asyncio.wait_for(
@@ -612,10 +612,10 @@ async def chat(
                     location_data=location_data,
                     session_id=session_id,
                 ),
-                timeout=110.0  # 110 second timeout
+                timeout=60.0  # 60 second timeout for regular endpoint
             )
         except asyncio.TimeoutError:
-            logger.error(f"Agent processing timed out after 110 seconds for message: {message[:100]}")
+            logger.error(f"Agent processing timed out after 60 seconds for message: {message[:100]}")
             raise HTTPException(
                 status_code=504,
                 detail="Request processing timed out. Please try a simpler query or smaller document."
@@ -924,11 +924,11 @@ async def chat_stream(
             stream = ThoughtStream()
             stream.enable()
             
-            # Get conversation history
+            # Get conversation history (reduced for streaming speed)
             history = []
             if session_id:
                 try:
-                    history_objs = get_recent_session_history(db, session_id, max_messages=10)
+                    history_objs = get_recent_session_history(db, session_id, max_messages=5)
                     # Convert ORM objects to dicts
                     history = [
                         {"role": msg.role, "content": msg.content}
