@@ -212,6 +212,31 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed technical document
 
 ## Features
 
+### 🧠 Advanced Session Management
+
+**LangChain-Powered Memory System**:
+
+- **Token-Aware Truncation**: Automatic conversation management with 2000 token limits
+- **Redis Persistence**: Sessions survive server restarts, shared across instances
+- **Smart Memory Types**: Window-based, token buffer, or summarization modes
+- **LangSmith Integration**: Production monitoring and tracing for all sessions
+- **Zero Breaking Changes**: Backward compatible with existing API
+
+```python
+# Sessions are automatically tracked with LangChain
+response = await send_message(
+    "What's the AQI in London?",
+    session_id="user-123"  # LangChain memory tracks conversation
+)
+
+# Memory stats available in response
+print(f"Memory tokens: {response.get('memory_tokens')}")
+```
+
+**Architecture**: Hybrid approach - custom orchestrator (0.08s performance) + LangChain memory management
+
+📖 **Complete Guide**: [LANGCHAIN_ANALYSIS.md](LANGCHAIN_ANALYSIS.md) - Integration strategy and best practices
+
 ### 🧠 Advanced Reasoning Mode
 
 **Complete Transparency Into AI Analytical Process**:

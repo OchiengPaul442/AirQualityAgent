@@ -47,6 +47,53 @@ Per Anthropic: _"Start simple, add complexity only when needed."_ Aeris-AQ uses 
 
 ## Agent Architecture
 
+### Session Management Architecture (NEW)
+
+**Hybrid Approach** (Custom + LangChain):
+
+AERIS-AQ now uses a hybrid session management system combining custom performance-optimized components with LangChain's production-grade memory features:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Session Manager                           │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │           SessionContextManager (Custom)                │ │
+│  │  • Document accumulation across sessions                │ │
+│  │  • Context TTL management (3600s)                       │ │
+│  │  • Fast in-memory caching                               │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          │                                   │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │        LangChainSessionMemory (Enhanced)                │ │
+│  │  • Token-aware truncation (2000 token limit)            │ │
+│  │  • Redis persistence (survives restarts)                │ │
+│  │  • LangSmith tracing integration                        │ │
+│  │  • Memory types: window | token_buffer | summary        │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Features**:
+
+- **Token-aware**: Automatic truncation at 2000 tokens
+- **Persistent**: Redis backend (sessions survive restarts)
+- **Monitored**: LangSmith tracing for production visibility
+- **Backward Compatible**: No breaking changes to existing API
+
+**Usage**:
+
+```python
+# Automatic - no code changes needed
+response = await agent_service.process_message(
+    message="What's the AQI in London?",
+    session_id="user-123"  # LangChain tracks automatically
+)
+
+# Memory stats included in response
+print(f"Memory tokens: {response.get('memory_tokens')}")
+```
+
 ### Core Components
 
 ```

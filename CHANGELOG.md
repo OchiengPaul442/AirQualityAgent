@@ -4,6 +4,37 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.11.0] - 2026-01-10
+
+### Added - LangChain Integration (Phase 1)
+
+- **LangChain Memory**: Enhanced session management with token-aware truncation
+  - Token buffer memory with 2000 token limit (automatic conversation management)
+  - Redis persistence (sessions survive server restarts)
+  - Memory stats tracking in API responses
+- **LangSmith Integration**: Production monitoring and tracing
+  - Real-time session monitoring
+  - Token usage analytics
+  - Performance tracking
+- **Memory Types**: Support for window, token_buffer, and summary memory modes
+- **Backward Compatible**: Zero breaking changes, existing API works unchanged
+
+### Improved
+
+- **Session Management**: Hybrid architecture (custom performance + LangChain features)
+- **Long Conversations**: Automatic summarization for 50+ message sessions
+- **Documentation**: Added LANGCHAIN_ANALYSIS.md and LANGCHAIN_IMPLEMENTATION.md guides
+- **Testing**: Comprehensive test suite for LangChain memory integration
+
+### Technical
+
+- New `src/services/session/` module with `LangChainSessionMemory` class
+- Dependencies: langchain==0.1.20, langchain-openai==0.0.8, langsmith==0.1.0, faiss-cpu==1.7.4
+- Memory tracking in `AgentService.process_message()`
+- Graceful fallback if Redis unavailable (in-memory mode)
+
+---
+
 ## [2.10.0] - 2026-01-10
 
 ### Added - Advanced Orchestration Layer

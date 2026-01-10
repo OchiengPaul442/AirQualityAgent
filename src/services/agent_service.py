@@ -34,6 +34,7 @@ from src.services.providers.gemini_provider import GeminiProvider
 from src.services.providers.ollama_provider import OllamaProvider
 from src.services.providers.openai_provider import OpenAIProvider
 from src.services.search_service import SearchService
+from src.services.session.langchain_memory import LangChainSessionMemory, create_session_memory
 from src.services.session_context_manager import SessionContextManager
 from src.services.uba_service import UbaService
 from src.services.waqi_service import WAQIService
@@ -64,6 +65,11 @@ class AgentService:
 
         # Initialize SessionContextManager for better long-conversation handling
         self.session_manager = SessionContextManager(max_contexts=50, context_ttl=3600)
+
+        # LangChain memory cache for enhanced session management
+        # Provides: token-aware truncation, summarization, Redis persistence
+        self.langchain_memories: dict[str, LangChainSessionMemory] = {}
+        logger.info("LangChain memory integration enabled for advanced session management")
 
         # Document accumulation cache per session with timestamp tracking for cleanup
         # DEPRECATED: Moved to SessionContextManager, kept for backward compatibility
@@ -411,6 +417,25 @@ class AgentService:
             )
 
         return provider_class(self.settings, self.tool_executor)
+
+    def _get_or_create_langchain_memory(self, session_id: str) -> LangChainSessionMemory:
+        """
+        Get or create LangChain memory for a session.
+        
+        Args:
+            session_id: Unique session identifier
+            
+        Returns:
+            LangChainSessionMemory instance for the session
+        """
+        if session_id not in self.langchain_memories:
+            self.langchain_memories[session_id] = create_session_memory(
+                session_id=session_id,
+                use_summarization=False,  # Start with token buffer
+                max_tokens=2000  # Align with context limits
+            )
+            logger.info(f"Created LangChain memory for session {session_id}")
+        return self.langchain_memories[session_id]
 
     def _has_location_consent(self, history: list[dict[str, Any]]) -> bool:
         """
@@ -1211,7 +1236,6 @@ class AgentService:
 
         # PARALLEL TOOL EXECUTION: Use asyncio.gather for concurrent tool calls
         # This dramatically reduces latency for multi-tool queries
-        import asyncio
         start_proactive = time.time()
         
         proactive_results = await QueryAnalyzer.proactively_call_tools(message, self.tool_executor)
@@ -1460,6 +1484,22 @@ class AgentService:
                 logger.info(f"Response truncated from {len(response_data.get('response', ''))} to {len(ai_response)} chars")
 
             self._add_to_memory(message, ai_response, session_id)
+
+            # LangChain memory tracking - Enhanced session management
+            if session_id:
+                try:
+                    lc_memory = self._get_or_create_langchain_memory(session_id)
+                    lc_memory.add_user_message(message)
+                    lc_memory.add_ai_message(ai_response)
+                    
+                    # Add memory stats to response (optional)
+                    token_count = lc_memory.get_token_count()
+                    if token_count:
+                        response_data["memory_tokens"] = token_count
+                        logger.info(f"📊 Session {session_id} memory: {token_count} tokens tracked by LangChain")
+                except Exception as e:
+                    logger.warning(f"LangChain memory tracking failed for session {session_id}: {e}")
+                    # Continue processing - memory tracking is not critical
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "

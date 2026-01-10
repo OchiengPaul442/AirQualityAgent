@@ -22,6 +22,13 @@ google-genai==1.56.0               # Gemini models (new Google AI SDK)
 ollama==0.6.1                      # Local LLM support (updated for httpx 0.28+)
 dashscope==1.25.7                  # Alibaba Cloud DashScope/Qwen models with web search
 
+# LangChain Framework - Memory & RAG (Python 3.13 compatible)
+langchain>=1.2.0                   # LangChain core framework
+langchain-openai>=1.1.0            # OpenAI integration for LangChain
+langchain-community>=0.4.0         # Community integrations
+langsmith>=0.6.0                   # LangSmith tracing and monitoring
+faiss-cpu>=1.13.0                  # Vector search for RAG (CPU version)
+
 # -----------------------------------------------------------------------------
 # Model Context Protocol (MCP)
 # -----------------------------------------------------------------------------
