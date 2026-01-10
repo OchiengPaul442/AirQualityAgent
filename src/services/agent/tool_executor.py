@@ -125,8 +125,8 @@ class ToolExecutor:
         Get city air quality with comprehensive fallback strategy.
 
         Tries ALL available data sources in intelligent order:
-        1. WAQI (global coverage, 13k+ stations)
-        2. AirQo (if African city)
+        1. AirQo FIRST (if African city - better coverage for Africa)
+        2. WAQI (global coverage, 13k+ stations)
         3. Geocode + OpenMeteo (works anywhere with coordinates)
         4. DEFRA (UK cities)
         5. UBA (German cities)
@@ -141,8 +141,36 @@ class ToolExecutor:
             Result dictionary with success flag and data/message
         """
         tried_services = []
+        
+        # Detect if this is likely an African city
+        african_indicators = [
+            "kampala", "nairobi", "lagos", "accra", "kigali", "dar es salaam", "addis ababa",
+            "cairo", "johannesburg", "cape town", "kinshasa", "luanda", "abidjan", "dakar",
+            "casablanca", "algiers", "tunis", "khartoum", "mogadishu", "harare", "lusaka",
+            "maputo", "windhoek", "gaborone", "lilongwe", "blantyre", "bujumbura", "bamako",
+            "ouagadougou", "niamey", "ndjamena", "bangui", "libreville", "brazzaville",
+            "yaoundé", "douala", "malabo", "monrovia", "freetown", "conakry", "bissau",
+            "praia", "banjul", "nouakchott", "kampala", "jinja", "mbarara", "gulu"
+        ]
+        is_african_city = any(indicator in city.lower() for indicator in african_indicators)
 
-        # 1. Try WAQI first (global coverage)
+        # 1. Try AirQo FIRST if African city (better African coverage)
+        if is_african_city and self.airqo and not self._is_circuit_open("airqo"):
+            try:
+                logger.info(f"🌍 Trying AirQo FIRST for African city: {city}")
+                tried_services.append("AirQo")
+                result = self.airqo.get_recent_measurements(city=city)
+                if result.get("success"):
+                    self._record_success("airqo")
+                    result["data_source"] = "AirQo"
+                    return result
+                logger.info(f"AirQo returned no data for {city}")
+                self._record_failure("airqo")
+            except Exception as e:
+                logger.error(f"AirQo error for {city}: {e}")
+                self._record_failure("airqo")
+
+        # 2. Try WAQI (global coverage)
         if self.waqi and not self._is_circuit_open("waqi"):
             try:
                 logger.info(f"Trying WAQI for {city}")
@@ -158,10 +186,10 @@ class ToolExecutor:
                 logger.error(f"WAQI error for {city}: {e}")
                 self._record_failure("waqi")
 
-        # 2. Try AirQo (good for African cities, but also try globally)
-        if self.airqo and not self._is_circuit_open("airqo"):
+        # 3. Try AirQo if not tried yet (for non-African cities, try as fallback)
+        if not is_african_city and self.airqo and not self._is_circuit_open("airqo"):
             try:
-                logger.info(f"Trying AirQo for {city}")
+                logger.info(f"Trying AirQo as fallback for {city}")
                 tried_services.append("AirQo")
                 result = self.airqo.get_recent_measurements(city=city)
                 if result.get("success"):
@@ -174,7 +202,7 @@ class ToolExecutor:
                 logger.error(f"AirQo error for {city}: {e}")
                 self._record_failure("airqo")
 
-        # 3. Try Geocode + OpenMeteo (works anywhere with coordinates)
+        # 4. Try Geocode + OpenMeteo (works anywhere with coordinates)
         if self.geocoding and self.openmeteo and not self._is_circuit_open("openmeteo"):
             try:
                 logger.info(f"Trying Geocoding + OpenMeteo for {city}")
@@ -199,7 +227,7 @@ class ToolExecutor:
                 logger.error(f"Geocoding + OpenMeteo error for {city}: {e}")
                 self._record_failure("openmeteo")
 
-        # 4. Try DEFRA (UK cities)
+        # 5. Try DEFRA (UK cities)
         if self.defra and not self._is_circuit_open("defra"):
             try:
                 logger.info(f"Trying DEFRA for {city}")
@@ -215,7 +243,7 @@ class ToolExecutor:
                 logger.error(f"DEFRA error for {city}: {e}")
                 self._record_failure("defra")
 
-        # 5. Try UBA (German cities)
+        # 6. Try UBA (German cities)
         if self.uba and not self._is_circuit_open("uba"):
             try:
                 logger.info(f"Trying UBA for {city}")
@@ -231,7 +259,7 @@ class ToolExecutor:
                 logger.error(f"UBA error for {city}: {e}")
                 self._record_failure("uba")
 
-        # 6. Try NSW (Australian cities)
+        # 7. Try NSW (Australian cities)
         if self.nsw and not self._is_circuit_open("nsw"):
             try:
                 logger.info(f"Trying NSW for {city}")
@@ -247,7 +275,7 @@ class ToolExecutor:
                 logger.error(f"NSW error for {city}: {e}")
                 self._record_failure("nsw")
 
-        # 7. Try Carbon Intensity (UK only, but worth a try)
+        # 8. Try Carbon Intensity (UK only, but worth a try)
         if self.carbon_intensity and not self._is_circuit_open("carbon_intensity"):
             try:
                 logger.info(f"Trying Carbon Intensity for {city}")

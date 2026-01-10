@@ -1173,7 +1173,7 @@ class AgentService:
                 )
 
             # Extract chart data from tool results if chart was generated
-            # Check if generate_chart was called and capture the chart data
+            # Check if generate_chart was called and embed chart in markdown
             if "generate_chart" in all_tools_used:
                 # First check if it's in provider response (direct AI call)
                 chart_result = response_data.get("chart_result")
@@ -1184,24 +1184,19 @@ class AgentService:
                     chart_result = proactive_tool_results.get("generate_chart")
                     logger.info(f"Looking for chart in proactive results: {chart_result is not None}")
 
-                # KEEP chart markdown embedded in response for automatic rendering
-                # Charts are now embedded directly in markdown for frontend rendering
-                # No need to strip them - this allows markdown formatters to display them
-                logger.info("📊 Chart kept embedded in markdown response for automatic rendering")
-
-                if chart_result and isinstance(chart_result, dict):
-                    response_data["chart_data"] = chart_result.get("chart_data")
-                    response_data["chart_metadata"] = {
-                        "chart_type": chart_result.get("chart_type"),
-                        "data_rows": chart_result.get("data_rows"),
-                        "original_rows": chart_result.get("original_rows"),
-                        "data_sampled": chart_result.get("data_sampled", False),
-                        "columns_used": chart_result.get("columns_used"),
-                        "format": chart_result.get("format"),
-                        "engine": chart_result.get("engine"),
-                    }
-
-                    # Add sampling notice to response if data was sampled
+                if chart_result and isinstance(chart_result, dict) and chart_result.get("success"):
+                    chart_data = chart_result.get("chart_data")
+                    
+                    # Ensure chart is embedded in markdown response
+                    if chart_data and "response" in response_data:
+                        # Check if chart is already embedded
+                        if chart_data not in response_data["response"]:
+                            # Embed chart at the end of response
+                            chart_markdown = f"\n\n![Generated Chart]({chart_data})\n"
+                            response_data["response"] += chart_markdown
+                            logger.info("📊 Chart embedded in markdown response for automatic rendering")
+                    
+                    # Add sampling notice if data was sampled
                     if chart_result.get("data_sampled") and chart_result.get("sampling_notice"):
                         sampling_msg = f"\n\n{chart_result.get('sampling_notice')}"
                         if "response" in response_data:
@@ -1212,7 +1207,7 @@ class AgentService:
                         f" (sampled from {chart_result.get('original_rows')})" if chart_result.get('data_sampled') else ""
                     )
                 else:
-                    logger.warning("⚠️ generate_chart was called but no chart_result found")
+                    logger.warning("⚠️ generate_chart was called but chart generation failed")
                     # Provide helpful fallback message
                     if "response" in response_data and response_data["response"]:
                         response_data["response"] += (

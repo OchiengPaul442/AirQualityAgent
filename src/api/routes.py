@@ -654,8 +654,7 @@ async def chat(
             del document_data
 
         # Extract chart data if present in result
-        chart_data = result.get("chart_data")
-        chart_metadata = result.get("chart_metadata")
+        # Chart data is now embedded in markdown response, no separate fields needed
 
         # Prepend session warning to response if needed
         if session_warning:
@@ -670,8 +669,7 @@ async def chat(
             message_count=message_count,
             document_processed=bool(document_filenames or document_filename),
             document_filename=document_filenames[0] if document_filenames else document_filename,
-            chart_data=chart_data,
-            chart_metadata=chart_metadata,
+
         )
     except HTTPException:
         raise
