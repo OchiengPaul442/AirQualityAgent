@@ -18,7 +18,8 @@ annotated-types==0.7.0             # Type annotations support
 # -----------------------------------------------------------------------------
 openai==2.14.0                     # OpenAI GPT models (latest as of Dec 2024)
 anthropic==0.39.0                  # Claude models
-google-genai==1.56.0               # Gemini models (new Google AI SDK)
+google-genai==1.57.0               # Gemini models (new Google AI SDK)
+google-auth==2.47.0                # Explicit pin to keep google-genai auth deps stable
 ollama==0.6.1                      # Local LLM support (updated for httpx 0.28+)
 dashscope==1.25.7                  # Alibaba Cloud DashScope/Qwen models with web search
 
@@ -49,7 +50,7 @@ aiofiles==24.1.0                   # Async file operations
 # Configuration & Environment
 # -----------------------------------------------------------------------------
 python-dotenv==1.0.1               # Load environment variables
-pydantic-settings==2.7.0           # Settings management
+pydantic-settings==2.10.1          # Settings management
 
 # -----------------------------------------------------------------------------
 # Token Counting & Cost Management
@@ -59,7 +60,7 @@ tiktoken==0.8.0                    # Accurate token counting for LLMs
 # -----------------------------------------------------------------------------
 # Web Scraping & Data Extraction
 # -----------------------------------------------------------------------------
-requests==2.32.3                   # HTTP library
+requests==2.32.5                   # HTTP library
 beautifulsoup4==4.12.3             # HTML/XML parsing
 lxml>=6.0.0                        # XML/HTML parser (updated for ddgs compatibility)
 trafilatura==2.0.0                 # Web content extraction

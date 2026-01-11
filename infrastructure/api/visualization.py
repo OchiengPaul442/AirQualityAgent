@@ -8,6 +8,8 @@ Charts can be returned as base64 encoded images or saved to files.
 import base64
 import io
 import logging
+import os
+import re
 import warnings
 from datetime import datetime
 from typing import Any, Literal
@@ -163,6 +165,7 @@ class VisualizationService:
                     x_label,
                     y_label,
                     color_column,
+                    output_format=output_format,
                     **kwargs,
                 )
 
@@ -298,7 +301,37 @@ class VisualizationService:
             # Improve layout
             plt.tight_layout()
 
-            # Convert to base64
+            output_format: str = str(kwargs.get("output_format", "base64")).lower()
+
+            # Option A: write chart to a file and return an API URL (best for markdown rendering)
+            if output_format == "file":
+                storage_dir = os.getenv("CHART_STORAGE_DIR", "/app/data/charts")
+                os.makedirs(storage_dir, exist_ok=True)
+
+                # Create a safe filename from title + timestamp
+                safe_title = re.sub(r"[^a-zA-Z0-9_-]+", "-", (title or "chart").strip()).strip("-")
+                safe_title = safe_title[:60] if safe_title else "chart"
+                filename = f"{safe_title}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.png"
+                file_path = os.path.join(storage_dir, filename)
+
+                plt.savefig(file_path, format="png", dpi=100, bbox_inches="tight")
+                plt.close(fig)
+
+                public_base_url = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+                chart_path = f"/api/v1/visualization/charts/{filename}"
+                chart_url = f"{public_base_url}{chart_path}" if public_base_url else chart_path
+
+                # Return a URL so markdown renderers can load the image.
+                return {
+                    "success": True,
+                    "chart_data": chart_url,
+                    "format": "png",
+                    "engine": "matplotlib",
+                    "storage": "file",
+                    "file_name": filename,
+                }
+
+            # Option B: base64 data URI (may be blocked by some markdown renderers/sanitizers)
             buffer = io.BytesIO()
             plt.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
             buffer.seek(0)
@@ -310,6 +343,7 @@ class VisualizationService:
                 "chart_data": f"data:image/png;base64,{image_base64}",
                 "format": "png",
                 "engine": "matplotlib",
+                "storage": "base64",
             }
 
         except Exception as e:
@@ -416,13 +450,11 @@ class VisualizationService:
         Convenience method for time series charts.
 
         Args:
-        # Convert list to comma-separated string for y_column
-        y_col_str = value_columns[0] if len(value_columns) == 1 else ",".join(value_columns)
-        return self.generate_chart(
-            data=data,
-            chart_type="timeseries",
-            x_column=time_column,
-            y_column=y_col_strhart parameters
+            data: Data as list of dicts or DataFrame
+            time_column: Column to use for time (x-axis)
+            value_columns: One or more columns to plot on y-axis
+            title: Chart title
+            **kwargs: Additional chart parameters
         """
         return self.generate_chart(
             data=data,

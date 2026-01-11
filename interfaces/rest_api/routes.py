@@ -5,10 +5,11 @@ import re
 import time
 import uuid
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -628,6 +629,14 @@ async def chat(
         final_response = ResponseFilter.clean_response(final_response)
         # Apply professional markdown formatting
         final_response = MarkdownFormatter.format_response(final_response)
+
+        # Ensure chart images render in frontends hosted on a different origin by converting
+        # API-relative chart URLs into absolute URLs based on the current request.
+        base_url = str(request.base_url).rstrip("/")
+        final_response = final_response.replace(
+            "](/api/v1/visualization/charts/",
+            f"]({base_url}/api/v1/visualization/charts/",
+        )
         tools_used = result.get("tools_used", [])
 
         # Add document processing tool to tools_used if document was processed
@@ -1004,6 +1013,32 @@ async def disconnect_mcp_server(name: str):
 # ============================================================================
 # VISUALIZATION ENDPOINTS
 # ============================================================================
+
+
+@router.get("/visualization/charts/{filename}")
+async def get_generated_chart(filename: str):
+    """Serve generated chart PNG files for markdown image rendering."""
+    # Prevent path traversal and enforce PNG-only
+    if "/" in filename or "\\" in filename or not filename.lower().endswith(".png"):
+        raise HTTPException(status_code=400, detail="Invalid chart filename")
+
+    charts_dir = Path(os.getenv("CHART_STORAGE_DIR", "./data/charts")).resolve()
+    file_path = (charts_dir / filename).resolve()
+
+    # Ensure resolved path stays within charts_dir
+    if charts_dir not in file_path.parents and file_path != charts_dir:
+        raise HTTPException(status_code=400, detail="Invalid chart path")
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Chart not found")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="image/png",
+        filename=filename,
+        content_disposition_type="inline",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/visualization/capabilities")
