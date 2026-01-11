@@ -146,7 +146,7 @@ grep "Tool execution failed" logs/app.log
 
 # Verify API keys
 echo $WAQI_API_KEY
-echo $AIRQO_API_KEY
+echo $AIRQO_API_TOKEN
 
 # Test external API directly
 curl "https://api.waqi.info/feed/london/?token=$WAQI_API_KEY"

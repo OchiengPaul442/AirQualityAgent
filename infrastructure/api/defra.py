@@ -6,6 +6,7 @@ import requests
 
 from infrastructure.cache.cache_service import get_cache
 from shared.config.settings import Settings
+from shared.utils.provider_errors import provider_unavailable_message
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class DefraService:
 
         except Exception as e:
             logger.error(f"Error fetching DEFRA data for site {site_id}: {e}")
-            return {"error": f"Failed to fetch DEFRA data: {str(e)}"}
+            return {"error": provider_unavailable_message("DEFRA")}
 
     def get_multiple_stations(
         self,
@@ -195,7 +196,7 @@ class DefraService:
 
         except Exception as e:
             logger.error(f"Error formatting DEFRA data: {e}")
-            return {"error": f"Failed to format DEFRA data: {str(e)}"}
+            return {"error": provider_unavailable_message("DEFRA")}
 
     def _get_pollutant_name(self, species_code: str) -> str:
         """Get human-readable pollutant name."""

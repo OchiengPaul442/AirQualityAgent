@@ -11,6 +11,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from shared.utils.provider_errors import aeris_unavailable_message
+
 
 class ToolExecutor:
     """Executes tools for the AI agent with intelligent fallbacks and error handling."""
@@ -681,8 +683,8 @@ class ToolExecutor:
                         "query": query
                     }
                 except Exception as e:
-                    logger.error(f"Web search error: {e}")
-                    return {"success": False, "error": str(e)}
+                    logger.error(f"Web search error: {e}", exc_info=True)
+                    return {"success": False, "error": aeris_unavailable_message()}
 
             elif function_name == "scrape_website":
                 url = args.get("url")
@@ -695,8 +697,8 @@ class ToolExecutor:
                         return {"success": False, "error": result["error"], "url": url}
                     return {"success": True, **result}
                 except Exception as e:
-                    logger.error(f"Web scraping error: {e}")
-                    return {"success": False, "error": str(e), "url": url}
+                    logger.error(f"Web scraping error: {e}", exc_info=True)
+                    return {"success": False, "error": aeris_unavailable_message(), "url": url}
 
             # Document tools
             elif function_name == "scan_document":
@@ -863,7 +865,11 @@ class ToolExecutor:
 
                 except Exception as e:
                     logger.error(f"Chart generation error: {e}", exc_info=True)
-                    return {"success": False, "error": f"Failed to generate chart: {str(e)}"}
+                    return {
+                        "success": False,
+                        "error": "Failed to generate chart.",
+                        "message": aeris_unavailable_message(),
+                    }
 
             else:
                 return {
@@ -874,8 +880,7 @@ class ToolExecutor:
         except Exception as e:
             logger.error(f"Tool execution failed for {function_name}: {e}", exc_info=True)
             return {
-                "error": str(e),
-                "error_type": type(e).__name__,
+                "error": aeris_unavailable_message(),
                 "function_name": function_name,
                 "guidance": "This data source is currently unavailable or the requested location was not found. Please inform the user and suggest they try a different location or data source.",
             }

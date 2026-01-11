@@ -132,7 +132,7 @@ GOOGLE_API_KEY=your_key_here
 
 # Data Providers (optional, system has free fallbacks)
 WAQI_API_KEY=your_waqi_key      # Global coverage, 30k+ stations
-AIRQO_API_KEY=your_airqo_key    # East Africa focus
+AIRQO_API_TOKEN=your_airqo_token  # East Africa focus
 
 # Database (SQLite by default)
 DATABASE_URL=sqlite:///data/aeris_agent.db
@@ -655,7 +655,7 @@ AI_PROVIDER=openai
 AI_MODEL=gpt-4o-mini
 OPENAI_API_KEY=sk-...
 WAQI_API_KEY=...
-AIRQO_API_KEY=...
+AIRQO_API_TOKEN=...
 
 # Optional
 DATABASE_URL=sqlite:////app/data/chat_sessions.db
@@ -693,7 +693,7 @@ AI_PROVIDER=openai
 AI_MODEL=gpt-4o-mini
 OPENAI_API_KEY=sk-...
 WAQI_API_KEY=...
-AIRQO_API_KEY=...
+AIRQO_API_TOKEN=...
 
 # Optional
 DATABASE_URL=postgresql://user:pass@localhost/aeris_agent

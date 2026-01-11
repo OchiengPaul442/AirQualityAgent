@@ -20,6 +20,8 @@ import pandas as pd
 import plotly.express as px
 import seaborn as sns
 
+from shared.utils.provider_errors import aeris_unavailable_message
+
 # Use non-interactive backend for server environments
 matplotlib.use("Agg")
 
@@ -189,7 +191,12 @@ class VisualizationService:
 
         except Exception as e:
             logger.error(f"Error generating chart: {e}", exc_info=True)
-            return {"success": False, "error": str(e), "chart_type": chart_type}
+            return {
+                "success": False,
+                "error": "Unable to generate a visualization with the provided data and parameters.",
+                "message": aeris_unavailable_message(),
+                "chart_type": chart_type,
+            }
 
     def _generate_matplotlib_chart(
         self,

@@ -11,6 +11,7 @@ from typing import Any
 import requests
 
 from infrastructure.cache.cache_service import get_cache
+from shared.utils.provider_errors import aeris_unavailable_message
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +75,11 @@ class GeocodingService:
             }
 
         except requests.RequestException as e:
-            logger.error(f"Geocoding request failed: {e}")
-            return {"success": False, "message": f"Geocoding service unavailable: {str(e)}"}
+            logger.error(f"Geocoding request failed: {e}", exc_info=True)
+            return {"success": False, "message": "Geocoding service is currently unavailable. Please try again in a few minutes."}
         except Exception as e:
-            logger.error(f"Geocoding error: {e}")
-            return {"success": False, "message": f"Failed to geocode address: {str(e)}"}
+            logger.error(f"Geocoding error: {e}", exc_info=True)
+            return {"success": False, "message": aeris_unavailable_message()}
 
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any]:
         """
@@ -120,11 +121,11 @@ class GeocodingService:
             }
 
         except requests.RequestException as e:
-            logger.error(f"Reverse geocoding request failed: {e}")
-            return {"success": False, "message": f"Reverse geocoding service unavailable: {str(e)}"}
+            logger.error(f"Reverse geocoding request failed: {e}", exc_info=True)
+            return {"success": False, "message": "Reverse geocoding service is currently unavailable. Please try again in a few minutes."}
         except Exception as e:
-            logger.error(f"Reverse geocoding error: {e}")
-            return {"success": False, "message": f"Failed to reverse geocode coordinates: {str(e)}"}
+            logger.error(f"Reverse geocoding error: {e}", exc_info=True)
+            return {"success": False, "message": aeris_unavailable_message()}
 
     def get_location_from_ip(self, ip_address: str | None = None) -> dict[str, Any]:
         """
@@ -190,8 +191,8 @@ class GeocodingService:
             return result
 
         except requests.RequestException as e:
-            logger.error(f"IP geolocation request failed: {e}")
-            return {"success": False, "message": f"IP geolocation service unavailable: {str(e)}"}
+            logger.error(f"IP geolocation request failed: {e}", exc_info=True)
+            return {"success": False, "message": "IP geolocation service is currently unavailable. Please try again in a few minutes."}
         except Exception as e:
-            logger.error(f"IP geolocation error: {e}")
-            return {"success": False, "message": f"Failed to get location from IP: {str(e)}"}
+            logger.error(f"IP geolocation error: {e}", exc_info=True)
+            return {"success": False, "message": aeris_unavailable_message()}

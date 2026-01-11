@@ -1,9 +1,17 @@
-"""
-AirQo API Service
+"""AirQo API Service.
 
 Provides access to AirQo air quality monitoring network data.
-API Documentation: https://docs.airqo.net/airqo-rest-api-documentation/
+
+Docs:
+- https://docs.airqo.net/airqo-rest-api-documentation/
+
+Notes:
+- AirQo uses query param `token` for authentication.
+- Measurements endpoints are entity-specific (site/device/grid/cohort).
+- Summary endpoints (sites/cohorts/grids) are used to discover `_id` values.
 """
+
+from __future__ import annotations
 
 import logging
 from datetime import datetime
@@ -13,6 +21,7 @@ import requests
 
 from infrastructure.cache.cache_service import get_cache
 from shared.utils.data_formatter import format_air_quality_data
+from shared.utils.provider_errors import ProviderServiceError, provider_unavailable_message
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +83,7 @@ class AirQoService:
             JSON response data
         """
 
-        url = f"{self.BASE_URL}/{endpoint}"
+        url = f"{self.BASE_URL}/{endpoint.lstrip('/')}"
 
         # Add authentication token to params
         request_params = params.copy() if params else {}
@@ -104,11 +113,84 @@ class AirQoService:
             return sanitized_data
 
         except requests.exceptions.RequestException as e:
-            # Log the full error for debugging
-            error_msg = f"AirQo API request failed: {str(e)}"
-            if hasattr(e, "response") and e.response is not None:
-                error_msg += f" Response: {e.response.text}"
-            raise Exception(error_msg) from e
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            body = getattr(getattr(e, "response", None), "text", None)
+            logger.warning(
+                "AirQo request failed",
+                extra={"endpoint": endpoint, "status": status},
+            )
+            raise ProviderServiceError(
+                provider="airqo",
+                public_message=provider_unavailable_message("AirQo"),
+                internal_message=f"RequestException: {e}; status={status}; body={body}",
+                http_status=status,
+            ) from e
+
+    def _paginate_skip_limit(
+        self,
+        endpoint: str,
+        params: dict[str, Any],
+        items_key: str,
+        max_pages: int = 50,
+        max_items: int | None = None,
+    ) -> dict[str, Any]:
+        """Fetch paginated results using AirQo's `skip`/`limit` meta fields.
+
+        Works even when `meta.nextPage` is absent.
+        """
+
+        page_params = params.copy()
+        page_params.setdefault("skip", 0)
+        page_params.setdefault("limit", 100)
+
+        first = self._make_request(endpoint, page_params)
+        if not first.get("success"):
+            return first
+
+        items = list(first.get(items_key, []) or [])
+        meta = first.get("meta", {}) or {}
+
+        total = (
+            meta.get("total")
+            or meta.get("totalResults")
+            or meta.get("total_results")
+            or len(items)
+        )
+
+        pages_fetched = 1
+        while pages_fetched < max_pages:
+            if max_items is not None and len(items) >= max_items:
+                break
+
+            skip = int(page_params.get("skip", 0))
+            limit = int(page_params.get("limit", 0))
+            if skip + limit >= int(total):
+                break
+
+            page_params["skip"] = skip + limit
+            next_page = self._make_request(endpoint, page_params)
+            if not next_page.get("success"):
+                break
+
+            next_items = next_page.get(items_key, []) or []
+            if not next_items:
+                break
+
+            items.extend(next_items)
+            meta = next_page.get("meta", meta) or meta
+            total = (
+                meta.get("total")
+                or meta.get("totalResults")
+                or meta.get("total_results")
+                or total
+            )
+            pages_fetched += 1
+
+        first[items_key] = items if max_items is None else items[:max_items]
+        first.setdefault("meta", {})
+        first["meta"]["totalResults"] = len(first[items_key])
+        first["meta"]["pagesFetched"] = pages_fetched
+        return first
 
     def get_measurements(
         self,
@@ -135,74 +217,34 @@ class AirQoService:
         Returns:
             Measurements data with PM2.5, PM10, etc.
         """
-        params: dict[str, Any] = {"frequency": frequency, "limit": limit}
+        if not (site_id or device_id):
+            raise ValueError("One of site_id or device_id must be provided")
 
-        if site_id:
-            params["site_id"] = site_id
-        if device_id:
-            params["device_id"] = device_id
-        if start_time:
-            params["startTime"] = start_time.isoformat()
-        if end_time:
-            params["endTime"] = end_time.isoformat()
+        # If a time window is provided, use the documented historical endpoints.
+        if start_time is not None or end_time is not None:
+            return format_air_quality_data(
+                self.get_historical_measurements(
+                    site_id=site_id,
+                    device_id=device_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    frequency=frequency,
+                    limit=max(1, int(limit)),
+                    fetch_all=fetch_all,
+                ),
+                source="airqo",
+            )
 
-        # Get first page
-        data = self._make_request("devices/measurements", params)
-
-        # If fetch_all is False or no pagination needed, return first page only
-        if not fetch_all or not data.get("success"):
-            return format_air_quality_data(data, source="airqo")
-
-        # Check if pagination is needed
-        meta = data.get("meta", {})
-        if not meta.get("nextPage") or meta.get("pages", 1) <= 1:
-            return format_air_quality_data(data, source="airqo")
-
-        # Collect all measurements from first page
-        all_measurements = data.get("measurements", [])
-        pages_fetched = 1
-        max_pages = 50  # Safety limit
-
-        # Fetch remaining pages
-        while meta.get("nextPage") and pages_fetched < max_pages:
-            try:
-                # Parse next page URL to extract pagination parameters
-                import urllib.parse
-
-                parsed = urllib.parse.urlparse(meta["nextPage"])
-                next_params = urllib.parse.parse_qs(parsed.query)
-
-                # Update parameters for next page
-                page_params = params.copy()
-                if "skip" in next_params:
-                    page_params["skip"] = int(next_params["skip"][0])
-                if "limit" in next_params:
-                    page_params["limit"] = int(next_params["limit"][0])
-
-                # Fetch next page
-                next_data = self._make_request("devices/measurements", page_params)
-
-                if next_data.get("success") and next_data.get("measurements"):
-                    all_measurements.extend(next_data["measurements"])
-                    meta = next_data.get("meta", {})
-                    pages_fetched += 1
-                    logger.info(
-                        f"Fetched page {pages_fetched} for measurements, total records: {len(all_measurements)}"
-                    )
-                else:
-                    break
-
-            except Exception as e:
-                logger.warning(f"Error fetching next page of measurements: {e}")
-                break
-
-        # Update data with all collected measurements
-        data["measurements"] = all_measurements
-        if meta:
-            data["meta"]["totalResults"] = len(all_measurements)
-            data["meta"]["pagesFetched"] = pages_fetched
-
-        return format_air_quality_data(data, source="airqo")
+        # Otherwise use the documented recent endpoints.
+        return format_air_quality_data(
+            self.get_recent_measurements(
+                site_id=site_id,
+                device_id=device_id,
+                limit=max(1, int(limit)),
+                fetch_all=fetch_all,
+            ),
+            source="airqo",
+        )
 
     def get_historical_measurements(
         self,
@@ -213,6 +255,7 @@ class AirQoService:
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         frequency: str = "hourly",
+        limit: int = 1000,
         fetch_all: bool = True,
     ) -> dict[str, Any]:
         """
@@ -234,7 +277,7 @@ class AirQoService:
         Returns:
             Historical measurements data
         """
-        params: dict[str, Any] = {"frequency": frequency}
+        params: dict[str, Any] = {"frequency": frequency, "limit": limit, "skip": 0}
         if start_time:
             params["startTime"] = start_time.isoformat()
         if end_time:
@@ -253,63 +296,11 @@ class AirQoService:
             raise ValueError("One of site_id, device_id, grid_id, or cohort_id must be provided.")
 
         try:
-            # Get first page
-            response = self._make_request(endpoint, params)
-
-            # If fetch_all is False or no pagination needed, return first page only
-            if not fetch_all or not response.get("success"):
+            if not fetch_all:
+                response = self._make_request(endpoint, params)
                 return response
 
-            # Check if pagination is needed
-            meta = response.get("meta", {})
-            if not meta.get("nextPage") or meta.get("pages", 1) <= 1:
-                return response
-
-            # Collect all measurements from first page
-            all_measurements = response.get("measurements", [])
-            pages_fetched = 1
-            max_pages = 50  # Safety limit
-
-            # Fetch remaining pages
-            while meta.get("nextPage") and pages_fetched < max_pages:
-                try:
-                    # Parse next page URL to extract pagination parameters
-                    import urllib.parse
-
-                    parsed = urllib.parse.urlparse(meta["nextPage"])
-                    next_params = urllib.parse.parse_qs(parsed.query)
-
-                    # Update parameters for next page
-                    page_params = params.copy()
-                    if "skip" in next_params:
-                        page_params["skip"] = int(next_params["skip"][0])
-                    if "limit" in next_params:
-                        page_params["limit"] = int(next_params["limit"][0])
-
-                    # Fetch next page
-                    next_response = self._make_request(endpoint, page_params)
-
-                    if next_response.get("success") and next_response.get("measurements"):
-                        all_measurements.extend(next_response["measurements"])
-                        meta = next_response.get("meta", {})
-                        pages_fetched += 1
-                        logger.info(
-                            f"Fetched page {pages_fetched} for historical data, total measurements: {len(all_measurements)}"
-                        )
-                    else:
-                        break
-
-                except Exception as e:
-                    logger.warning(f"Error fetching next page of historical data: {e}")
-                    break
-
-            # Update response with all collected measurements
-            response["measurements"] = all_measurements
-            if meta:
-                response["meta"]["totalResults"] = len(all_measurements)
-                response["meta"]["pagesFetched"] = pages_fetched
-
-            return response
+            return self._paginate_skip_limit(endpoint, params, items_key="measurements", max_pages=50)
 
         except Exception as e:
             error_msg = str(e)
@@ -419,64 +410,19 @@ class AirQoService:
         Returns:
             Dictionary with sites array containing detailed site information
         """
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit, "skip": 0, "tenant": "airqo", "detailLevel": "summary"}
         if search:
             params["search"] = search
 
-        # Get first page
-        response = self._make_request("devices/sites/summary", params)
+        if not fetch_all:
+            return self._make_request("devices/sites/summary", params)
 
-        # If fetch_all is False or no pagination info, return first page only
-        if not fetch_all or not response.get("success"):
-            return response
-
-        # Collect all sites from first page
-        all_sites = response.get("sites", [])
-        meta = response.get("meta", {})
-
-        # Check for pagination and fetch remaining pages
-        max_pages = 50  # Safety limit to prevent infinite loops
-        pages_fetched = 1
-
-        while meta.get("nextPage") and pages_fetched < max_pages:
-            try:
-                # Extract next page URL
-                next_url = meta["nextPage"]
-
-                # Parse the next page URL to extract skip parameter
-                import urllib.parse
-
-                parsed = urllib.parse.urlparse(next_url)
-                next_params = urllib.parse.parse_qs(parsed.query)
-
-                # Update skip parameter for next page
-                if "skip" in next_params:
-                    params["skip"] = int(next_params["skip"][0])
-
-                    # Fetch next page
-                    next_response = self._make_request("devices/sites/summary", params)
-
-                    if next_response.get("success") and next_response.get("sites"):
-                        all_sites.extend(next_response["sites"])
-                        meta = next_response.get("meta", {})
-                        pages_fetched += 1
-                        logger.info(f"Fetched page {pages_fetched}, total sites: {len(all_sites)}")
-                    else:
-                        break
-                else:
-                    break
-
-            except Exception as e:
-                logger.warning(f"Error fetching next page: {e}")
-                break
-
-        # Update response with all collected sites
-        response["sites"] = all_sites
-        if meta:
-            response["meta"]["totalResults"] = len(all_sites)
-            response["meta"]["pagesFetched"] = pages_fetched
-
-        return response
+        return self._paginate_skip_limit(
+            "devices/sites/summary",
+            params,
+            items_key="sites",
+            max_pages=50,
+        )
 
     def get_grids_summary(
         self, search: str | None = None, limit: int = 80, fetch_all: bool = True
@@ -494,64 +440,38 @@ class AirQoService:
         Returns:
             Dictionary with grids array, each containing sites
         """
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit, "skip": 0, "tenant": "airqo", "detailLevel": "summary"}
         if search:
             params["search"] = search
 
-        # Get first page
-        response = self._make_request("devices/grids/summary", params)
+        if not fetch_all:
+            return self._make_request("devices/grids/summary", params)
 
-        # If fetch_all is False or no pagination info, return first page only
-        if not fetch_all or not response.get("success"):
-            return response
+        return self._paginate_skip_limit(
+            "devices/grids/summary",
+            params,
+            items_key="grids",
+            max_pages=50,
+        )
 
-        # Collect all grids from first page
-        all_grids = response.get("grids", [])
-        meta = response.get("meta", {})
+    def get_cohorts_summary(
+        self, search: str | None = None, limit: int = 80, fetch_all: bool = True
+    ) -> dict[str, Any]:
+        """Get cohorts summary to discover `cohort_id` values (cohorts[*]._id)."""
 
-        # Check for pagination and fetch remaining pages
-        max_pages = 50  # Safety limit to prevent infinite loops
-        pages_fetched = 1
+        params: dict[str, Any] = {"limit": limit, "skip": 0, "tenant": "airqo", "detailLevel": "summary"}
+        if search:
+            params["search"] = search
 
-        while meta.get("nextPage") and pages_fetched < max_pages:
-            try:
-                # Extract next page URL
-                next_url = meta["nextPage"]
+        if not fetch_all:
+            return self._make_request("devices/cohorts/summary", params)
 
-                # Parse the next page URL to extract skip parameter
-                import urllib.parse
-
-                parsed = urllib.parse.urlparse(next_url)
-                next_params = urllib.parse.parse_qs(parsed.query)
-
-                # Update skip parameter for next page
-                if "skip" in next_params:
-                    params["skip"] = int(next_params["skip"][0])
-
-                    # Fetch next page
-                    next_response = self._make_request("devices/grids/summary", params)
-
-                    if next_response.get("success") and next_response.get("grids"):
-                        all_grids.extend(next_response["grids"])
-                        meta = next_response.get("meta", {})
-                        pages_fetched += 1
-                        logger.info(f"Fetched page {pages_fetched}, total grids: {len(all_grids)}")
-                    else:
-                        break
-                else:
-                    break
-
-            except Exception as e:
-                logger.warning(f"Error fetching next page: {e}")
-                break
-
-        # Update response with all collected grids
-        response["grids"] = all_grids
-        if meta:
-            response["meta"]["totalResults"] = len(all_grids)
-            response["meta"]["pagesFetched"] = pages_fetched
-
-        return response
+        return self._paginate_skip_limit(
+            "devices/cohorts/summary",
+            params,
+            items_key="cohorts",
+            max_pages=50,
+        )
 
     def get_site_id_by_name(self, name: str, limit: int = 80) -> str | list[str] | None:
         """
@@ -586,8 +506,50 @@ class AirQoService:
                     return site_ids[0] if len(site_ids) == 1 else site_ids
 
             return None
-        except Exception as e:
-            print(f"Error finding site ID for '{name}': {e}")
+        except Exception:
+            logger.exception("Error finding site ID", extra={"name": name})
+            return None
+
+    def get_grid_id_by_name(self, name: str, limit: int = 80) -> str | list[str] | None:
+        """Helper to find Grid ID(s) by searching grids summary (grids[*]._id)."""
+
+        try:
+            cache_key = f"grid_id_map:{name.lower()}"
+            cached_id = self.cache_service.get("airqo", cache_key)
+            if cached_id:
+                return cached_id
+
+            response = self.get_grids_summary(search=name, limit=limit)
+            if response.get("success") and response.get("grids"):
+                grids = response["grids"]
+                grid_ids = [g.get("_id") for g in grids if g.get("_id")]
+                if grid_ids:
+                    self.cache_service.set("airqo", cache_key, grid_ids[0], 3600)
+                    return grid_ids[0] if len(grid_ids) == 1 else grid_ids
+            return None
+        except Exception:
+            logger.exception("Error finding grid ID", extra={"name": name})
+            return None
+
+    def get_cohort_id_by_name(self, name: str, limit: int = 80) -> str | list[str] | None:
+        """Helper to find Cohort ID(s) by searching cohorts summary (cohorts[*]._id)."""
+
+        try:
+            cache_key = f"cohort_id_map:{name.lower()}"
+            cached_id = self.cache_service.get("airqo", cache_key)
+            if cached_id:
+                return cached_id
+
+            response = self.get_cohorts_summary(search=name, limit=limit)
+            if response.get("success") and response.get("cohorts"):
+                cohorts = response["cohorts"]
+                cohort_ids = [c.get("_id") for c in cohorts if c.get("_id")]
+                if cohort_ids:
+                    self.cache_service.set("airqo", cache_key, cohort_ids[0], 3600)
+                    return cohort_ids[0] if len(cohort_ids) == 1 else cohort_ids
+            return None
+        except Exception:
+            logger.exception("Error finding cohort ID", extra={"name": name})
             return None
 
     def get_air_quality_by_location(
@@ -630,18 +592,14 @@ class AirQoService:
                     site_ids = [site.get("_id") for site in sites if site.get("_id")]
 
                     if site_ids:
-                        # Step 2: Get measurements for found sites
-                        params = {"site_id": ",".join(site_ids)}
-                        measurements_data = self._make_request("devices/readings/recent", params)
-
-                        # Add location context to the response
+                        # Step 2: Get measurements for the best matching site (bounded)
+                        best_site_id = site_ids[0]
+                        measurements_data = self.get_recent_measurements(site_id=best_site_id)
                         if measurements_data.get("success"):
                             measurements_data["coordinates"] = {"lat": latitude, "lon": longitude}
                             measurements_data["city_found"] = city_name
-                            measurements_data["sites_found"] = len(site_ids)
-                            measurements_data["site_ids_used"] = site_ids
-
-                        return format_air_quality_data(measurements_data, source="airqo")
+                            measurements_data["site_id_used"] = best_site_id
+                        return measurements_data
 
             # Step 2: If reverse geocoding didn't work or no sites found, try coordinate-based search
             location_query = f"{latitude:.4f},{longitude:.4f}"
@@ -652,18 +610,13 @@ class AirQoService:
                 site_ids = [site.get("_id") for site in sites if site.get("_id")]
 
                 if site_ids:
-                    # Get measurements for found sites
-                    params = {"site_id": ",".join(site_ids)}
-                    measurements_data = self._make_request("devices/readings/recent", params)
-
-                    # Add location context to the response
+                    best_site_id = site_ids[0]
+                    measurements_data = self.get_recent_measurements(site_id=best_site_id)
                     if measurements_data.get("success"):
                         measurements_data["coordinates"] = {"lat": latitude, "lon": longitude}
-                        measurements_data["sites_found"] = len(site_ids)
-                        measurements_data["site_ids_used"] = site_ids
+                        measurements_data["site_id_used"] = best_site_id
                         measurements_data["search_method"] = "coordinates"
-
-                    return format_air_quality_data(measurements_data, source="airqo")
+                    return measurements_data
 
             # Step 3: If no sites found, try grid-based search for the region
             grids_response = self.get_grids_summary(search=city_name or location_query, limit=80)
@@ -689,20 +642,24 @@ class AirQoService:
             # Step 4: No sites or grids found
             return {
                 "success": False,
-                "message": f"No AirQo monitoring sites or grids found near coordinates ({latitude:.4f}, {longitude:.4f}). "
-                f"AirQo primarily covers East African countries. The coordinates may be outside the coverage area.",
+                "message": (
+                    f"No AirQo monitoring sites or grids found near coordinates ({latitude:.4f}, {longitude:.4f}). "
+                    "AirQo primarily covers East African countries; the coordinates may be outside coverage."
+                ),
                 "coordinates": {"lat": latitude, "lon": longitude},
                 "city_attempted": city_name,
                 "search_method": "none_found",
             }
 
-        except Exception as e:
-            coords_str = f"({latitude:.4f}, {longitude:.4f})" if latitude is not None and longitude is not None else "(invalid)"
+        except ProviderServiceError as e:
             return {
                 "success": False,
-                "message": f"Error retrieving AirQo data for coordinates {coords_str}: {str(e)}",
-                "coordinates": {"lat": latitude, "lon": longitude} if latitude is not None and longitude is not None else None,
-                "error": str(e),
+                "message": e.public_message,
+            }
+        except Exception:
+            return {
+                "success": False,
+                "message": provider_unavailable_message("AirQo"),
             }
 
     def get_recent_measurements(
@@ -714,6 +671,9 @@ class AirQoService:
         country: str = "UG",
         city: str | None = None,
         search: str | None = None,
+        limit: int = 1000,
+        fetch_all: bool = True,
+        max_sites: int = 3,
     ) -> dict[str, Any]:
         """
         Get recent measurements using the proper AirQo API flow:
@@ -733,24 +693,46 @@ class AirQoService:
         Returns:
             Recent measurements with full details including health tips, AQI ranges, etc.
         """
-        # 1. If direct site_id provided, use the readings/recent endpoint
+        params: dict[str, Any] = {"limit": limit, "skip": 0}
+
+        # 1) Direct entity IDs (documented endpoints)
         if site_id:
-            params = {"site_id": site_id}
-            data = self._make_request("devices/readings/recent", params)
+            endpoint = f"devices/measurements/sites/{site_id}/recent"
+            data = (
+                self._paginate_skip_limit(endpoint, params, "measurements")
+                if fetch_all
+                else self._make_request(endpoint, params)
+            )
             return format_air_quality_data(data, source="airqo")
 
-        # 2. If device_id, grid_id, or cohort_id provided (legacy support)
         if device_id:
-            data = self._make_request(f"devices/measurements/devices/{device_id}/recent")
-            return format_air_quality_data(data, source="airqo")
-        elif grid_id:
-            data = self._make_request(f"devices/measurements/grids/{grid_id}/recent")
-            return format_air_quality_data(data, source="airqo")
-        elif cohort_id:
-            data = self._make_request(f"devices/measurements/cohorts/{cohort_id}/recent")
+            endpoint = f"devices/measurements/devices/{device_id}/recent"
+            data = (
+                self._paginate_skip_limit(endpoint, params, "measurements")
+                if fetch_all
+                else self._make_request(endpoint, params)
+            )
             return format_air_quality_data(data, source="airqo")
 
-        # 3. Search for sites using city or search parameter
+        if grid_id:
+            endpoint = f"devices/measurements/grids/{grid_id}/recent"
+            data = (
+                self._paginate_skip_limit(endpoint, params, "measurements")
+                if fetch_all
+                else self._make_request(endpoint, params)
+            )
+            return format_air_quality_data(data, source="airqo")
+
+        if cohort_id:
+            endpoint = f"devices/measurements/cohorts/{cohort_id}/recent"
+            data = (
+                self._paginate_skip_limit(endpoint, params, "measurements")
+                if fetch_all
+                else self._make_request(endpoint, params)
+            )
+            return format_air_quality_data(data, source="airqo")
+
+        # 2) Search for sites using city or search parameter
         search_query = search or city
         if search_query:
             try:
@@ -764,62 +746,48 @@ class AirQoService:
                     site_ids = [site.get("_id") for site in sites if site.get("_id")]
 
                     if site_ids:
-                        # Use the readings/recent endpoint with multiple site_ids
-                        # This endpoint accepts comma-separated site_ids
-                        params = {"site_id": ",".join(site_ids[:5])}  # Limit to first 5 sites
-                        data = self._make_request("devices/readings/recent", params)
+                        # Bounded multi-site fetch to avoid overload.
+                        selected_sites = sites[: max(1, min(max_sites, 10))]
+                        aggregated: list[dict[str, Any]] = []
 
-                        # Add search context and station metadata to help AI understand the data
-                        if data.get("success"):
-                            data["search_location"] = search_query
-                            data["sites_queried"] = len(site_ids[:5])
+                        for site in selected_sites:
+                            sid = site.get("_id")
+                            if not sid:
+                                continue
+                            endpoint = f"devices/measurements/sites/{sid}/recent"
+                            site_data = (
+                                self._paginate_skip_limit(endpoint, params, "measurements")
+                                if fetch_all
+                                else self._make_request(endpoint, params)
+                            )
+                            if site_data.get("success") and site_data.get("measurements"):
+                                aggregated.extend(site_data.get("measurements", []))
 
-                            # Add detailed station information for transparency
-                            station_details = []
-                            for site in sites[:5]:
-                                station_info = {
-                                    "site_name": site.get(
-                                        "name", site.get("description", "Unknown")
-                                    ),
-                                    "site_id": site.get("_id"),
-                                    "location": site.get(
-                                        "location_name", site.get("city", "Unknown")
-                                    ),
-                                    "latitude": site.get("latitude"),
-                                    "longitude": site.get("longitude"),
-                                    "country": site.get("country"),
-                                }
-                                # Only include if we have meaningful data
-                                if (
-                                    station_info["site_name"]
-                                    and station_info["site_name"] != "Unknown"
-                                ):
-                                    station_details.append(station_info)
-
-                            if station_details:
-                                data["monitoring_stations"] = station_details
-                                data["_data_source_note"] = (
-                                    f"Data from {len(station_details)} AirQo monitoring station(s) in or near {search_query}"
-                                )
-
-                        return format_air_quality_data(data, source="airqo")
+                        result = {
+                            "success": bool(aggregated),
+                            "message": "successfully returned the measurements" if aggregated else "No measurements found",
+                            "meta": {"sitesQueried": len(selected_sites), "totalResults": len(aggregated)},
+                            "measurements": aggregated,
+                            "search_location": search_query,
+                        }
+                        return format_air_quality_data(result, source="airqo")
 
                 # If no sites found, return helpful error with coverage info
                 return {
                     "success": False,
-                    "message": f"AirQo monitoring network does not have active stations in '{search_query}'. AirQo covers major East African cities including Kampala, Gulu, Mbale, Jinja, Nairobi, Dar es Salaam, and Kigali. Try checking WAQI or OpenMeteo for this location.",
+                    "message": (
+                        f"No AirQo monitoring sites found for '{search_query}'. "
+                        "Try WAQI or OpenMeteo for wider geographic coverage."
+                    ),
                     "location_searched": search_query,
                     "sites": [],
-                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources.",
                 }
             except Exception as e:
                 logger.error(f"Error searching AirQo sites for {search_query}: {e}")
                 return {
                     "success": False,
-                    "message": f"Error searching for AirQo monitoring sites in '{search_query}': {str(e)}",
+                    "message": provider_unavailable_message("AirQo"),
                     "location_searched": search_query,
-                    "error": str(e),
-                    "suggestion": "Try using WAQI (get_city_air_quality) or OpenMeteo as alternative data sources.",
                 }
 
         raise ValueError(
@@ -836,30 +804,29 @@ class AirQoService:
         Returns:
             Dictionary with air quality data for each city
         """
-        results = {}
-        import asyncio
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        async def get_city_data(city):
+        results: dict[str, Any] = {}
+        cities_limited = cities[:50]  # safety cap
+
+        def fetch_city(city_name: str) -> dict[str, Any]:
             try:
-                return city, self.get_recent_measurements(city=city)
-            except Exception as e:
-                return city, {"error": str(e)}
+                return self.get_recent_measurements(city=city_name)
+            except ProviderServiceError as e:
+                return {"success": False, "message": e.public_message}
+            except Exception:
+                return {"success": False, "message": provider_unavailable_message("AirQo")}
 
-        async def gather_results():
-            tasks = [get_city_data(city) for city in cities]
-            return await asyncio.gather(*tasks)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            future_map = {pool.submit(fetch_city, c): c for c in cities_limited}
+            for fut in as_completed(future_map):
+                city_name = future_map[fut]
+                try:
+                    results[city_name] = fut.result()
+                except Exception:
+                    results[city_name] = {"success": False, "message": provider_unavailable_message("AirQo")}
 
-        # Run the async gathering
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            city_results = loop.run_until_complete(gather_results())
-            for city, data in city_results:
-                results[city] = data
-        finally:
-            loop.close()
-
-        return {"success": True, "cities": results, "count": len(cities), "source": "airqo"}
+        return {"success": True, "cities": results, "count": len(results), "source": "airqo"}
 
     def search_sites_by_location(self, location: str, limit: int = 80) -> dict[str, Any]:
         """
@@ -887,7 +854,7 @@ class AirQoService:
         except Exception as e:
             return {
                 "success": False,
-                "message": f"Error searching for sites: {str(e)}",
+                "message": provider_unavailable_message("AirQo"),
                 "sites": [],
             }
 

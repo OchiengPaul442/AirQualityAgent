@@ -22,6 +22,8 @@ Generates detailed performance report at: tests/stress_test_report.json
 import asyncio
 import io
 import json
+import os
+import subprocess
 import sys
 import time
 import uuid
@@ -38,7 +40,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Test configuration
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = os.environ.get("STRESS_TEST_BASE_URL", "http://localhost:8000/api/v1")
 TIMEOUT = 120  # 2 minutes max per test
 MAX_CONCURRENT_REQUESTS = 10
 
@@ -63,6 +65,11 @@ class StressTestRunner:
         self.session_ids = {}
         self.start_time = None
         self.client = httpx.AsyncClient(timeout=TIMEOUT)
+
+    @staticmethod
+    def _format_error(e: Exception) -> str:
+        message = str(e)
+        return f"{type(e).__name__}: {message}" if message else type(e).__name__
 
     def log(self, message: str, level: str = "INFO"):
         """Log with colors and timestamps"""
@@ -104,12 +111,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ Health check exception: {e}", "ERROR")
+            self.log(f"✗ Health check exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "health_check",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_simple_chat(self) -> dict[str, Any]:
@@ -155,12 +162,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ Simple chat exception: {e}", "ERROR")
+            self.log(f"✗ Simple chat exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "simple_chat",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     # Streaming test removed - not an industry standard practice
@@ -219,12 +226,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ CSV upload exception: {e}", "ERROR")
+            self.log(f"✗ CSV upload exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "csv_upload",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_document_upload_pdf(self) -> dict[str, Any]:
@@ -288,12 +295,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ PDF upload exception: {e}", "ERROR")
+            self.log(f"✗ PDF upload exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "pdf_upload",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_context_retention(self) -> dict[str, Any]:
@@ -352,12 +359,12 @@ class StressTestRunner:
                     "error": f"Status {response2.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ Context retention exception: {e}", "ERROR")
+            self.log(f"✗ Context retention exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "context_retention",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_langchain_memory_integration(self) -> dict[str, Any]:
@@ -451,12 +458,12 @@ class StressTestRunner:
                     "error": "Memory recall failed"
                 }
         except Exception as e:
-            self.log(f"✗ LangChain memory exception: {e}", "ERROR")
+            self.log(f"✗ LangChain memory exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "langchain_memory",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_security_input_validation(self) -> dict[str, Any]:
@@ -566,12 +573,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ NAAQS question exception: {e}", "ERROR")
+            self.log(f"✗ NAAQS question exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "naaqs_question",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_ozone_formation_question(self) -> dict[str, Any]:
@@ -618,12 +625,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ Ozone question exception: {e}", "ERROR")
+            self.log(f"✗ Ozone question exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "ozone_question",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_naaqs_violation_response(self) -> dict[str, Any]:
@@ -670,12 +677,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ NAAQS violation exception: {e}", "ERROR")
+            self.log(f"✗ NAAQS violation exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "naaqs_violation",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_attainment_designations(self) -> dict[str, Any]:
@@ -724,12 +731,12 @@ class StressTestRunner:
                     "error": f"Status {response.status_code}"
                 }
         except Exception as e:
-            self.log(f"✗ Attainment designations exception: {e}", "ERROR")
+            self.log(f"✗ Attainment designations exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "attainment_designations",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_concurrent_requests(self) -> dict[str, Any]:
@@ -772,12 +779,12 @@ class StressTestRunner:
                 "successful_requests": successes
             }
         except Exception as e:
-            self.log(f"✗ Concurrent requests exception: {e}", "ERROR")
+            self.log(f"✗ Concurrent requests exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "concurrent_requests",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_session_management(self) -> dict[str, Any]:
@@ -826,12 +833,12 @@ class StressTestRunner:
                 "session_found": session_found
             }
         except Exception as e:
-            self.log(f"✗ Session management exception: {e}", "ERROR")
+            self.log(f"✗ Session management exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "session_management",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def test_performance_baseline(self) -> dict[str, Any]:
@@ -878,12 +885,12 @@ class StressTestRunner:
                 "meets_target": meets_target
             }
         except Exception as e:
-            self.log(f"✗ Performance baseline exception: {e}", "ERROR")
+            self.log(f"✗ Performance baseline exception: {self._format_error(e)}", "ERROR")
             return {
                 "test": "performance_baseline",
                 "status": "FAILED",
                 "duration": time.time() - start,
-                "error": str(e)
+                "error": self._format_error(e)
             }
 
     async def run_all_tests(self):
@@ -979,11 +986,78 @@ class StressTestRunner:
 
 async def main():
     """Main entry point"""
+    repo_root = Path(__file__).parent.parent
+
+    async def _is_server_running() -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(f"{BASE_URL}/health")
+                return r.status_code == 200
+        except Exception:
+            return False
+
+    server_proc: subprocess.Popen | None = None
+    started_server = False
+
+    if not await _is_server_running():
+        env = os.environ.copy()
+        env.setdefault("AI_PROVIDER", "mock")
+        env.setdefault("AI_MODEL", "mock")
+        env.setdefault("ENVIRONMENT", "development")
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "interfaces.rest_api.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8000",
+        ]
+
+        server_proc = subprocess.Popen(
+            cmd,
+            cwd=str(repo_root),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        started_server = True
+
+        # Wait for readiness (up to ~30 seconds)
+        for _ in range(60):
+            if await _is_server_running():
+                break
+            await asyncio.sleep(0.5)
+        else:
+            if server_proc:
+                server_proc.terminate()
+            raise RuntimeError(
+                "Failed to start local API server for stress test. "
+                "Try running `python -m uvicorn interfaces.rest_api.main:app --host 127.0.0.1 --port 8000` manually."
+            )
+
     runner = StressTestRunner()
     try:
         await runner.run_all_tests()
     finally:
         await runner.cleanup()
+        if started_server and server_proc:
+            if os.name == "nt":
+                # Ensure the whole process tree is terminated on Windows.
+                subprocess.run(
+                    ["taskkill", "/PID", str(server_proc.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            else:
+                server_proc.terminate()
+                try:
+                    server_proc.wait(timeout=10)
+                except Exception:
+                    server_proc.kill()
 
 
 if __name__ == "__main__":

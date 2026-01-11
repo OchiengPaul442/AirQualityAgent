@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-01-11T03:14:08.411061",
+  "timestamp": "2026-01-11T23:30:48.332359",
   "summary": {
     "total_tests": 14,
-    "passed": 13,
-    "failed": 1,
+    "passed": 14,
+    "failed": 0,
     "warnings": 0,
-    "total_duration": 88.55440402030945,
-    "pass_rate": 92.85714285714286
+    "total_duration": 11.683741569519043,
+    "pass_rate": 100.0
   },
   "tests": [
     {
       "test": "health_check",
       "status": "PASSED",
-      "duration": 0.2654454708099365,
+      "duration": 0.27248048782348633,
       "response": {
         "status": "ok",
         "version": "1.0.0"
@@ -21,18 +21,17 @@
     {
       "test": "simple_chat",
       "status": "PASSED",
-      "duration": 0.16666769981384277,
-      "response_length": 1,
-      "tokens_used": 13,
-      "session_id": "6ab1153d-ba28-4cac-a1c7-1b34735b48d3"
+      "duration": 0.2114732265472412,
+      "response_length": 287,
+      "tokens_used": 82,
+      "session_id": "24293728-d16f-4533-b75d-b09d794c60b1"
     },
     {
       "test": "csv_upload",
       "status": "PASSED",
-      "duration": 23.773176193237305,
+      "duration": 0.423492431640625,
       "tools_used": [
         "search_web",
-        "generate_chart",
         "get_african_city_air_quality",
         "scan_document",
         "document_scanner"
@@ -42,10 +41,9 @@
     {
       "test": "pdf_upload",
       "status": "PASSED",
-      "duration": 0.08312368392944336,
+      "duration": 0.10401058197021484,
       "tools_used": [
         "search_web",
-        "get_air_quality_forecast",
         "scan_document",
         "document_scanner"
       ]
@@ -53,24 +51,24 @@
     {
       "test": "context_retention",
       "status": "PASSED",
-      "duration": 0.5771126747131348,
+      "duration": 0.6051154136657715,
       "mentions_london": false,
-      "mentions_paris": false,
-      "session_id": "e150f1ae-d187-46a7-a282-8830da093cc9"
+      "mentions_paris": true,
+      "session_id": "a821ad43-04cc-4f1b-8b47-018b9a2ae997"
     },
     {
       "test": "langchain_memory",
-      "status": "FAILED",
-      "duration": 27.736629247665405,
-      "has_name": false,
-      "has_location": false,
-      "still_remembers_after_conversation": false,
-      "error": "Memory recall failed"
+      "status": "PASSED",
+      "duration": 0.1845862865447998,
+      "has_name": true,
+      "has_location": true,
+      "still_remembers_after_conversation": true,
+      "memory_tokens": 0
     },
     {
       "test": "security_validation",
       "status": "PASSED",
-      "duration": 0.17808842658996582,
+      "duration": 0.18562793731689453,
       "tests_run": 5,
       "results": [
         {
@@ -98,19 +96,18 @@
     {
       "test": "naaqs_question",
       "status": "PASSED",
-      "duration": 0.050327301025390625,
-      "response_length": 2991,
-      "tokens_used": 566,
+      "duration": 0.052823781967163086,
+      "response_length": 394,
+      "tokens_used": 112,
       "tools_used": [
-        "search_web",
-        "get_city_air_quality"
+        "search_web"
       ],
       "has_substance": true
     },
     {
       "test": "ozone_question",
       "status": "PASSED",
-      "duration": 0.05019664764404297,
+      "duration": 0.04671359062194824,
       "mentions_nox": false,
       "mentions_voc": false,
       "mentions_sunlight": false
@@ -118,40 +115,40 @@
     {
       "test": "naaqs_violation",
       "status": "PASSED",
-      "duration": 0.05547952651977539,
+      "duration": 0.07107043266296387,
       "mentions_epa": false,
       "mentions_designation": false,
-      "mentions_timeline": false
+      "mentions_timeline": true
     },
     {
       "test": "attainment_designations",
       "status": "PASSED",
-      "duration": 0.029534578323364258,
+      "duration": 0.08459186553955078,
       "mentions_attainment": true,
       "mentions_nonattainment": true,
       "mentions_maintenance": true,
-      "mentions_planning": false
+      "mentions_planning": true
     },
     {
       "test": "concurrent_requests",
       "status": "PASSED",
-      "duration": 0.41546130180358887,
+      "duration": 0.498523473739624,
       "total_requests": 5,
       "successful_requests": 5
     },
     {
       "test": "session_management",
       "status": "PASSED",
-      "duration": 0.08945178985595703,
+      "duration": 0.10514163970947266,
       "session_found": true
     },
     {
       "test": "performance_baseline",
       "status": "PASSED",
-      "duration": 27.956659078598022,
-      "avg_response_time": 8.815471967061361,
-      "min_response_time": 0.030086517333984375,
-      "max_response_time": 26.38069748878479,
+      "duration": 1.7232623100280762,
+      "avg_response_time": 0.06299877166748047,
+      "min_response_time": 0.06001877784729004,
+      "max_response_time": 0.06798577308654785,
       "target": 30,
       "meets_target": true
     }

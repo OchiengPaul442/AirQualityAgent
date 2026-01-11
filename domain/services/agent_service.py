@@ -25,6 +25,7 @@ from core.memory.langchain_memory import LangChainSessionMemory, create_session_
 from core.memory.prompts.system_instructions import get_response_parameters, get_system_instruction
 from core.providers.base_provider import BaseAIProvider
 from core.providers.gemini_provider import GeminiProvider
+from core.providers.mock_provider import MockProvider
 from core.providers.ollama_provider import OllamaProvider
 from core.providers.openai_provider import OpenAIProvider
 from core.tools.document_scanner import DocumentScanner
@@ -66,6 +67,10 @@ class AgentService:
 
         # Initialize SessionContextManager for better long-conversation handling
         self.session_manager = SessionContextManager(max_contexts=50, context_ttl=3600)
+
+        # Persist simple personal info per session (name/location) so recall doesn't rely on the LLM
+        # and survives history truncation.
+        self._personal_info_by_session: dict[str, dict[str, str]] = {}
 
         # LangChain memory cache for enhanced session management
         # Provides: token-aware truncation, summarization, Redis persistence
@@ -408,6 +413,7 @@ class AgentService:
             "gemini": GeminiProvider,
             "openai": OpenAIProvider,
             "ollama": OllamaProvider,
+            "mock": MockProvider,
         }
 
         provider_class = provider_map.get(self.settings.AI_PROVIDER.lower())
@@ -583,6 +589,94 @@ class AgentService:
                 return True
 
         return False
+
+    def _build_personal_info_recall_response(
+        self, message: str, history: list[dict[str, Any]], session_id: str | None
+    ) -> str | None:
+        import re
+
+        message_lower = message.lower()
+        asks_name = any(
+            phrase in message_lower
+            for phrase in [
+                "what's my name",
+                "what is my name",
+            ]
+        )
+        asks_location = any(
+            phrase in message_lower
+            for phrase in [
+                "where do i live",
+                "where i live",
+                "where am i",
+                "what city",
+                "which city",
+                "what location",
+            ]
+        )
+
+        if not (asks_name or asks_location):
+            return None
+
+        name: str | None = None
+        location: str | None = None
+
+        if session_id:
+            stored = self._personal_info_by_session.get(session_id, {})
+            name = stored.get("name") or None
+            location = stored.get("location") or None
+
+        for msg in reversed(history or []):
+            if msg.get("role") != "user":
+                continue
+            content = (msg.get("content") or "").strip()
+            if not content:
+                continue
+
+            if name is None:
+                name_match = re.search(
+                    r"\bmy name is\s+([A-Za-z][A-Za-z\-']{0,63})\b",
+                    content,
+                    re.IGNORECASE,
+                )
+                if name_match:
+                    name = name_match.group(1)
+
+            if location is None:
+                location_match = re.search(
+                    r"\bi\s+(?:live in|am from|i'm from|i'm in)\s+([A-Za-z][A-Za-z\s\-']{0,63})\b",
+                    content,
+                    re.IGNORECASE,
+                )
+                if location_match:
+                    location = location_match.group(1).strip().rstrip(".")
+
+            if name and location:
+                break
+
+        # Hydrate per-session cache if we found anything in history.
+        if session_id and (name or location):
+            entry = self._personal_info_by_session.setdefault(session_id, {})
+            if name:
+                entry["name"] = name
+            if location:
+                entry["location"] = location
+
+        if asks_name and asks_location and (name or location):
+            if name and location:
+                return f"You told me your name is {name} and you live in {location}."
+            if name:
+                return f"You told me your name is {name}."
+            if location:
+                return f"You told me you're in {location}."
+
+        if asks_name and name:
+            return f"You told me your name is {name}."
+
+        if asks_location and location:
+            return f"You told me you're in {location}."
+
+        return None
 
     def _check_security_violation(self, message_lower: str) -> bool:
         """
@@ -1070,7 +1164,8 @@ class AgentService:
         # Personal information queries must NEVER use cache (need real-time memory recall)
         is_personal_info = any(pattern in message.lower() for pattern in [
             'my name', 'i live', 'i am from', "i'm from", 'remember', 
-            "what's my", "what is my", "where do i", "who am i"
+            "what's my", "what is my", "where do i", "who am i",
+            "what city", "which city", "what location"
         ])
 
         # Check cache with intelligent freshness validation
@@ -1286,6 +1381,22 @@ class AgentService:
         query_type = classification.get("query_type", "general")
         logger.info(f"📊 Query classified as: {query_type}")
 
+        # Deterministic personal-info recall (doesn't depend on the model remembering).
+        # Only triggers for explicit recall questions (e.g., "What's my name?").
+        recall_response = self._build_personal_info_recall_response(message, history, session_id)
+        if recall_response:
+            logger.info("📚 Returning deterministic personal info recall response")
+            self._add_to_memory(message, recall_response, session_id)
+            return {
+                "response": recall_response,
+                "tokens_used": 0,
+                "cost_estimate": 0.0,
+                "cached": False,
+                "tools_used": [],
+                "query_type": "personal_info",
+                "memory_tokens": None,
+            }
+
         # SPECIAL HANDLING: Personal information sharing
         # For queries where users share personal info, we need explicit acknowledgment
         if query_type == "personal_info":
@@ -1302,6 +1413,13 @@ class AgentService:
             if name_match or location_match:
                 name = name_match.group(1) if name_match else None
                 location = location_match.group(1).strip() if location_match else None
+
+                if session_id and (name or location):
+                    entry = self._personal_info_by_session.setdefault(session_id, {})
+                    if name:
+                        entry["name"] = name
+                    if location:
+                        entry["location"] = location
                 
                 response_parts = []
                 if name:

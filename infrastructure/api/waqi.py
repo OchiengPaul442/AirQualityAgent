@@ -1,16 +1,28 @@
-"""
-World Air Quality Index (WAQI) API Service
+"""World Air Quality Index (WAQI) API Service.
 
 Provides access to global air quality data from over 11,000 stations.
-API Documentation: https://aqicn.org/json-api/doc/
+
+Docs:
+- https://aqicn.org/api/
+- https://aqicn.org/json-api/doc/
+
+Important:
+- WAQI returns AQI values (0-500), not raw concentrations.
 """
 
+from __future__ import annotations
+
+import logging
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
 from infrastructure.cache.cache_service import get_cache
 from shared.utils.data_formatter import format_air_quality_data
+from shared.utils.provider_errors import ProviderServiceError, provider_unavailable_message
+
+logger = logging.getLogger(__name__)
 
 
 class WAQIService:
@@ -65,38 +77,53 @@ class WAQIService:
         Returns:
             JSON response data
         """
-        url = f"{self.BASE_URL}/{endpoint}"
+        url = f"{self.BASE_URL}/{endpoint.lstrip('/')}"
 
-        # Add API key to params
-        if params is None:
-            params = {}
-        params["token"] = self.api_key
+        # Build request params without mutating caller-owned dict
+        request_params: dict[str, Any] = dict(params or {})
+        request_params["token"] = self.api_key
 
         # Check Redis cache
-        cached_data = self.cache_service.get_api_response("waqi", endpoint, params)
+        cached_data = self.cache_service.get_api_response("waqi", endpoint, request_params)
         if cached_data is not None:
             # Ensure cached data is also sanitized
             return self._sanitize_token(cached_data)
 
         try:
-            response = self.session.get(url, params=params, timeout=30)
+            response = self.session.get(url, params=request_params, timeout=30)
             response.raise_for_status()
             data = response.json()
 
             if data.get("status") != "ok":
-                raise Exception(f"WAQI API error: {data.get('data', 'Unknown error')}")
+                # Don't leak provider's reason to callers.
+                raise ProviderServiceError(
+                    provider="waqi",
+                    public_message=provider_unavailable_message("WAQI"),
+                    internal_message=f"WAQI status={data.get('status')} data={data.get('data')}",
+                    http_status=response.status_code,
+                )
 
             # Sanitize token from response before caching and returning
             sanitized_data = self._sanitize_token(data)
 
             # Cache the sanitized result in Redis
             self.cache_service.set_api_response(
-                "waqi", endpoint, params, sanitized_data, self.cache_ttl
+                "waqi", endpoint, request_params, sanitized_data, self.cache_ttl
             )
             return sanitized_data
 
+        except ProviderServiceError:
+            raise
         except requests.exceptions.RequestException as e:
-            raise Exception(f"WAQI API request failed: {str(e)}") from e
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            body = getattr(getattr(e, "response", None), "text", None)
+            logger.warning("WAQI request failed", extra={"endpoint": endpoint, "status": status})
+            raise ProviderServiceError(
+                provider="waqi",
+                public_message=provider_unavailable_message("WAQI"),
+                internal_message=f"RequestException: {e}; status={status}; body={body}",
+                http_status=status,
+            ) from e
 
     def get_city_feed(self, city: str) -> dict[str, Any]:
         """
@@ -117,7 +144,9 @@ class WAQIService:
             AQI data with pollutants, time, location info.
             Includes both AQI values and estimated concentrations in µg/m³.
         """
-        data = self._make_request(f"feed/{city}/")
+        # City can contain spaces or unicode; keep it safe in the URL path.
+        safe_city = quote(city.strip(), safe="")
+        data = self._make_request(f"feed/{safe_city}/")
         formatted = format_air_quality_data(data, source="waqi")
 
         # Add success flag based on WAQI API status
@@ -134,6 +163,14 @@ class WAQIService:
                 "For exact concentration measurements, consider using AirQo or OpenMeteo data sources."
             )
 
+        return formatted
+
+    def get_station_feed(self, uid: int | str) -> dict[str, Any]:
+        """Get station feed by WAQI station UID (aka @uid in WAQI URLs)."""
+
+        data = self._make_request(f"feed/@{uid}/")
+        formatted = format_air_quality_data(data, source="waqi")
+        formatted["success"] = bool(data.get("status") == "ok" and "data" in data)
         return formatted
 
     def get_by_coordinates(self, lat: float, lon: float) -> dict[str, Any]:
@@ -190,7 +227,8 @@ class WAQIService:
         Returns:
             List of matching stations
         """
-        return self._make_request("search/", {"keyword": keyword})
+        # WAQI v2 endpoint (matches official demo)
+        return self._make_request("v2/search/", {"keyword": keyword})
 
     def get_map_bounds(self, lat1: float, lng1: float, lat2: float, lng2: float) -> dict[str, Any]:
         """
@@ -205,8 +243,9 @@ class WAQIService:
         Returns:
             List of stations within bounds
         """
-        bounds = f"{lat1},{lng1},{lat2},{lng2}"
-        return self._make_request("map/bounds/", {"bounds": bounds})
+        # WAQI v2 endpoint expects `latlng` param (N,W,S,E style used by demos)
+        latlng = f"{lat1},{lng1},{lat2},{lng2}"
+        return self._make_request("v2/map/bounds/", {"latlng": latlng})
 
     def get_station_forecast(self, city: str) -> dict[str, Any]:
         """
@@ -236,8 +275,14 @@ class WAQIService:
         for city in cities:
             try:
                 results[city] = self.get_city_feed(city)
-            except Exception as e:
-                results[city] = {"error": str(e)}
+            except ProviderServiceError as e:
+                # Non-leaky; keep service usable for agent even when one city fails.
+                results[city] = {"success": False, "message": e.public_message}
+            except Exception:
+                results[city] = {
+                    "success": False,
+                    "message": provider_unavailable_message("WAQI"),
+                }
         return results
 
     def interpret_aqi(self, aqi: int) -> dict[str, str]:

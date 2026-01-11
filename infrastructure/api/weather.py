@@ -3,6 +3,8 @@ from typing import Any
 
 import requests
 
+from shared.utils.provider_errors import provider_unavailable_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,7 +83,7 @@ class WeatherService:
 
         except Exception as e:
             logger.error(f"Error fetching weather for {city}: {e}")
-            return {"error": str(e)}
+            return {"error": provider_unavailable_message("Open-Meteo")}
 
     def get_weather_forecast(self, city: str, days: int = 7) -> dict[str, Any]:
         """Get weather forecast for a city."""
@@ -145,4 +147,4 @@ class WeatherService:
 
         except Exception as e:
             logger.error(f"Error fetching weather forecast for {city}: {e}")
-            return {"error": str(e), "success": False}
+            return {"error": provider_unavailable_message("Open-Meteo"), "success": False}

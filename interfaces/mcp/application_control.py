@@ -22,6 +22,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from shared.utils.provider_errors import aeris_unavailable_message
+
 
 class ApplicationType(Enum):
     """Types of applications the agent can control."""
@@ -329,8 +331,8 @@ class MCPApplicationBridge:
         except ValueError:
             return {"success": False, "error": f"Invalid action type: {action_type}"}
         except Exception as e:
-            logger.error(f"Failed to execute action: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Failed to execute action: {e}", exc_info=True)
+            return {"success": False, "error": aeris_unavailable_message()}
 
     async def navigate_application(self, destination: str) -> bool:
         """

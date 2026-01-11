@@ -6,6 +6,7 @@ import requests
 
 from infrastructure.cache.cache_service import get_cache
 from shared.config.settings import Settings
+from shared.utils.provider_errors import provider_unavailable_message
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class UbaService:
 
         except Exception as e:
             logger.error(f"Error fetching UBA measures data: {e}")
-            return {"error": f"Failed to fetch UBA data: {str(e)}"}
+            return {"error": provider_unavailable_message("UBA")}
 
     def get_stations(self) -> dict[str, Any]:
         """
@@ -133,7 +134,7 @@ class UbaService:
 
         except Exception as e:
             logger.error(f"Error fetching UBA stations data: {e}")
-            return {"error": f"Failed to fetch UBA stations: {str(e)}"}
+            return {"error": provider_unavailable_message("UBA")}
 
     def _format_measures_data(self, raw_data: dict) -> dict[str, Any]:
         """
@@ -194,7 +195,7 @@ class UbaService:
 
         except Exception as e:
             logger.error(f"Error formatting UBA measures data: {e}")
-            return {"error": f"Failed to format UBA data: {str(e)}"}
+            return {"error": provider_unavailable_message("UBA")}
 
     def _format_stations_data(self, raw_data: dict) -> dict[str, Any]:
         """
@@ -233,7 +234,7 @@ class UbaService:
 
         except Exception as e:
             logger.error(f"Error formatting UBA stations data: {e}")
-            return {"error": f"Failed to format UBA stations: {str(e)}"}
+            return {"error": provider_unavailable_message("UBA")}
 
     def _get_pollutant_name(self, component_id: int) -> str:
         """Get human-readable pollutant name from component ID."""

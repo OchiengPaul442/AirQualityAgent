@@ -21,6 +21,8 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
+from shared.utils.provider_errors import aeris_unavailable_message
+
 # List of common user agents to rotate
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -138,10 +140,10 @@ class RobustScraper:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error scraping {url}: {e}")
-            return {"error": str(e), "url": url}
+            return {"error": aeris_unavailable_message(), "url": url}
         except Exception as e:
             logger.error(f"Unexpected error scraping {url}: {e}")
-            return {"error": str(e), "url": url}
+            return {"error": aeris_unavailable_message(), "url": url}
 
     def _extract_air_quality_metrics(self, soup: BeautifulSoup, url: str) -> dict[str, Any] | None:
         """

@@ -21,6 +21,7 @@ except ImportError:
     TIKTOKEN_AVAILABLE = False
 
 from shared.config.settings import get_settings
+from shared.utils.provider_errors import aeris_unavailable_message
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,8 @@ class DocumentScanner:
                 }
 
         except Exception as e:
-            return {"error": f"Error scanning document: {str(e)}", "filename": filename}
+            logger.error(f"Error scanning document {filename}: {e}", exc_info=True)
+            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
 
     def scan_file(self, file_path: str) -> dict[str, Any]:
         """
@@ -95,8 +97,10 @@ class DocumentScanner:
                 "filename": os.path.basename(file_path),
             }
         except Exception as e:
+            logger.error(f"Error reading file {file_path}: {e}", exc_info=True)
             return {
-                "error": f"Error reading file: {str(e)}",
+                "error": "Failed to process document.",
+                "message": aeris_unavailable_message(),
                 "filename": os.path.basename(file_path),
             }
 
@@ -136,7 +140,8 @@ class DocumentScanner:
                 "install_command": "pip install PyPDF2",
             }
         except Exception as e:
-            return {"error": f"Error reading PDF: {str(e)}", "filename": filename}
+            logger.error(f"Error reading PDF {filename}: {e}", exc_info=True)
+            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
 
     def _scan_csv_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract data from CSV file bytes"""
@@ -210,7 +215,8 @@ class DocumentScanner:
                 "install_command": "pip install pandas",
             }
         except Exception as e:
-            return {"error": f"Error reading CSV: {str(e)}", "filename": filename}
+            logger.error(f"Error reading CSV {filename}: {e}", exc_info=True)
+            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
 
     def _scan_excel_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract data from Excel file bytes - processes ALL sheets"""
@@ -332,4 +338,5 @@ class DocumentScanner:
                 "install_command": f"pip install {missing_lib}",
             }
         except Exception as e:
-            return {"error": f"Error reading Excel file: {str(e)}", "filename": filename}
+            logger.error(f"Error reading Excel file {filename}: {e}", exc_info=True)
+            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}

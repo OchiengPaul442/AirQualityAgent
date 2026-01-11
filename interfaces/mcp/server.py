@@ -13,6 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from core.tools.robust_scraper import RobustScraper
 from infrastructure.api.airqo import AirQoService
 from shared.config.settings import get_settings
+from shared.utils.provider_errors import ProviderServiceError, provider_unavailable_message
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,8 +40,12 @@ async def get_air_quality(city: str, site_id: str | None = None) -> dict[str, An
     """
     try:
         return airqo_service.get_recent_measurements(city=city, site_id=site_id)
-    except Exception as e:
-        return {"error": str(e)}
+    except ProviderServiceError as e:
+        logger.warning("AirQo tool failure", extra={"city": city})
+        return {"error": e.public_message}
+    except Exception:
+        logger.exception("AirQo tool failure", extra={"city": city})
+        return {"error": provider_unavailable_message("AirQo")}
 
 
 @mcp.tool()
@@ -53,8 +58,12 @@ async def get_multiple_cities_air_quality(cities: list[str]) -> dict[str, Any]:
     """
     try:
         return airqo_service.get_multiple_cities_air_quality(cities)
-    except Exception as e:
-        return {"error": str(e)}
+    except ProviderServiceError as e:
+        logger.warning("AirQo multi-city tool failure")
+        return {"error": e.public_message}
+    except Exception:
+        logger.exception("AirQo multi-city tool failure")
+        return {"error": provider_unavailable_message("AirQo")}
 
 
 @mcp.tool()
@@ -68,8 +77,12 @@ async def get_air_quality_forecast(site_id: str, frequency: str = "daily") -> di
     """
     try:
         return airqo_service.get_forecast(site_id=site_id, frequency=frequency)
-    except Exception as e:
-        return {"error": str(e)}
+    except ProviderServiceError as e:
+        logger.warning("AirQo forecast tool failure", extra={"site_id": site_id})
+        return {"error": e.public_message}
+    except Exception:
+        logger.exception("AirQo forecast tool failure", extra={"site_id": site_id})
+        return {"error": provider_unavailable_message("AirQo")}
 
 
 @mcp.tool()
@@ -93,8 +106,12 @@ async def get_air_quality_history(
         return airqo_service.get_historical_measurements(
             site_id=site_id, start_time=start, end_time=end, frequency=frequency
         )
-    except Exception as e:
-        return {"error": str(e)}
+    except ProviderServiceError as e:
+        logger.warning("AirQo history tool failure", extra={"site_id": site_id})
+        return {"error": e.public_message}
+    except Exception:
+        logger.exception("AirQo history tool failure", extra={"site_id": site_id})
+        return {"error": provider_unavailable_message("AirQo")}
 
 
 @mcp.tool()
@@ -109,8 +126,9 @@ async def scrape_webpage(url: str) -> dict[str, Any]:
         # Run synchronous scraper in a thread pool
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, scraper_service.scrape, url)
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        logger.exception("Scraper tool failure", extra={"url": url})
+        return {"error": provider_unavailable_message("Web Scraper")}
 
 
 @mcp.tool()
@@ -128,8 +146,9 @@ async def search_web(query: str) -> dict[str, Any]:
         search_service = SearchService()
         results = search_service.search(query)
         return {"results": results}
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        logger.exception("Web search tool failure")
+        return {"error": provider_unavailable_message("Web Search")}
 
 
 if __name__ == "__main__":

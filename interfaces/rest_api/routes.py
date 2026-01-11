@@ -37,6 +37,11 @@ from infrastructure.database.repository import (
 )
 from shared.config.settings import get_settings
 from shared.utils.markdown_formatter import MarkdownFormatter
+from shared.utils.provider_errors import (
+    ProviderServiceError,
+    aeris_unavailable_message,
+    provider_unavailable_message,
+)
 from shared.utils.security import ResponseFilter, validate_request_data
 from shared.utils.token_counter import get_token_counter
 
@@ -238,7 +243,7 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error deleting session {session_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}") from e
+        raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()}) from e
 
 
 @router.get("/sessions/{session_id}/messages")
@@ -403,7 +408,10 @@ async def chat(
             session_id = sanitized_data["session_id"]
         except ValueError as e:
             logger.warning(f"Input validation failed: {e}")
-            raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid input. Please check your request and try again.",
+            )
 
         # Generate or use provided session ID
         session_id = session_id if session_id and session_id.strip() else str(uuid.uuid4())
@@ -479,7 +487,8 @@ async def chat(
             except Exception as e:
                 logger.error(f"Document processing failed: {str(e)}", exc_info=True)
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to process document: {str(e)}"
+                    status_code=500,
+                    detail={"message": "Failed to process document.", "detail": aeris_unavailable_message()},
                 ) from e
 
         # Get conversation history BEFORE adding new message
@@ -860,8 +869,8 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
             except HTTPException:
                 raise  # Re-raise HTTP exceptions
             except Exception as e:
-                logger.error(f"Document processing failed: {str(e)}")
-                errors["document"] = f"Failed to process document: {str(e)}"
+                logger.exception("Document processing failed")
+                errors["document"] = "Failed to process document"
             finally:
                 # Explicitly release memory
                 if "file_content" in locals():
@@ -875,9 +884,12 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
                 waqi_data = waqi.get_city_feed(request.city)
                 if waqi_data and waqi_data.get("status") == "ok":
                     results["waqi"] = sanitize_response(waqi_data)
-            except Exception as e:
-                logger.warning(f"WAQI API failed for {request.city}: {str(e)}")
-                errors["waqi"] = str(e)
+            except ProviderServiceError as e:
+                logger.warning("WAQI provider failure", extra={"city": request.city})
+                errors["waqi"] = e.public_message
+            except Exception:
+                logger.exception("WAQI API failed", extra={"city": request.city})
+                errors["waqi"] = provider_unavailable_message("WAQI")
 
         # Try AirQo API for African city queries
         if "airqo" in settings.ENABLED_DATA_SOURCES and request.city:
@@ -886,9 +898,12 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
                 airqo_data = airqo.get_recent_measurements(city=request.city)
                 if airqo_data and airqo_data.get("success"):
                     results["airqo"] = sanitize_response(airqo_data)
-            except Exception as e:
-                logger.warning(f"AirQo API failed for {request.city}: {str(e)}")
-                errors["airqo"] = str(e)
+            except ProviderServiceError as e:
+                logger.warning("AirQo provider failure", extra={"city": request.city})
+                errors["airqo"] = e.public_message
+            except Exception:
+                logger.exception("AirQo API failed", extra={"city": request.city})
+                errors["airqo"] = provider_unavailable_message("AirQo")
 
         # Try Open-Meteo API if coordinates are provided
         if (
@@ -924,8 +939,8 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
                 if openmeteo_result:
                     results["openmeteo"] = sanitize_response(openmeteo_result)
             except Exception as e:
-                logger.warning(f"Open-Meteo API failed: {str(e)}")
-                errors["openmeteo"] = str(e)
+                logger.exception("Open-Meteo API failed")
+                errors["openmeteo"] = provider_unavailable_message("Open-Meteo")
 
         # Return results if any source succeeded
         if results:
@@ -946,7 +961,10 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
         raise
     except Exception as e:
         logger.error(f"Air quality query error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail={"message": aeris_unavailable_message()},
+        ) from e
 
 
 @router.post("/mcp/connect", response_model=MCPConnectionResponse)
@@ -978,7 +996,8 @@ async def connect_mcp_server(request: MCPConnectionRequest):
 
         return MCPConnectionResponse(status="connected", name=request.name, available_tools=tools)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to connect MCP server: {str(e)}")
+        logger.error("Failed to connect MCP server", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()})
 
 
 @router.get("/mcp/list", response_model=MCPListResponse)
@@ -989,7 +1008,8 @@ async def list_mcp_connections():
         connections = [{"name": name, "status": "connected"} for name in agent.mcp_clients.keys()]
         return MCPListResponse(connections=connections)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to list MCP connections", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()})
 
 
 @router.delete("/mcp/disconnect/{name}")
@@ -1007,7 +1027,8 @@ async def disconnect_mcp_server(name: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Failed to disconnect MCP server", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()})
 
 
 # ============================================================================

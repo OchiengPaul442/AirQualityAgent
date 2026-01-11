@@ -479,7 +479,9 @@ class OllamaProvider(BaseAIProvider):
 
                 except Exception as e:
                     logger.error(f"Tool execution failed: {e}")
-                    tool_result = {"error": str(e)}
+                    tool_result = {
+                        "error": "Aeris-AQ is currently experiencing issues executing a required service. Please try again in a few minutes."
+                    }
 
                 tool_results.append(tool_result)
 
