@@ -347,7 +347,7 @@ class BaseAPIService:
 - OpenMeteoService (Weather + AQ)
 - SearchService (Brave/Tavily)
 - GeocodingService (Nominatim)
-- VisualizationService (Matplotlib/Plotly)
+- VisualizationService (Matplotlib/Plotly with file-based PNG serving)
 
 ## Data Flow
 

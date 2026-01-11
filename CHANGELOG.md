@@ -4,6 +4,30 @@ All notable changes to the Air Quality AI Agent project.
 
 ---
 
+## [2.10.4] - 2026-01-11
+
+### Containerization & Visualization Enhancements
+
+- **Docker Containerization**: Complete Docker setup with multi-stage builds, optimized images, and production-ready configuration
+  - Multi-stage Dockerfile with venv isolation and non-root user
+  - Docker Compose with Redis caching and health checks
+  - Environment variable configuration for all deployment scenarios
+- **File-Based Chart Visualization**: Replaced base64 data URIs with HTTP-served PNG files for reliable markdown rendering
+  - New API endpoints: `/api/v1/visualization/charts/{filename}`, `/api/v1/visualization/capabilities`
+  - Cross-origin support with absolute URLs for frontend rendering
+  - Chart storage with automatic cleanup and security protections
+- **Infrastructure Improvements**: Redis integration for session caching, health checks, and service dependencies
+- **Documentation Updates**: Comprehensive updates to all guides reflecting containerization and new visualization system
+
+### Technical Details
+
+- Fixed uvicorn executable path issues in containers
+- Resolved pip dependency conflicts during Docker builds
+- Added chart file serving with proper security (path traversal protection)
+- Updated all documentation with Docker deployment instructions
+
+---
+
 ## [2.12.0] - 2026-01-10
 
 ### Major Refactoring - Professional Architecture Structure

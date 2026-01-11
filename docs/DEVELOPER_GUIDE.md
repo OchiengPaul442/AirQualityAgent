@@ -2,8 +2,8 @@
 
 ## AI Agent Architecture & Workflows
 
-**Version**: 2.10.3  
-**Last Updated**: January 10, 2026  
+**Version**: 2.10.4  
+**Last Updated**: January 11, 2026  
 **Based on**: [Anthropic's Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)
 
 ---
@@ -633,17 +633,44 @@ POST /api/v1/agent/chat
 2. DocumentScanner extracts content → SessionContextManager caches
 3. User: "Show PM2.5 trends"
 4. AI parses CSV columns from injected document content
-5. AI calls: generate_chart(data=[...], chart_type='line', x_column='date', y_column='pm25')
+5. AI calls: generate_chart(data=[...], chart_type='line', x_column='date', y_column='pm25', output_format='file')
 6. VisualizationService:
    - Samples data if >1000 rows (last 70% + first 20% + random 10%)
-   - Generates chart with matplotlib/plotly
-   - Returns base64 PNG: "data:image/png;base64,iVBORw0KG..."
+   - Generates chart with matplotlib
+   - Saves PNG to /app/data/charts/ with safe filename
+   - Returns URL: "/api/v1/visualization/charts/chart-20260111-120000.png"
 7. AgentService.process_message():
    - Detects "generate_chart" in tools_used
-   - Auto-embeds: ![Generated Chart](data:image/png;base64,...)
-8. API returns response with embedded chart
-9. Frontend displays chart inline
+   - Auto-embeds: ![Generated Chart](http://localhost:8000/api/v1/visualization/charts/chart-20260111-120000.png)
+   - Makes URLs absolute for cross-origin frontend rendering
+8. API returns response with embedded chart URL
+9. Frontend markdown renderer loads PNG from API endpoint
 ```
+
+### Chart Storage & Serving
+
+**File-Based Approach**: Charts are saved as PNG files and served via HTTP endpoints for reliable markdown rendering.
+
+**Benefits**:
+
+- ✅ Works with all markdown renderers (no base64 blocking)
+- ✅ Cross-origin friendly with absolute URLs
+- ✅ Cached by browsers/CDNs
+- ✅ Smaller response payloads
+- ✅ Security (no inline data URLs)
+
+**Configuration**:
+
+```bash
+# Environment variables
+CHART_STORAGE_DIR=/app/data/charts  # Where PNGs are saved
+PUBLIC_BASE_URL=http://localhost:8000  # For absolute URLs
+```
+
+**API Endpoints**:
+
+- `GET /api/v1/visualization/charts/{filename}` - Serve PNG files
+- `GET /api/v1/visualization/capabilities` - Get supported formats/types
 
 ### Why Charts Sometimes Fail
 
@@ -875,7 +902,7 @@ Flow:
 4. AI calls: generate_chart(data=[...], chart_type='line', x_column='date', y_column='pm25')
 5. VisualizationService: Sample to 1K rows, generate PNG
 6. AgentService: Auto-embed chart in markdown
-7. API returns response with ![Chart](data:image/png;base64,...)
+7. API returns response with ![Chart](http://localhost:8000/api/v1/visualization/charts/filename.png)
 8. Frontend displays inline chart
 ```
 
@@ -951,8 +978,8 @@ curl -X POST /api/v1/agent/chat \
    - Verify chart_result in response_data
 
 3. **If embedded but not showing**: Frontend issue
-   - Verify markdown parser supports ![](data:image/png;base64,...)
-   - Check browser console for errors
+   - Verify markdown parser supports HTTP image URLs
+   - Check browser console for CORS or network errors
 
 ### Issue: Session Context Lost
 

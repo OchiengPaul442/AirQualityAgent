@@ -6,12 +6,17 @@ Complete guide for integrating the Air Quality Agent API into frontend applicati
 
 ### Endpoints
 
-| Endpoint                    | Method | Purpose                 | Use When                   |
-| --------------------------- | ------ | ----------------------- | -------------------------- |
-| `/api/v1/agent/chat`        | POST   | Simple request/response | Standard chat interface    |
-| `/api/v1/agent/chat/stream` | POST   | SSE streaming           | Real-time progress updates |
-| `/api/v1/sessions`          | GET    | List sessions           | Session management UI      |
-| `/api/v1/sessions/{id}`     | DELETE | Delete session          | Clear conversation         |
+| Endpoint                                  | Method | Purpose                        | Use When                      |
+| ----------------------------------------- | ------ | ------------------------------ | ----------------------------- |
+| `/api/v1/agent/chat`                      | POST   | Simple request/response        | Standard chat interface       |
+| `/api/v1/agent/chat/stream`               | POST   | SSE streaming                  | Real-time progress updates    |
+| `/api/v1/sessions`                        | GET    | List sessions                  | Session management UI         |
+| `/api/v1/sessions/{id}`                   | GET    | Get session details            | Session history and messages  |
+| `/api/v1/sessions/{id}`                   | DELETE | Delete session                 | Clear conversation            |
+| `/api/v1/sessions/new`                    | POST   | Create new session             | Start new conversation        |
+| `/api/v1/health`                          | GET    | Health check                   | Service availability          |
+| `/api/v1/visualization/charts/{filename}` | GET    | Serve generated chart images   | Display charts in markdown    |
+| `/api/v1/visualization/capabilities`      | GET    | Get visualization capabilities | Check supported formats/types |
 
 ### Base URL
 
@@ -549,6 +554,98 @@ curl -X POST http://localhost:8000/api/v1/agent/chat/stream \\
 2. Set Body → form-data
 3. Add `message` field
 4. Send and view SSE stream
+
+---
+
+## 6. Chart Visualization
+
+The API automatically generates and embeds charts in markdown responses when analyzing data. Charts are served as PNG files for reliable rendering across different markdown viewers.
+
+### Chart Generation
+
+Charts are automatically generated when the agent processes data analysis requests. The response includes markdown image links that point to the chart files.
+
+**Example Response with Chart**:
+
+```json
+{
+  "response": "Here's the PM2.5 trend analysis:\n\n![Generated Chart](http://localhost:8000/api/v1/visualization/charts/PM2-5-Trend-20260111-120000-123456.png)\n\nThe data shows...",
+  "session_id": "abc-123",
+  "tools_used": ["generate_chart", "get_city_air_quality"]
+}
+```
+
+### Serving Chart Images
+
+**Endpoint**: `GET /api/v1/visualization/charts/{filename}`
+
+**Purpose**: Serves generated chart PNG files for markdown image rendering.
+
+**Parameters**:
+
+- `filename`: The chart filename (PNG only, path traversal protected)
+
+**Example**:
+
+```bash
+curl -O "http://localhost:8000/api/v1/visualization/charts/chart-20260111-120000.png"
+```
+
+**Response**: PNG image file with `Content-Type: image/png` and `Content-Disposition: inline`
+
+### Visualization Capabilities
+
+**Endpoint**: `GET /api/v1/visualization/capabilities`
+
+**Purpose**: Get information about supported visualization formats and chart types.
+
+**Response**:
+
+```json
+{
+  "supported_formats": ["csv", "xlsx", "xls", "pdf"],
+  "supported_chart_types": [
+    "line",
+    "bar",
+    "scatter",
+    "histogram",
+    "box",
+    "heatmap",
+    "pie",
+    "area",
+    "violin"
+  ],
+  "description": "Create dynamic visualizations from CSV, Excel, PDF files or search results"
+}
+```
+
+### Chart Storage
+
+- Charts are stored in `/app/data/charts/` (configurable via `CHART_STORAGE_DIR`)
+- Files are automatically cleaned up (TTL: 1 hour)
+- Filenames include timestamp for uniqueness
+- Cross-origin support via absolute URLs (configurable via `PUBLIC_BASE_URL`)
+
+### Frontend Integration
+
+**Markdown Rendering**: Charts render automatically in markdown viewers that support images.
+
+**React Example**:
+
+```typescript
+// The response already contains markdown with image links
+const response = await fetch("/api/v1/agent/chat", {
+  method: "POST",
+  body: formData,
+});
+
+const data = await response.json();
+
+// Render with a markdown component that supports images
+<ReactMarkdown>{data.response}</ReactMarkdown>;
+```
+
+**Cross-Origin Support**: If your frontend is on a different domain, set `PUBLIC_BASE_URL` environment variable to ensure chart URLs are absolute.
 
 ---
 

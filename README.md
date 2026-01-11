@@ -61,7 +61,7 @@ AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) 
 - Production-ready patterns (circuit breakers, retries, fallbacks)
 - Cost-optimized (tested on low-end models, parallel execution)
 
-**Version 2.10.1** (Latest):
+**Version 2.10.4** (Latest):
 
 - Parallel Tool Execution: 66% latency reduction for composite queries using asyncio.gather()
 - Anthropic Best Practices: Routing, sectioning, orchestrator-workers, prompt chaining patterns
@@ -69,6 +69,10 @@ AERIS-AQ (Artificial Environmental Real-time Intelligence System - Air Quality) 
 - Comprehensive Documentation: Professional architecture and maintenance guides
 - Code Quality: 522/524 lint errors resolved, clean test suite
 - Model Compatibility: Validated on qwen2.5:3b, llama3.2:1b, and enterprise models
+- **NEW**: Docker containerization with Redis caching and health checks
+- **NEW**: File-based chart visualization (HTTP-served PNGs) for reliable markdown rendering
+- **NEW**: Chart API endpoints (`/api/v1/visualization/charts/{filename}`, `/api/v1/visualization/capabilities`)
+- **NEW**: Cross-origin chart support with absolute URLs
 
 ## Quick Start
 
@@ -633,24 +637,38 @@ python tests/multi_model_test.py
 # Build image
 docker build -t aeris-aq:latest .
 
-# Run container
-docker run -d \
-  --name aeris-aq \
-  -p 8000:8000 \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  --env-file .env \
-  aeris-aq:latest
+# Run container with Redis
+docker compose up -d --build
 
 # Check logs
-docker logs -f aeris-aq
+docker compose logs -f airquality-agent
+
+# Stop services
+docker compose down
 ```
 
-**Docker Compose**:
+**Environment Variables** (production):
 
 ```bash
-docker-compose up -d
-docker-compose logs -f
+# Required
+AI_PROVIDER=openai
+AI_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-...
+WAQI_API_KEY=...
+AIRQO_API_KEY=...
+
+# Optional
+DATABASE_URL=sqlite:////app/data/chat_sessions.db
+REDIS_ENABLED=true
+REDIS_HOST=redis
+REDIS_PORT=6379
+LOG_LEVEL=INFO
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_PER_MINUTE=60
+
+# Chart Storage (for visualization features)
+CHART_STORAGE_DIR=/app/data/charts
+PUBLIC_BASE_URL=http://your-domain.com
 ```
 
 **Systemd Service** (Linux):
@@ -858,6 +876,16 @@ Data sources:
 - Contact: [Add contact information]
 
 ## Changelog
+
+**Version 2.10.4** (2026-01-11):
+
+- Docker containerization with multi-stage builds and optimized images
+- Redis integration for session caching and performance
+- File-based chart visualization system (HTTP-served PNGs instead of base64)
+- New API endpoints: `/api/v1/visualization/charts/{filename}`, `/api/v1/visualization/capabilities`
+- Cross-origin chart rendering support with absolute URLs
+- Health checks and service dependencies in Docker Compose
+- Updated documentation for containerized deployment
 
 **Version 2.10.1** (2026-01-10):
 

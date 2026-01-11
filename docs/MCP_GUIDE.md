@@ -314,27 +314,28 @@ Pass environment variables to MCP servers:
 
 ### How It Works
 
-Charts are now **embedded directly in markdown responses** for automatic rendering:
+Charts are now **served as PNG files** and embedded in markdown responses for reliable rendering:
 
-1. 📊 **AI generates chart** using `generate_chart` tool
-2. 🖼️ **Tool returns base64 image** as `data:image/png;base64,...`
-3. ✅ **AI embeds in response** using markdown syntax: `![Chart](data:image/png;base64,...)`
-4. 🎉 **Frontend renders automatically** - no special handling needed!
+1. 📊 **AI generates chart** using `generate_chart` tool with `output_format='file'`
+2. 🖼️ **Tool saves PNG file** to `/app/data/charts/` and returns API URL path
+3. ✅ **AI embeds in response** using markdown syntax: `![Chart](/api/v1/visualization/charts/filename.png)`
+4. 🎉 **Frontend renders automatically** - markdown loads image from API endpoint!
 
 ### Best Practices (Like ChatGPT)
 
-✅ **Embedded Images**: Charts are inline markdown images, not separate fields  
+✅ **HTTP-Served Images**: Charts are PNG files served via API endpoints  
 ✅ **Auto-Rendering**: Markdown formatters display charts automatically  
-✅ **Data URI Format**: Base64-encoded PNG embedded directly in response  
-✅ **Self-Contained**: Single markdown response contains both text and visualization
+✅ **Cross-Origin Friendly**: Absolute URLs work with different frontend domains  
+✅ **Cached & Secure**: Browser/CDN caching with proper security headers
 
 ### Technical Implementation
 
-**1. Data Sampling**: Max 1000 rows (was 5000), prioritizing recent data  
+**1. Data Sampling**: Max 1000 rows, prioritizing recent data  
 **2. Font Fix**: DejaVu Sans for Unicode support (PM₂.₅)  
-**3. Error Handling**: Graceful fallback for all 3 providers  
-**4. Markdown Embedding**: Charts included as `![Chart](data:image/...)` in response  
-**5. No Stripping**: Markdown formatter preserves chart images
+**3. Error Handling**: Graceful fallback for all providers  
+**4. File Storage**: PNGs saved with safe filenames and automatic cleanup  
+**5. API Serving**: Charts served via `GET /api/v1/visualization/charts/{filename}`  
+**6. Absolute URLs**: Made absolute for cross-origin frontend rendering
 
 | Provider | Error Handling         | Chart Embedding |
 | -------- | ---------------------- | --------------- |
@@ -345,8 +346,9 @@ Charts are now **embedded directly in markdown responses** for automatic renderi
 ### Results
 
 - ✅ <2 second chart generation (was timing out)
-- ✅ Charts render inline with text
-- ✅ No special frontend handling needed
+- ✅ Charts render inline with text via HTTP URLs
+- ✅ Cross-origin friendly for different frontend domains
+- ✅ Browser/CDN caching for performance
 - ✅ Compatible with all markdown renderers
 - ✅ **Works like ChatGPT - embed & render**
 - ✅ User notified when data sampled
@@ -359,7 +361,7 @@ Charts are now **embedded directly in markdown responses** for automatic renderi
 ```markdown
 📊 Here's your PM2.5 trend visualization:
 
-![PM2.5 Trend Chart](data:image/png;base64,iVBORw0KG...)
+![PM2.5 Trend Chart](http://localhost:8000/api/v1/visualization/charts/pm2-5-trend-20260111-120000.png)
 
 Key insights:
 • Peak levels on Jan 5th (65 µg/m³)

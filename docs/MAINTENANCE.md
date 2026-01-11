@@ -18,18 +18,29 @@
 **Automated Health Check**:
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health
 ```
 
 Expected response:
 
 ```json
 {
-  "status": "healthy",
-  "database": "connected",
-  "cache": "operational",
-  "timestamp": "2026-01-10T12:00:00Z"
+  "status": "ok",
+  "version": "1.0.0"
 }
+```
+
+**Docker Compose Health Check**:
+
+```bash
+# Check all services
+docker compose ps
+
+# Check specific service health
+docker compose exec airquality-agent curl -fs http://localhost:8000/api/v1/health
+
+# View logs
+docker compose logs -f airquality-agent
 ```
 
 **Manual Verification**:
@@ -94,22 +105,30 @@ async def cleanup_old_sessions():
 **Diagnosis**:
 
 ```bash
-# Check if server is running
+# Check if server is running (direct)
 ps aux | grep uvicorn
+
+# Check Docker containers
+docker compose ps
 
 # Check port availability
 netstat -an | grep 8000
 
-# Check logs
+# Check logs (direct)
 tail -n 100 logs/errors.json
+
+# Check logs (Docker)
+docker compose logs -f airquality-agent
 ```
 
 **Solutions**:
 
-1. Restart server: `./start_server.sh`
-2. Check database: `sqlite3 data/aeris_agent.db ".tables"`
-3. Verify environment variables: `cat .env | grep -v '#'`
-4. Check disk space: `df -h`
+1. Restart server (direct): `./start_server.sh`
+2. Restart Docker services: `docker compose restart`
+3. Rebuild and restart: `docker compose up -d --build`
+4. Check database: `sqlite3 data/aeris_agent.db ".tables"`
+5. Verify environment variables: `cat .env | grep -v '#'`
+6. Check disk space: `df -h`
 
 #### Issue 2: Tool Execution Failures
 
