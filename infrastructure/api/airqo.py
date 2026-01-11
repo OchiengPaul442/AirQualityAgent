@@ -610,6 +610,14 @@ class AirQoService:
         Returns:
             Formatted air quality data with measurements from available sites
         """
+        # Validate coordinates
+        if latitude is None or longitude is None:
+            return {
+                "success": False,
+                "message": "Invalid coordinates: latitude and longitude are required",
+                "error": "missing_coordinates",
+            }
+        
         try:
             # Step 1: Reverse geocode to get city name first
             city_name = self._reverse_geocode(latitude, longitude)
@@ -689,10 +697,11 @@ class AirQoService:
             }
 
         except Exception as e:
+            coords_str = f"({latitude:.4f}, {longitude:.4f})" if latitude is not None and longitude is not None else "(invalid)"
             return {
                 "success": False,
-                "message": f"Error retrieving AirQo data for coordinates ({latitude:.4f}, {longitude:.4f}): {str(e)}",
-                "coordinates": {"lat": latitude, "lon": longitude},
+                "message": f"Error retrieving AirQo data for coordinates {coords_str}: {str(e)}",
+                "coordinates": {"lat": latitude, "lon": longitude} if latitude is not None and longitude is not None else None,
                 "error": str(e),
             }
 

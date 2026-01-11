@@ -105,12 +105,39 @@ class QueryAnalyzer:
         
         Returns:
             Dict with:
-                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research' | 'general_knowledge'
+                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research' | 'general_knowledge' | 'personal_info'
                 - confidence: float (0-1)
                 - recommended_tools: list of tool names
                 - skip_ai_tools: bool (whether AI should call additional tools)
         """
         message_lower = message.lower()
+
+        # HIGHEST PRIORITY: Personal information sharing/recall
+        # Users telling the AI about themselves (name, location for memory, preferences)
+        # Must be checked BEFORE location detection to avoid treating "I live in Paris" as AQ query
+        personal_info_patterns = [
+            r'\bmy name is\b',
+            r'\bi am\b.*\bfrom\b',
+            r'\bi live in\b',
+            r'\bi\'m from\b',
+            r'\bi\'m in\b',
+            r'\bmy (name|city|location|hometown)\b',
+            r'\bremember (this|that|me)\b',
+            r'\bdon\'t forget\b',
+            r'\bwhat (is|was) my (name|city|location)\b',
+            r'\bwhere do i live\b',
+            r'\bwho am i\b',
+            r'\bdo you (know|remember) (my|me)\b',
+        ]
+
+        if any(re.search(pattern, message_lower) for pattern in personal_info_patterns):
+            logger.info(f"👤 Personal information detected: '{message[:50]}...'")
+            return {
+                "query_type": "personal_info",
+                "confidence": 0.95,
+                "recommended_tools": [],
+                "skip_ai_tools": True,  # Pure conversational memory, no tools needed
+            }
 
         # CRITICAL: Check data_analysis and research FIRST (higher priority than educational)
         # Data analysis queries - Need web search + visualization
@@ -662,10 +689,10 @@ class QueryAnalyzer:
         classification = QueryAnalyzer.classify_query_type(message)
         logger.info(f"📊 Query type: {classification['query_type']} (confidence: {classification['confidence']:.2f})")
 
-        # STEP 2: Early return for educational queries (no tools needed)
-        # But NOT for general_knowledge queries (they need web search)
-        if classification["query_type"] == "educational" and classification["skip_ai_tools"]:
-            logger.info("✅ Educational query - no tools needed")
+        # STEP 2: Early return for queries that don't need tools
+        # Educational queries and personal information queries can be handled by AI alone
+        if classification.get("skip_ai_tools", False) and classification["query_type"] in ["educational", "personal_info"]:
+            logger.info(f"✅ {classification['query_type'].replace('_', ' ').title()} query - no tools needed")
             return {
                 "tool_results": {},
                 "tools_called": [],

@@ -9,6 +9,7 @@ optimized for air quality research and environmental data presentation. It handl
 - Clean code block formatting with language detection and syntax highlighting
 - Clean line breaks and spacing
 - Professional source citation formatting for environmental research
+- Rich link previews with metadata extraction
 - Consistent formatting throughout
 
 Based on established markdown standards and best practices for scientific communication.
@@ -16,8 +17,24 @@ Based on established markdown standards and best practices for scientific commun
 
 import logging
 import re
+from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Import link metadata extractor (lazy import to avoid circular dependencies)
+_link_extractor = None
+
+def get_link_extractor():
+    """Lazy import of link extractor"""
+    global _link_extractor
+    if _link_extractor is None:
+        try:
+            from shared.utils.link_metadata import get_link_extractor as _get_extractor
+            _link_extractor = _get_extractor()
+        except ImportError:
+            logger.warning("Link metadata extractor not available")
+            _link_extractor = None
+    return _link_extractor
 
 
 class MarkdownFormatter:
@@ -56,6 +73,7 @@ class MarkdownFormatter:
         # text = MarkdownFormatter._remove_chart_markdown(text)  # Charts now stay in markdown
         text = MarkdownFormatter._fix_broken_parentheses(text)
         text = MarkdownFormatter._convert_emoji_numbering(text)
+        text = MarkdownFormatter._enhance_links_with_metadata(text)  # NEW: Add rich link previews
         text = MarkdownFormatter._format_headers(text)
         text = MarkdownFormatter._format_lists(text)
         text = MarkdownFormatter._format_tables(text)
@@ -178,6 +196,62 @@ class MarkdownFormatter:
                 i += 1
 
         return "\n".join(fixed_lines)
+
+    @staticmethod
+    def _enhance_links_with_metadata(text: str) -> str:
+        """
+        Enhance external links with rich metadata for preview tooltips.
+        
+        Converts plain markdown links to rich links with metadata extracted from URLs.
+        This enables hover previews with title, description, and favicon in supported frontends.
+        
+        Example:
+            [EPA Guidelines](https://epa.gov/guide)
+            becomes:
+            [EPA Guidelines](https://epa.gov/guide "EPA Guidelines - Official air quality standards...")
+        """
+        extractor = get_link_extractor()
+        if not extractor:
+            return text  # Skip if extractor unavailable
+        
+        # Match markdown links: [text](url) but not ![image](url)
+        link_pattern = r'(?<!!)\[([^\]]+)\]\(([^)"\s]+)(?:\s+"[^"]*")?\)'
+        
+        def enhance_link(match):
+            link_text = match.group(1)
+            url = match.group(2)
+            
+            # Skip data URIs, anchors, and relative links
+            if url.startswith(('data:', '#', '/', '.')):
+                return match.group(0)
+            
+            # Only enhance http/https links
+            if not url.startswith(('http://', 'https://')):
+                return match.group(0)
+            
+            try:
+                # Get rich metadata
+                metadata = extractor.extract_metadata(url)
+                
+                # Create hover text with title and description
+                hover_text = metadata.get('title', link_text)
+                description = metadata.get('description', '')
+                
+                if description:
+                    # Truncate description to 150 chars
+                    if len(description) > 150:
+                        description = description[:147] + '...'
+                    hover_text += f' - {description}'
+                
+                # Return enhanced link with title attribute
+                return f'[{link_text}]({url} "{hover_text}")'
+            except Exception as e:
+                logger.debug(f"Failed to enhance link {url}: {e}")
+                return match.group(0)  # Return original on error
+        
+        # Apply enhancement to all links
+        enhanced_text = re.sub(link_pattern, enhance_link, text)
+        return enhanced_text
 
     @staticmethod
     def _convert_emoji_numbering(text: str) -> str:

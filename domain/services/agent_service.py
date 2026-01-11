@@ -903,11 +903,12 @@ class AgentService:
                     langchain_history = lc_memory.get_history()
                     if langchain_history:
                         logger.info(f"📚 Loaded {len(langchain_history)} messages from LangChain memory for session {session_id}")
+                        logger.debug(f"LangChain history content: {langchain_history}")
                         
                         # If no database history, use LangChain as primary source
                         if not history:
                             history = langchain_history
-                            logger.info(f"Using LangChain memory as primary source ({len(history)} messages)")
+                            logger.info(f"✅ Using LangChain memory as primary source ({len(history)} messages)")
                         else:
                             # Database history exists - LangChain is supplemental
                             # Merge unique messages from LangChain that aren't in database
@@ -916,7 +917,9 @@ class AgentService:
                                 if lc_msg.get("content", "") not in db_contents:
                                     history.append(lc_msg)
                                     logger.debug(f"Added unique message from LangChain to history")
-                            logger.info(f"Using database history ({len(history)} messages total after LangChain merge)")
+                            logger.info(f"✅ Using database history ({len(history)} messages total after LangChain merge)")
+                    else:
+                        logger.info(f"📚 LangChain memory exists but is empty for session {session_id}")
             except Exception as e:
                 logger.warning(f"Failed to load LangChain memory for session {session_id}: {e}")
 
@@ -1063,19 +1066,29 @@ class AgentService:
                 "error": "cost_limit_exceeded",
             }
 
+        # CRITICAL: Quick classification for cache-skipping decision
+        # Personal information queries must NEVER use cache (need real-time memory recall)
+        is_personal_info = any(pattern in message.lower() for pattern in [
+            'my name', 'i live', 'i am from', "i'm from", 'remember', 
+            "what's my", "what is my", "where do i", "who am i"
+        ])
+
         # Check cache with intelligent freshness validation
+        # BUT: Skip cache for personal information queries (they need real-time memory recall)
         cache_key = self._generate_cache_key(
             message, history, document_data, style, temperature, top_p, session_id
         )
 
-        # Check for cached response with freshness validation
-        cached_response = self._get_fresh_cached_response(cache_key, message)
+        # Check for cached response with freshness validation (skip for personal info)
+        cached_response = None if is_personal_info else self._get_fresh_cached_response(cache_key, message)
         if cached_response is not None:
             logger.info(f"Cache hit for key: {cache_key[:16]}... (fresh data)")
             cached_response["cached"] = True
             # Run occasional cache cleanup
             self._cleanup_stale_cache()
             return cached_response
+        elif is_personal_info:
+            logger.info("🔓 Skipping cache for personal information query - need fresh memory recall")
 
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
@@ -1272,6 +1285,68 @@ class AgentService:
 
         query_type = classification.get("query_type", "general")
         logger.info(f"📊 Query classified as: {query_type}")
+
+        # SPECIAL HANDLING: Personal information sharing
+        # For queries where users share personal info, we need explicit acknowledgment
+        if query_type == "personal_info":
+            logger.info(f"👤 Personal info query detected: {message[:100]}")
+            # Extract name and location from the message
+            import re
+            name_match = re.search(r'my name is (\w+)', message, re.IGNORECASE)
+            location_match = re.search(r'i (?:live in|am from|\'m from|\'m in) ([\w\s]+?)(?:\.|$|,|\sand\s)', message, re.IGNORECASE)
+            
+            logger.info(f"👤 Name match: {name_match.group(1) if name_match else None}")
+            logger.info(f"👤 Location match: {location_match.group(1) if location_match else None}")
+            
+            # If user is SHARING info (not asking)
+            if name_match or location_match:
+                name = name_match.group(1) if name_match else None
+                location = location_match.group(1).strip() if location_match else None
+                
+                response_parts = []
+                if name:
+                    response_parts.append(f"Nice to meet you, {name}!")
+                if location:
+                    response_parts.append(f"Got it - you're in {location}.")
+                
+                if response_parts:
+                    response_parts.append("I'll remember that for our conversation.")
+                    
+                    # Create response and add to memory immediately
+                    ai_response = " ".join(response_parts)
+                    logger.info(f"👤 Generated acknowledgment: {ai_response}")
+                    
+                    # Add to LangChain memory
+                    token_count = None
+                    if session_id:
+                        try:
+                            lc_memory = self._get_or_create_langchain_memory(session_id)
+                            if lc_memory:
+                                lc_memory.add_user_message(message)
+                                lc_memory.add_ai_message(ai_response)
+                                token_count = lc_memory.get_token_count()
+                                logger.info(f"📚 Stored personal info in LangChain memory ({token_count} tokens)")
+                        except Exception as e:
+                            logger.warning(f"Failed to store in LangChain memory: {e}")
+                    
+                    # Add to database memory
+                    self._add_to_memory(message, ai_response, session_id)
+                    
+                    # Return response without calling AI
+                    logger.info("✅ Returning personal info acknowledgment response")
+                    return {
+                        "response": ai_response,
+                        "tokens_used": 0,
+                        "cost_estimate": 0.0,
+                        "cached": False,
+                        "tools_used": [],
+                        "query_type": "personal_info",
+                        "memory_tokens": token_count,
+                    }
+            
+            # If user is ASKING about stored info (e.g., "what's my name?")
+            # Continue to AI processing with history
+            logger.info("📚 Personal info recall query - will use conversation history")
 
         if tools_called_proactively:
             logger.info(
