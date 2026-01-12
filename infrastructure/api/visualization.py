@@ -69,6 +69,65 @@ class VisualizationService:
             self._chart_storage = get_chart_storage_service()
         return self._chart_storage
 
+    def _preprocess_chart_data(self, df: pd.DataFrame, chart_type: str, x_column: str | None, y_columns: list[str]) -> pd.DataFrame:
+        """
+        Preprocess chart data for better visualization of large datasets.
+        
+        - Intelligently samples data for readability
+        - Handles categorical labels intelligently
+        - Optimizes for different chart types
+        """
+        df_processed = df.copy()
+        
+        # Handle categorical x-axis data with too many unique values
+        if x_column and x_column in df_processed.columns:
+            unique_x = df_processed[x_column].nunique()
+            
+            # For bar/pie charts, limit categories to prevent overcrowding
+            if chart_type in ["bar", "pie"] and unique_x > 15:
+                logger.warning(f"Large number of categories ({unique_x}) in {x_column}, sampling top categories")
+                
+                # For bar charts, keep top 15 by sum of y values
+                if chart_type == "bar" and y_columns:
+                    # Calculate total y value for each x category
+                    category_totals = df_processed.groupby(x_column)[y_columns[0]].sum().sort_values(ascending=False)
+                    top_categories = category_totals.head(15).index
+                    
+                    # Filter to top categories and add "Others" category
+                    df_top = df_processed[df_processed[x_column].isin(top_categories)]
+                    df_others = df_processed[~df_processed[x_column].isin(top_categories)]
+                    
+                    if not df_others.empty:
+                        others_row = df_others[y_columns].sum().to_dict()
+                        others_row[x_column] = "Others"
+                        df_processed = pd.concat([df_top, pd.DataFrame([others_row])], ignore_index=True)
+                    else:
+                        df_processed = df_top
+                        
+                # For pie charts, similar logic
+                elif chart_type == "pie":
+                    category_totals = df_processed.groupby(x_column)[y_columns[0]].sum().sort_values(ascending=False)
+                    top_categories = category_totals.head(10).index
+                    df_processed = df_processed[df_processed[x_column].isin(top_categories)]
+            
+            # For line/scatter plots with too many x points, sample
+            elif chart_type in ["line", "scatter", "timeseries"] and len(df_processed) > 200:
+                # Sample every nth point for readability
+                sample_rate = max(1, len(df_processed) // 200)
+                df_processed = df_processed.iloc[::sample_rate].copy()
+                logger.info(f"Sampled {chart_type} chart data: {len(df_processed)} points for readability")
+        
+        # Handle very long text labels by truncating
+        for col in [x_column] + y_columns:
+            if col and col in df_processed.columns and df_processed[col].dtype == 'object':
+                # Truncate long string labels
+                df_processed[col] = df_processed[col].astype(str).str.slice(0, 30)
+                # Add ellipsis if truncated
+                mask = df_processed[col].str.len() == 30
+                df_processed.loc[mask, col] = df_processed.loc[mask, col] + "..."
+        
+        return df_processed
+
     def generate_chart(
         self,
         data: list[dict[str, Any]] | pd.DataFrame,
