@@ -69,6 +69,7 @@ class ToolExecutor:
         self.uploaded_documents = (
             {}
         )  # Store uploaded documents temporarily for fallback access: {filename: content_dict}
+        self.session_id = None  # Will be set by agent service for chart organization
 
         # Lazy-load visualization service
         self._visualization_service = None
@@ -874,6 +875,7 @@ class ToolExecutor:
                         color_column=args.get("color_column"),
                         output_format=args.get("output_format", "file"),  # Default to file instead of base64
                         interactive=args.get("interactive", False),
+                        session_id=getattr(self, "session_id", None),  # Pass session_id for organization
                     )
 
                     if result.get("success"):

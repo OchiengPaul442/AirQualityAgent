@@ -175,44 +175,17 @@ async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 
-@app.get("/charts/{filename}")
-async def serve_chart(filename: str):
-    """Serve chart files from the charts directory."""
-    charts_dir = os.path.join(os.getcwd(), "charts")
-    file_path = os.path.join(charts_dir, filename)
-
-    if os.path.exists(file_path) and os.path.isfile(file_path):
-        return FileResponse(file_path, media_type="image/png")
-    else:
-        raise HTTPException(status_code=404, detail="Chart file not found")
-
-
 @app.on_event("startup")
 async def cleanup_old_charts():
     """Clean up old chart files on startup to prevent disk space issues."""
-    import glob
-    import time
-
-    charts_dir = os.path.join(os.getcwd(), "charts")
-    if not os.path.exists(charts_dir):
-        return
-
-    # Keep only files from the last 24 hours
-    cutoff_time = time.time() - (24 * 60 * 60)  # 24 hours ago
-
-    chart_files = glob.glob(os.path.join(charts_dir, "chart_*.png"))
-    cleaned_count = 0
-
-    for file_path in chart_files:
-        if os.path.getmtime(file_path) < cutoff_time:
-            try:
-                os.remove(file_path)
-                cleaned_count += 1
-            except OSError:
-                pass  # Ignore errors when deleting
-
-    if cleaned_count > 0:
-        logger.info(f"Cleaned up {cleaned_count} old chart files")
+    try:
+        from infrastructure.storage.chart_storage import get_chart_storage_service
+        
+        storage_service = get_chart_storage_service()
+        cleaned_count = storage_service.cleanup_old_charts(max_age_hours=24)
+        logger.info(f"✓ Startup cleanup: {cleaned_count} old charts removed")
+    except Exception as e:
+        logger.error(f"Failed to clean up old charts on startup: {e}")
 
 
 if __name__ == "__main__":

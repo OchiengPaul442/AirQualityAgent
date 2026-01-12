@@ -213,7 +213,7 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     """
     Delete a chat session and all its messages.
     Call this when the user closes a session in the frontend.
-    Also cleans up agent memory for this session.
+    Also cleans up agent memory and associated charts for this session.
 
     Args:
         session_id: Session identifier to delete
@@ -233,6 +233,17 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
         if hasattr(agent, "session_manager"):
             agent.session_manager.clear_session(session_id)
             logger.info(f"Cleaned up agent session context for {session_id[:8]}...")
+        
+        # Clean up charts associated with this session
+        try:
+            from infrastructure.storage.chart_storage import get_chart_storage_service
+            
+            storage_service = get_chart_storage_service()
+            cleanup_result = storage_service.delete_session_charts(session_id)
+            logger.info(f"✓ Chart cleanup for session {session_id[:8]}: {cleanup_result['message']}")
+        except Exception as e:
+            logger.error(f"Failed to clean up charts for session {session_id}: {e}")
+            # Don't fail the whole operation if chart cleanup fails
 
         return {
             "status": "success",

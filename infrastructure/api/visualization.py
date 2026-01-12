@@ -57,6 +57,17 @@ class VisualizationService:
                 "ytick.labelsize": 9,
             }
         )
+        
+        # Initialize chart storage service
+        self._chart_storage = None
+    
+    @property
+    def chart_storage(self):
+        """Lazy-load chart storage service."""
+        if self._chart_storage is None:
+            from infrastructure.storage.chart_storage import get_chart_storage_service
+            self._chart_storage = get_chart_storage_service()
+        return self._chart_storage
 
     def generate_chart(
         self,
@@ -70,6 +81,7 @@ class VisualizationService:
         color_column: str | None = None,
         output_format: ChartFormat = "file",
         interactive: bool = False,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
@@ -168,6 +180,7 @@ class VisualizationService:
                     y_label,
                     color_column,
                     output_format=output_format,
+                    session_id=session_id,
                     **kwargs,
                 )
 
@@ -209,6 +222,7 @@ class VisualizationService:
         y_label: str | None,
         color_column: str | None,
         output_format: str = "base64",
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate chart using matplotlib."""
@@ -311,25 +325,29 @@ class VisualizationService:
 
             # Handle different output formats
             if output_format == "file":
-                # Save to file and return file path
-                charts_dir = os.path.join(os.getcwd(), "charts")
-                os.makedirs(charts_dir, exist_ok=True)
-                
-                # Generate unique filename
-                import uuid
-                filename = f"chart_{uuid.uuid4().hex}.png"
-                filepath = os.path.join(charts_dir, filename)
-                
-                plt.savefig(filepath, format="png", dpi=100, bbox_inches="tight")
+                # Save chart to bytes buffer first
+                buffer = io.BytesIO()
+                plt.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
+                buffer.seek(0)
+                chart_bytes = buffer.read()
                 plt.close(fig)
+                
+                # Use session_id or default
+                sess_id = session_id or "default"
+                
+                # Save using chart storage service (Cloudinary with local fallback)
+                storage_result = self.chart_storage.save_chart(
+                    chart_bytes, sess_id, chart_type
+                )
                 
                 return {
                     "success": True,
-                    "chart_data": f"/charts/{filename}",
+                    "chart_data": storage_result["url"],
                     "format": "png",
                     "engine": "matplotlib",
-                    "storage": "file",
-                    "filepath": filepath,
+                    "storage": storage_result["backend"],
+                    "session_id": sess_id,
+                    **{k: v for k, v in storage_result.items() if k not in ["url", "backend"]},
                 }
             else:
                 # Default to base64 encoding for inline display

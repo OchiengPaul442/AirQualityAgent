@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_PASSWORD: str = ""
 
+    # Cloudinary (for chart storage)
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     CORS_ALLOW_CREDENTIALS: bool = True

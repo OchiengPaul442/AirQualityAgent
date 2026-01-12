@@ -1328,6 +1328,10 @@ class AgentService:
             self.tool_executor.client_ip = client_ip
             self.tool_executor.client_location = None
             logger.info(f"Set IP location for tool executor (fallback): {client_ip}")
+        
+        # Set session_id for chart organization
+        self.tool_executor.session_id = session_id
+        logger.debug(f"Set session_id for tool executor: {session_id}")
 
         # CRITICAL: If documents are provided, block scan_document tool to prevent AI confusion
         if accumulated_docs:
