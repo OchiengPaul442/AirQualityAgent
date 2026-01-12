@@ -308,40 +308,8 @@ class VisualizationService:
             # Improve layout
             plt.tight_layout()
 
-            output_format: str = str(kwargs.get("output_format", "base64")).lower()
-
-            # Option A: write chart to a file and return an API URL (best for markdown rendering)
-            if output_format == "file":
-                # Use ./data/charts as default (works in dev), /app/data/charts for Docker
-                storage_dir = os.getenv("CHART_STORAGE_DIR", "./data/charts")
-                os.makedirs(storage_dir, exist_ok=True)
-
-                # Create a safe filename from title + timestamp
-                safe_title = re.sub(r"[^a-zA-Z0-9_-]+", "-", (title or "chart").strip()).strip("-")
-                safe_title = safe_title[:60] if safe_title else "chart"
-                filename = f"{safe_title}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.png"
-                file_path = os.path.join(storage_dir, filename)
-                
-                logger.info(f"Saving chart to: {file_path}")
-
-                plt.savefig(file_path, format="png", dpi=100, bbox_inches="tight")
-                plt.close(fig)
-
-                public_base_url = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
-                chart_path = f"/api/v1/visualization/charts/{filename}"
-                chart_url = f"{public_base_url}{chart_path}" if public_base_url else chart_path
-
-                # Return a URL so markdown renderers can load the image.
-                return {
-                    "success": True,
-                    "chart_data": chart_url,
-                    "format": "png",
-                    "engine": "matplotlib",
-                    "storage": "file",
-                    "file_name": filename,
-                }
-
-            # Option B: base64 data URI (may be blocked by some markdown renderers/sanitizers)
+            # Always use base64 encoding for inline display (like ChatGPT)
+            # This ensures charts render properly in markdown without needing file storage
             buffer = io.BytesIO()
             plt.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
             buffer.seek(0)

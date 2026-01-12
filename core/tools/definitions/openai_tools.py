@@ -792,12 +792,9 @@ def get_visualization_tools() -> list[dict]:
 - area: Cumulative trends (stacked areas)
 - timeseries: Time-based data with date parsing
 
-RETURNS: A PNG chart that can be embedded in markdown.
+RETURNS: A base64-encoded PNG chart that can be embedded directly in markdown as an image.
 
-DEFAULT BEHAVIOR: The server returns a URL (best for markdown rendering).
-OPTION: You can request a base64 data URI if needed.
-
-USAGE: Call with data array and chart parameters. The chart will be embedded automatically as an image in the response.""",
+USAGE: Call with data array and chart parameters. The chart will be automatically embedded in the response markdown.""",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -827,11 +824,6 @@ USAGE: Call with data array and chart parameters. The chart will be embedded aut
                         "y_column": {
                             "type": "string",
                             "description": "Name of the data field(s) for y-axis (e.g., 'pm25', 'aqi')",
-                        },
-                        "output_format": {
-                            "type": "string",
-                            "enum": ["file", "base64"],
-                            "description": "Chart output mode. 'file' returns a URL served by the API (recommended). 'base64' returns a data URI.",
                         },
                         "title": {
                             "type": "string",
