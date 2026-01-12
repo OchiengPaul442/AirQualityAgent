@@ -32,12 +32,6 @@ services:
       # Cache Settings
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-3600}
 
-      # Charts: store generated PNGs here (served by API)
-      CHART_STORAGE_DIR: ${CHART_STORAGE_DIR:-/app/data/charts}
-
-      # Public base URL used when embedding chart URLs in markdown
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
-
     depends_on:
       redis:
         condition: service_healthy

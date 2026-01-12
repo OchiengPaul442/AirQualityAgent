@@ -735,10 +735,6 @@ REDIS_PORT=6379
 LOG_LEVEL=INFO
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_PER_MINUTE=60
-
-# Chart Storage (for visualization features)
-CHART_STORAGE_DIR=/app/data/charts
-PUBLIC_BASE_URL=http://your-domain.com
 ```
 
 **Systemd Service** (Linux):
