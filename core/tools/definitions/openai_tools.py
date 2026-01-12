@@ -330,7 +330,14 @@ def get_search_tools() -> list[dict]:
 
 💡 Make search queries specific and targeted for best results.
 
-🔄 THIS PROVIDES REAL INTERNET SEARCH RESULTS - NOT YOUR TRAINING DATA.""",
+🔄 THIS PROVIDES REAL INTERNET SEARCH RESULTS - NOT YOUR TRAINING DATA.
+
+📝 SOURCE CITATION FORMAT: When using search results, ALWAYS format sources professionally:
+- End your response with a "Sources & References" section
+- Format each source as: "Source: Title (URL) - Brief summary"
+- Example:
+  Source: Uganda Air Quality Regulations (https://example.com) - NEMA working with Ministry of Works to enforce new air quality standards
+- This ensures proper academic/professional citation formatting""",
                 "parameters": {
                     "type": "object",
                     "properties": {

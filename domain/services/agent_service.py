@@ -15,7 +15,7 @@ import time
 from typing import Any
 
 from core.agent.cost_tracker import CostTracker
-from core.agent.orchestrator import ToolOrchestrator
+from core.agent.orchestrator import ResponseValidator, ToolOrchestrator
 from core.agent.query_analyzer import QueryAnalyzer
 
 # ThoughtStream removed - use logging and observability tools instead
@@ -1606,7 +1606,10 @@ class AgentService:
             query_analysis = QueryAnalyzer.detect_air_quality_query(message)
             forecast_analysis = QueryAnalyzer.detect_forecast_query(message)
 
-            if forecast_analysis["is_forecast"]:
+            # Don't cache responses that use web search (they contain current information)
+            if "search_web" in all_tools_used:
+                cache_ttl = 300  # 5 minutes for search-based responses
+            elif forecast_analysis["is_forecast"]:
                 cache_ttl = 3600  # 1 hour for forecasts
             elif query_analysis["is_air_quality"]:
                 cache_ttl = 1800  # 30 minutes for current air quality
@@ -1740,6 +1743,16 @@ class AgentService:
                 except Exception as e:
                     logger.warning(f"LangChain memory tracking failed for session {session_id}: {e}")
                     # Continue processing - memory tracking is not critical
+
+            # Enhance response with additional context if needed
+            tool_results = proactive_results.get("tool_results", {})
+            # Add any tool results from the provider response
+            if "tool_results" in response_data:
+                tool_results.update(response_data["tool_results"])
+            
+            response_data["response"] = ResponseValidator.enhance_response(
+                response_data["response"], all_tools_used, tool_results
+            )
 
             logger.info(
                 f"Message processed successfully. Tokens: {tokens_used}, "

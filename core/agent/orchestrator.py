@@ -553,8 +553,35 @@ class ResponseValidator:
         Returns:
             Enhanced response
         """
+        
+        # Always add detailed sources section when search_web was used
+        if "search_web" in tools_used and "search_web" in tool_results:
+            search_result = tool_results["search_web"]
+            if search_result.get("success") and search_result.get("results"):
+                results = search_result["results"][:5]  # Top 5 results
+                
+                # Check if response already has a sources section
+                if "### Sources" not in response and "### References" not in response:
+                    sources_section = ["", "### Sources & References", ""]
+                    
+                    for i, result in enumerate(results, 1):
+                        title = result.get("title", "No title").strip()
+                        href = result.get("href", "").strip()
+                        body = result.get("body", "").strip()[:150]
+                        
+                        if href and title:
+                            if body:
+                                sources_section.append(f"Source: {title} ({href}) - {body}")
+                            else:
+                                sources_section.append(f"Source: {title} ({href})")
+                    
+                    if len(sources_section) > 3:  # Has actual sources
+                        response += "\n".join(sources_section)
+                else:
+                    print(f"DEBUG: search_result success: {search_result.get('success')}, has results: {bool(search_result.get('results'))}")
+
         # If response is very short but we have good data, enhance it
-        if len(response.strip()) < 100 and tool_results:
+        elif len(response.strip()) < 100 and tool_results:
             logger.info("🔧 Enhancing short response with tool data")
             # Add a note about data sources
             sources = ResponseValidator._extract_sources(tools_used)

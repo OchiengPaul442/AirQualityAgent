@@ -875,7 +875,7 @@ class QueryAnalyzer:
                 context_parts.append(
                     f"\n**LATEST INFORMATION from web search:**\n{format_search_result(result)}\n"
                 )
-                logger.info(f"✅ Search web completed successfully for: '{search_query[:50]}...'")
+                logger.info(f"✅ Search web completed successfully for: '{search_query[:50]}...' - Result keys: {list(result.keys()) if result else 'None'}")
             except Exception as e:
                 logger.error(f"❌ Proactive search call failed for '{search_query[:50]}...': {e}")
         elif should_search and not search_query:

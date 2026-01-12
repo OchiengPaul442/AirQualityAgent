@@ -901,6 +901,83 @@ class MarkdownFormatter:
 
             # Check if this is a standalone source line (handle multi-line summaries)
             stripped_line = line.strip()
+
+            # Handle markdown link format: Source: [Title](URL) - Summary
+            markdown_link_match = re.match(
+                r"^(?:Source|source):\s*\[([^\]]+)\]\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
+                stripped_line,
+            )
+
+            if markdown_link_match:
+                title, url, summary = markdown_link_match.groups()
+                title = title.strip()
+                url = url.strip()
+                summary = summary.strip() if summary else ""
+
+                # Check if summary continues on next lines (incomplete summary)
+                if (
+                    summary
+                    and not summary.endswith(".")
+                    and not summary.endswith(")")
+                    and i + 1 < len(lines)
+                ):
+                    # Look ahead to find continuation of summary
+                    next_line = lines[i + 1].strip()
+                    if (
+                        next_line
+                        and not next_line.startswith("Source:")
+                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
+                    ):
+                        summary += " " + next_line
+                        lines[i + 1] = ""  # Mark as processed
+
+                # Create professional citation
+                if summary:
+                    citation = f"**{title}** - {summary} ([link]({url}))"
+                else:
+                    citation = f"**{title}** ([link]({url}))"
+
+                current_sources.append(citation)
+                continue  # Don't add the original line
+
+            # Handle general markdown links that might be sources: [Title](URL) - Summary
+            general_markdown_match = re.match(
+                r"^\[([^\]]+)\]\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
+                stripped_line,
+            )
+
+            if general_markdown_match and ("source" in stripped_line.lower() or "reference" in stripped_line.lower() or i > 0 and ("source" in lines[i-1].lower() or "reference" in lines[i-1].lower())):
+                title, url, summary = general_markdown_match.groups()
+                title = title.strip()
+                url = url.strip()
+                summary = summary.strip() if summary else ""
+
+                # Check if summary continues on next lines (incomplete summary)
+                if (
+                    summary
+                    and not summary.endswith(".")
+                    and not summary.endswith(")")
+                    and i + 1 < len(lines)
+                ):
+                    # Look ahead to find continuation of summary
+                    next_line = lines[i + 1].strip()
+                    if (
+                        next_line
+                        and not next_line.startswith("Source:")
+                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
+                    ):
+                        summary += " " + next_line
+                        lines[i + 1] = ""  # Mark as processed
+
+                # Create professional citation
+                if summary:
+                    citation = f"**{title}** - {summary} ([link]({url}))"
+                else:
+                    citation = f"**{title}** ([link]({url}))"
+
+                current_sources.append(citation)
+                continue  # Don't add the original line
+
             source_match = re.match(
                 r"^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
                 stripped_line,

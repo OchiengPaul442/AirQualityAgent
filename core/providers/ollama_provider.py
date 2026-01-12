@@ -925,12 +925,27 @@ class OllamaProvider(BaseAIProvider):
 
             # Handle search_web results
             if result.get("results") and isinstance(result["results"], list):
-                results = result["results"][:3]  # Top 3 results
-                summary_parts = ["Web search results:"]
+                results = result["results"][:5]  # Top 5 results for better coverage
+                summary_parts = []
+
+                # Add search results with proper source citations for markdown formatting
                 for idx, r in enumerate(results, 1):
-                    title = r.get("title", "No title")
-                    snippet = r.get("snippet", "")[:150]
-                    summary_parts.append(f"{idx}. {title}: {snippet}...")
+                    title = r.get("title", "No title").strip()
+                    href = r.get("href", "").strip()
+                    body = r.get("body", "").strip()[:200]  # Longer snippet for better context
+
+                    if href and title:
+                        # Format as source citation that markdown formatter can recognize
+                        if body:
+                            summary_parts.append(f"Source: {title} ({href}) - {body}")
+                        else:
+                            summary_parts.append(f"Source: {title} ({href})")
+
+                # Add a summary section
+                if summary_parts:
+                    summary_parts.insert(0, f"Found {len(results)} relevant sources from web search:")
+                    summary_parts.append("")  # Add blank line before sources section
+
                 return "\n".join(summary_parts)
 
             # Handle failed tool calls with suggestions
