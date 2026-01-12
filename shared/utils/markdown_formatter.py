@@ -254,6 +254,85 @@ class MarkdownFormatter:
         return enhanced_text
 
     @staticmethod
+    def _get_site_name(url: str) -> str:
+        """
+        Extract a clean site name from URL for link display.
+        
+        Examples:
+        - https://www.epa.gov/air-quality → EPA
+        - https://github.com/user/repo → GitHub
+        - https://example.com/path → example.com
+        """
+        try:
+            from urllib.parse import urlparse
+            
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # Remove www. prefix
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            
+            # Handle common sites with better names
+            site_mappings = {
+                'epa.gov': 'EPA',
+                'who.int': 'WHO',
+                'cdc.gov': 'CDC',
+                'github.com': 'GitHub',
+                'stackoverflow.com': 'Stack Overflow',
+                'wikipedia.org': 'Wikipedia',
+                'youtube.com': 'YouTube',
+                'twitter.com': 'Twitter',
+                'facebook.com': 'Facebook',
+                'linkedin.com': 'LinkedIn',
+                'reddit.com': 'Reddit',
+                'medium.com': 'Medium',
+                'nytimes.com': 'New York Times',
+                'bbc.com': 'BBC',
+                'cnn.com': 'CNN',
+                'reuters.com': 'Reuters',
+                'bloomberg.com': 'Bloomberg',
+                'wsj.com': 'Wall Street Journal',
+                'forbes.com': 'Forbes',
+                'techcrunch.com': 'TechCrunch',
+                'theverge.com': 'The Verge',
+                'wired.com': 'Wired',
+                'arstechnica.com': 'Ars Technica',
+                'hackernews.com': 'Hacker News',
+                'ycombinator.com': 'Y Combinator',
+            }
+            
+            # Return mapped name if available
+            if domain in site_mappings:
+                return site_mappings[domain]
+            
+            # For other sites, capitalize first letter of each word
+            parts = domain.split('.')
+            if parts:
+                main_domain = parts[0]
+                # Handle multi-word domains
+                if '-' in main_domain:
+                    return ' '.join(word.capitalize() for word in main_domain.split('-'))
+                elif '_' in main_domain:
+                    return ' '.join(word.capitalize() for word in main_domain.split('_'))
+                else:
+                    return main_domain.capitalize()
+            
+            return domain
+            
+        except Exception:
+            # Fallback to domain extraction
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(url)
+                domain = parsed.netloc
+                if domain.startswith('www.'):
+                    domain = domain[4:]
+                return domain.split('.')[0].capitalize()
+            except Exception:
+                return "Link"
+
+    @staticmethod
     def _convert_emoji_numbering(text: str) -> str:
         """
         Convert emoji numbering to regular numbering for professional appearance.
@@ -886,11 +965,13 @@ class MarkdownFormatter:
 
                 # Format inline citation with line break
                 if summary and url:
-                    citation = f"**{title}** - {summary} ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 elif summary:
                     citation = f"**{title}** - {summary}"
                 elif url:
-                    citation = f"**{title}** ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** ([{site_name}]({url}))"
                 else:
                     citation = f"**{title}**"
 
@@ -933,9 +1014,10 @@ class MarkdownFormatter:
 
                 # Create professional citation
                 if summary:
-                    citation = f"**{title}** - {summary} ([link]({url}))"
+                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    citation = f"**{title}** ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** ([{site_name}]({url}))"
 
                 current_sources.append(citation)
                 continue  # Don't add the original line
@@ -971,9 +1053,11 @@ class MarkdownFormatter:
 
                 # Create professional citation
                 if summary:
-                    citation = f"**{title}** - {summary} ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    citation = f"**{title}** ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** ([{site_name}]({url}))"
 
                 current_sources.append(citation)
                 continue  # Don't add the original line
