@@ -46,6 +46,9 @@ errors.json
 # Reports
 reports/
 
+# Charts (generated images)
+charts/
+
 # Cache directories
 .pytest_cache/
 .ruff_cache/
