@@ -119,7 +119,16 @@ class OpenMeteoService:
         }
 
         data = self._make_request(params)
-        return format_air_quality_data(data, source="openmeteo")
+        formatted = format_air_quality_data(data, source="openmeteo")
+        
+        # Add success flag based on presence of current data
+        if "current" in data and not data.get("error"):
+            formatted["success"] = True
+        else:
+            formatted["success"] = False
+            formatted["error"] = data.get("reason", "Unknown error")
+        
+        return formatted
 
     def get_hourly_forecast(
         self,

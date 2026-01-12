@@ -312,7 +312,8 @@ class VisualizationService:
 
             # Option A: write chart to a file and return an API URL (best for markdown rendering)
             if output_format == "file":
-                storage_dir = os.getenv("CHART_STORAGE_DIR", "/app/data/charts")
+                # Use ./data/charts as default (works in dev), /app/data/charts for Docker
+                storage_dir = os.getenv("CHART_STORAGE_DIR", "./data/charts")
                 os.makedirs(storage_dir, exist_ok=True)
 
                 # Create a safe filename from title + timestamp
@@ -320,6 +321,8 @@ class VisualizationService:
                 safe_title = safe_title[:60] if safe_title else "chart"
                 filename = f"{safe_title}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.png"
                 file_path = os.path.join(storage_dir, filename)
+                
+                logger.info(f"Saving chart to: {file_path}")
 
                 plt.savefig(file_path, format="png", dpi=100, bbox_inches="tight")
                 plt.close(fig)

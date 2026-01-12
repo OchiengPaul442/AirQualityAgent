@@ -23,11 +23,18 @@ def get_waqi_tools() -> list[dict]:
 - African cities (Uganda, Kenya, Tanzania, Rwanda) → Use get_african_city_air_quality instead
 
 📊 RETURNS: Real-time measurements including:
-- Overall AQI (Air Quality Index)
-- PM2.5, PM10, NO2, O3, SO2, CO concentrations
-- Monitoring station name and location
-- Timestamp of measurement
-- Data source for citation
+- overall_aqi: Overall Air Quality Index (0-500 scale)
+- pm25_ugm3: PM2.5 concentration in µg/m³ (IMPORTANT: Use this field!)
+- pm25_aqi: PM2.5 AQI value
+- pm10_ugm3: PM10 concentration in µg/m³ (IMPORTANT: Use this field!)
+- pm10_aqi: PM10 AQI value
+- city_name: City name
+- pollutants: Dictionary with all pollutant measurements
+- timestamp: When the measurement was taken
+- Data source: WAQI (World Air Quality Index)
+
+⚠️ CRITICAL: Always check pm25_ugm3 and pm10_ugm3 fields for concentration values in µg/m³!
+These are the ACTUAL pollutant concentrations, not the AQI indices.
 
 💡 FOR COMPARISONS: Call this tool MULTIPLE TIMES (once per city) to compare air quality between cities.
 Example: "Compare London and Tokyo" → Call twice: city="London", then city="Tokyo"

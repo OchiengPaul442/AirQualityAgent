@@ -740,18 +740,18 @@ class StressTestRunner:
             }
 
     async def test_concurrent_requests(self) -> dict[str, Any]:
-        """Test 12: Concurrent request handling"""
-        self.log("Test 12: Concurrent Requests", "HEADER")
+        """Test 12: Concurrent request handling with real API calls"""
+        self.log("Test 12: Concurrent Requests (Real API Data)", "HEADER")
         start = time.time()
 
         try:
-            # Create 5 concurrent requests
+            # Create 5 concurrent requests that will use real APIs
             messages = [
-                "What's the AQI in New York?",
-                "What's the AQI in Tokyo?",
-                "What's the AQI in Mumbai?",
-                "What's the AQI in Sydney?",
-                "What's the AQI in Cairo?",
+                "What's the current air quality in London?",  # WAQI should work
+                "What's the air quality in Kampala?",  # AirQo should work
+                "What's the air quality in Nairobi?",  # AirQo should work
+                "What's the air quality in Sydney?",  # WAQI/OpenMeteo should work
+                "What's the air quality in Cairo?",  # WAQI should work
             ]
 
             tasks = []
@@ -763,20 +763,33 @@ class StressTestRunner:
             # Execute concurrently
             responses = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Count successes
-            successes = sum(1 for r in responses if not isinstance(r, Exception) and r.status_code == 200)
+            # Count successes and check for API data
+            successes = 0
+            api_data_found = 0
+            for r, msg in zip(responses, messages):
+                if not isinstance(r, Exception) and r.status_code == 200:
+                    successes += 1
+                    result = r.json()
+                    response_text = result.get("response", "").lower()
+                    # Check if response contains actual AQI/air quality data
+                    has_data = any(keyword in response_text for keyword in ["aqi", "pm2.5", "pm10", "air quality index", "good", "moderate", "unhealthy"])
+                    if has_data:
+                        api_data_found += 1
+                    self.log(f"  {msg[:40]}: {'SUCCESS' if has_data else 'NO DATA'}", "INFO")
+
             duration = time.time() - start
 
             self.log(
-                f"✓ Concurrent requests passed ({duration:.2f}s, {successes}/{len(messages)} succeeded)",
-                "SUCCESS"
+                f"✓ Concurrent requests passed ({duration:.2f}s, {successes}/{len(messages)} succeeded, {api_data_found}/{len(messages)} with real data)",
+                "SUCCESS" if api_data_found >= 3 else "WARNING"
             )
             return {
                 "test": "concurrent_requests",
-                "status": "PASSED",
+                "status": "PASSED" if api_data_found >= 3 else "WARNING",
                 "duration": duration,
                 "total_requests": len(messages),
-                "successful_requests": successes
+                "successful_requests": successes,
+                "api_data_found": api_data_found
             }
         except Exception as e:
             self.log(f"✗ Concurrent requests exception: {self._format_error(e)}", "ERROR")

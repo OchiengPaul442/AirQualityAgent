@@ -11,7 +11,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from shared.utils.provider_errors import aeris_unavailable_message
+from shared.utils.provider_errors import ProviderServiceError, aeris_unavailable_message
 
 
 class ToolExecutor:
@@ -166,10 +166,12 @@ class ToolExecutor:
                     self._record_success("airqo")
                     result["data_source"] = "AirQo"
                     return result
+                # Log internally but don't expose error to user
                 logger.info(f"AirQo returned no data for {city}")
                 self._record_failure("airqo")
             except Exception as e:
-                logger.error(f"AirQo error for {city}: {e}")
+                # Log exception internally but don't expose to user
+                logger.error(f"AirQo error for {city}: {str(e)[:200]}")
                 self._record_failure("airqo")
 
         # 2. Try WAQI (global coverage)
@@ -182,10 +184,12 @@ class ToolExecutor:
                     self._record_success("waqi")
                     result["data_source"] = "WAQI"
                     return result
+                # Log internally but don't expose error to user
                 logger.info(f"WAQI returned no data for {city}")
                 self._record_failure("waqi")
             except Exception as e:
-                logger.error(f"WAQI error for {city}: {e}")
+                # Log exception internally but don't expose to user
+                logger.error(f"WAQI error for {city}: {str(e)[:200]}")
                 self._record_failure("waqi")
 
         # 3. Try AirQo if not tried yet (for non-African cities, try as fallback)
@@ -411,19 +415,23 @@ class ToolExecutor:
 
             elif function_name == "search_waqi_stations":
                 if self.waqi is None:
-                    return {"success": False, "message": "WAQI service is not enabled."}
+                    return {"success": False, "message": aeris_unavailable_message()}
                 if self._is_circuit_open("waqi"):
                     return {
                         "success": False,
-                        "message": "WAQI service temporarily unavailable. Try again later.",
+                        "message": aeris_unavailable_message(),
                     }
                 try:
                     result = self.waqi.search_stations(args.get("keyword"))
                     self._record_success("waqi")
                     return result
-                except Exception:
+                except ProviderServiceError as e:
                     self._record_failure("waqi")
-                    raise
+                    return {"success": False, "message": e.public_message}
+                except Exception as e:
+                    self._record_failure("waqi")
+                    logger.error(f"WAQI search stations error: {str(e)[:200]}")
+                    return {"success": False, "message": aeris_unavailable_message()}
 
             # AirQo tools - with intelligent fallback
             elif function_name == "get_african_city_air_quality":
@@ -444,29 +452,41 @@ class ToolExecutor:
 
             elif function_name == "get_airqo_history":
                 if self.airqo is None:
-                    return {"success": False, "message": "AirQo service is not enabled."}
-                start_time_str = args.get("start_time")
-                end_time_str = args.get("end_time")
-                start_time = (
-                    datetime.fromisoformat(start_time_str)
-                    if isinstance(start_time_str, str)
-                    else None
-                )
-                end_time = (
-                    datetime.fromisoformat(end_time_str) if isinstance(end_time_str, str) else None
-                )
-                return self.airqo.get_historical_measurements(
-                    site_id=args.get("site_id"),
-                    device_id=args.get("device_id"),
-                    start_time=start_time,
-                    end_time=end_time,
-                    frequency=args.get("frequency", "hourly"),
-                )
+                    return {"success": False, "message": aeris_unavailable_message()}
+                try:
+                    start_time_str = args.get("start_time")
+                    end_time_str = args.get("end_time")
+                    start_time = (
+                        datetime.fromisoformat(start_time_str)
+                        if isinstance(start_time_str, str)
+                        else None
+                    )
+                    end_time = (
+                        datetime.fromisoformat(end_time_str) if isinstance(end_time_str, str) else None
+                    )
+                    return self.airqo.get_historical_measurements(
+                        site_id=args.get("site_id"),
+                        device_id=args.get("device_id"),
+                        start_time=start_time,
+                        end_time=end_time,
+                        frequency=args.get("frequency", "hourly"),
+                    )
+                except ProviderServiceError as e:
+                    return {"success": False, "message": e.public_message}
+                except Exception as e:
+                    logger.error(f"AirQo history error: {str(e)[:200]}")
+                    return {"success": False, "message": aeris_unavailable_message()}
 
             elif function_name == "get_airqo_metadata":
                 if self.airqo is None:
-                    return {"success": False, "message": "AirQo service is not enabled."}
-                return self.airqo.get_metadata(entity_type=args.get("entity_type", "grids"))
+                    return {"success": False, "message": aeris_unavailable_message()}
+                try:
+                    return self.airqo.get_metadata(entity_type=args.get("entity_type", "grids"))
+                except ProviderServiceError as e:
+                    return {"success": False, "message": e.public_message}
+                except Exception as e:
+                    logger.error(f"AirQo metadata error: {str(e)[:200]}")
+                    return {"success": False, "message": aeris_unavailable_message()}
 
             elif function_name == "get_air_quality_forecast":
                 # Intelligent routing: Use AirQo for African cities, WAQI for others

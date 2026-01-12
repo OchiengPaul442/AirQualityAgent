@@ -659,6 +659,30 @@ class GeminiProvider(BaseAIProvider):
 
                     return "\n".join(summary_lines)
 
+            # Try extracting WAQI data with new structure (pm25_ugm3/pm10_ugm3)
+            if "pm25_ugm3" in result or "pm10_ugm3" in result or "overall_aqi" in result:
+                city = result.get("city_name", "Unknown city")
+                aqi = result.get("overall_aqi", "N/A")
+                pm25_conc = result.get("pm25_ugm3")
+                pm10_conc = result.get("pm10_ugm3")
+                time = result.get("timestamp", "Unknown time")
+                dominant = result.get("dominant_pollutant", "")
+
+                summary_lines = [
+                    f"# Air Quality — {city}",
+                    "",
+                    f"- Overall AQI: {aqi}" + (f" (Dominant: {dominant})" if dominant else ""),
+                ]
+                
+                if pm25_conc is not None:
+                    summary_lines.append(f"- PM2.5: {pm25_conc} µg/m³")
+                if pm10_conc is not None:
+                    summary_lines.append(f"- PM10: {pm10_conc} µg/m³")
+                    
+                summary_lines.append(f"- Time: {time}")
+
+                return "\n".join(summary_lines)
+
             top_keys = list(result.keys())[:4]
             if top_keys:
                 return f"Result keys: {', '.join(top_keys)}"

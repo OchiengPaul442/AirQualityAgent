@@ -145,6 +145,7 @@ class WAQIService:
             Includes both AQI values and estimated concentrations in µg/m³.
         """
         # City can contain spaces or unicode; keep it safe in the URL path.
+        # WAQI API format: /feed/{city}/ with token as query param
         safe_city = quote(city.strip(), safe="")
         data = self._make_request(f"feed/{safe_city}/")
         formatted = format_air_quality_data(data, source="waqi")
@@ -152,6 +153,59 @@ class WAQIService:
         # Add success flag based on WAQI API status
         if data.get("status") == "ok" and "data" in data:
             formatted["success"] = True
+            
+            # Extract key data and add to top level for easy AI access
+            waqi_data = data.get("data", {})
+            formatted["overall_aqi"] = waqi_data.get("aqi")
+            formatted["city_name"] = waqi_data.get("city", {}).get("name", city)
+            formatted["timestamp"] = waqi_data.get("time", {}).get("s")
+            formatted["dominant_pollutant"] = waqi_data.get("dominentpol")
+            
+            # Extract PM2.5 and PM10 AQI values from iaqi and add to root for easy access
+            iaqi = waqi_data.get("iaqi", {})
+            
+            # Initialize pollutants dict for easy access
+            formatted["pollutants"] = {}
+            
+            if "pm25" in iaqi and isinstance(iaqi["pm25"], dict):
+                pm25_aqi = iaqi["pm25"].get("v")
+                if pm25_aqi is not None:
+                    formatted["pm25_aqi"] = pm25_aqi
+                    # Convert AQI to estimated concentration
+                    from shared.utils.aqi_converter import aqi_to_concentration
+                    pm25_conc = aqi_to_concentration(pm25_aqi, "pm25")
+                    if pm25_conc is not None:
+                        formatted["pm25_ugm3"] = round(pm25_conc, 1)
+                        formatted["pollutants"]["pm25"] = {
+                            "aqi": pm25_aqi,
+                            "concentration_ugm3": round(pm25_conc, 1),
+                            "unit": "µg/m³"
+                        }
+            
+            if "pm10" in iaqi and isinstance(iaqi["pm10"], dict):
+                pm10_aqi = iaqi["pm10"].get("v")
+                if pm10_aqi is not None:
+                    formatted["pm10_aqi"] = pm10_aqi
+                    # Convert AQI to estimated concentration
+                    from shared.utils.aqi_converter import aqi_to_concentration
+                    pm10_conc = aqi_to_concentration(pm10_aqi, "pm10")
+                    if pm10_conc is not None:
+                        formatted["pm10_ugm3"] = round(pm10_conc, 1)
+                        formatted["pollutants"]["pm10"] = {
+                            "aqi": pm10_aqi,
+                            "concentration_ugm3": round(pm10_conc, 1),
+                            "unit": "µg/m³"
+                        }
+            
+            # Extract other pollutants if available
+            for pollutant in ["no2", "o3", "so2", "co"]:
+                if pollutant in iaqi and isinstance(iaqi[pollutant], dict):
+                    value = iaqi[pollutant].get("v")
+                    if value is not None:
+                        formatted["pollutants"][pollutant] = {
+                            "aqi": value,
+                            "note": "AQI value"
+                        }
         else:
             formatted["success"] = False
 
@@ -215,7 +269,10 @@ class WAQIService:
         Returns:
             AQI data for nearest station to client IP
         """
-        return self._make_request("feed/here/")
+        data = self._make_request("feed/here/")
+        formatted = format_air_quality_data(data, source="waqi")
+        formatted["success"] = bool(data.get("status") == "ok" and "data" in data)
+        return formatted
 
     def search_stations(self, keyword: str) -> dict[str, Any]:
         """
