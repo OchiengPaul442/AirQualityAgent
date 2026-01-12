@@ -691,36 +691,56 @@ class AgentService:
         Returns:
             bool: True if security violation detected
         """
-        # Security violation patterns
+        # CRITICAL: Exclude legitimate document processing queries
+        # Users asking about uploaded documents is NOT a security violation
+        legitimate_document_queries = [
+            r"\bwhat.*document\b",
+            r"\bwhat.*file\b",
+            r"\banalyze.*document\b",
+            r"\banalyze.*file\b",
+            r"\bsummarize.*document\b",
+            r"\bsummarize.*file\b",
+            r"\bshow.*data\b",
+            r"\btell me about.*document\b",
+            r"\btell me about.*file\b",
+        ]
+        
+        import re
+
+        # Check if query is about uploaded documents (legitimate)
+        for pattern in legitimate_document_queries:
+            if re.search(pattern, message_lower, re.IGNORECASE):
+                logger.debug(f"Legitimate document query detected: {message_lower[:100]}")
+                return False  # Not a security violation
+        
+        # Security violation patterns (only for actual attacks)
         security_patterns = [
-            # Tool/function enumeration attempts
-            r"\b(list|show|display|enumerate)\b.*\b(tool|function|method|api)s?\b",
-            r"\b(what|which)\b.*\b(tool|function|method|api)s?\b.*\b(available|do you have|can you)\b",
+            # Tool/function enumeration attempts (but NOT document/file questions)
+            r"\b(list|show|display|enumerate)\b.*\b(all )?(tool|function|method|api)s?\b",
+            r"\b(what|which)\b.*\b(tool|function|method|api)s?\b.*\b(available|do you have|can you use)\b",
             r"\b(available|accessible)\b.*\b(tool|function|method|api)s?\b",
             # System prompt/instruction revelation attempts
             r"\b(system|internal)\b.*\b(prompt|instruction)s?\b",
-            r"\b(show|reveal|display)\b.*\b(prompt|instruction)s?\b",
-            r"\b(what.*prompt|what.*instruction)\b",
+            r"\b(show|reveal|display)\b.*\b(system )?(prompt|instruction)s?\b",
+            r"\b(what.*your )?(system )?(prompt|instruction)\b",
             # API key/token revelation attempts
-            r"\b(api|access)\b.*\b(key|token|secret)s?\b",
-            r"\b(what.*key|what.*token|what.*secret)\b",
-            r"\b(show|reveal)\b.*\b(key|token|secret)s?\b",
+            r"\b(api|access)\b.*\b(key|token|secret)s?\b.*\b(show|reveal|what)\b",
+            r"\b(what|show|reveal).*\b(api|access)\b.*\b(key|token|secret)s?\b",
             # Source code revelation attempts
-            r"\b(source|program)\b.*\b(code)\b.*\b(show|reveal|display)\b",
             r"\b(show|reveal|display)\b.*\b(source|program)\b.*\b(code)\b",
+            r"\b(source|program)\b.*\b(code)\b.*\b(show|reveal|display)\b",
             # Developer mode attempts
             r"\b(developer|dev|admin|root)\b.*\b(mode|access|privileges)\b",
-            r"\b(enter|enable|activate)\b.*\b(developer|dev|admin)\b.*\b(mode|access)\b",
+            r"\b(enter|enable|activate)\b.*\b(developer|dev|admin)\b.*\b(mode)\b",
             r"\b(ignore|suspend|bypass)\b.*\b(safety|security|restriction)s?\b",
             # Direct security bypass attempts
             r"\b(override|ignore|bypass)\b.*\b(instruction|rule|security)s?\b",
             r"\b(dan|jailbreak|uncensored)\b",
         ]
 
-        import re
-
         for pattern in security_patterns:
             if re.search(pattern, message_lower, re.IGNORECASE):
+                logger.warning(f"Security violation pattern matched: {pattern}")
                 return True
 
         return False
@@ -1655,23 +1675,52 @@ class AgentService:
 
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")
-            if len(ai_response) > self.max_response_length:
-                # Add user-friendly truncation message
-                truncation_message = (
+            original_length = len(ai_response)
+            
+            # Check if provider indicated truncation via finish_reason
+            finish_reason = response_data.get("finish_reason", "stop")
+            provider_truncated = finish_reason == "length"
+            
+            # Check if we need to truncate internally
+            internal_truncation_needed = len(ai_response) > self.max_response_length
+            
+            # Handle any truncation (provider or internal)
+            if provider_truncated or internal_truncation_needed:
+                # Add professional continuation prompt
+                continuation_message = (
                     "\n\n---\n"
-                    "**📝 Note**: This response was truncated due to length limits. To get complete information:\n"
-                    "• Ask for specific sections (e.g., 'Tell me about health effects')\n"
-                    "• Break your question into smaller parts\n"
-                    "• Request a summary instead of detailed analysis\n\n"
-                    "**Aeris can help you with**: Real-time AQI data • Health recommendations • "
-                    "Trends & analysis • Data visualization • Scientific explanations"
+                    "**📝 Response Incomplete**: This response was truncated due to length limits.\n\n"
+                    "**To continue:**\n"
+                    "• Click the 'Continue' button to generate the rest\n"
+                    "• Or ask for specific sections (e.g., 'Tell me about health effects')\n"
+                    "• Or request a focused summary\n\n"
+                    "💡 **Tip**: Break complex questions into smaller parts for better results."
                 )
-                ai_response = (
-                    ai_response[: self.max_response_length - len(truncation_message)] + truncation_message
-                )
+                
+                if internal_truncation_needed:
+                    # Truncate and add continuation message
+                    ai_response = (
+                        ai_response[: self.max_response_length - len(continuation_message)] + continuation_message
+                    )
+                else:
+                    # Provider truncated - just add continuation message
+                    ai_response += continuation_message
+                
                 response_data["response"] = ai_response
                 response_data["truncated"] = True
-                logger.info(f"Response truncated from {len(response_data.get('response', ''))} to {len(ai_response)} chars")
+                response_data["requires_continuation"] = True
+                response_data["finish_reason"] = finish_reason
+                
+                logger.info(
+                    f"Response truncated: original={original_length} chars, "
+                    f"final={len(ai_response)} chars, reason={finish_reason}, "
+                    f"provider_truncated={provider_truncated}, internal={internal_truncation_needed}"
+                )
+            else:
+                # Response is complete
+                response_data["requires_continuation"] = False
+                response_data["truncated"] = False
+                response_data["finish_reason"] = finish_reason
 
             self._add_to_memory(message, ai_response, session_id)
 

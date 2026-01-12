@@ -699,6 +699,7 @@ class OpenAIProvider(BaseAIProvider):
             "response": response_text
             or "I was unable to generate a response. Please try again.",
             "tools_used": tools_used,
+            "finish_reason": finish_reason,  # Pass finish_reason to agent_service
         }
 
         if "chart_result" in locals() and chart_result:

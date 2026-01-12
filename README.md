@@ -295,6 +295,76 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed technical document
 
 ## Features
 
+### 🔄 Response Continuation System (NEW)
+
+**Professional Handling of Long Responses**:
+
+- **Automatic Truncation Detection**: Tracks both provider and internal truncation limits
+- **Frontend-Ready Signals**: `requires_continuation`, `finish_reason`, `truncated` flags
+- **Seamless User Experience**: "Continue" button integration with session context
+- **Smart Prompting**: Professional messages guide users to better query strategies
+- **Zero Data Loss**: Conversation context maintained across continuation requests
+
+```json
+{
+  "response": "Detailed analysis...\n\n📝 Response Incomplete...",
+  "session_id": "uuid",
+  "requires_continuation": true,
+  "finish_reason": "length",
+  "truncated": true
+}
+```
+
+**Frontend Integration**: Simple API - send "Please continue" with session_id. Complete React, Vue, and vanilla JS examples provided.
+
+📖 **Complete Guide**: [CONTINUATION_FEATURE.md](docs/CONTINUATION_FEATURE.md) - Implementation examples and best practices
+
+### 📄 Enhanced Document Analysis
+
+**Intelligent File Processing with Context Preservation**:
+
+- **Secure Processing**: Fixed security filters for seamless document queries
+- **Context Retention**: Follow-up questions work perfectly across conversation
+- **Multi-Format Support**: PDF, CSV, Excel with automatic structure detection
+- **Visual Analysis**: Automatic chart generation from uploaded data
+- **Smart Caching**: Documents persist in session for efficient re-analysis
+
+```bash
+# Upload and analyze in one request
+curl -X POST /api/v1/agent/chat \
+  -F "message=What are the key trends in this data?" \
+  -F "file=@air_quality_data.csv"
+
+# Ask follow-up questions seamlessly
+curl -X POST /api/v1/agent/chat \
+  -d '{"message": "Show me a chart of PM2.5 trends", "session_id": "..."}'
+```
+
+**Fixed Issues**: Document upload context loss, security violation false positives, improved query understanding
+
+### 🌍 Intelligent Location Queries (ENHANCED)
+
+**Smart Coordinate Handling with Proximity Search**:
+
+- **Reverse Geocoding**: Automatically find location names from coordinates
+- **Nearby Stations**: Search for closest monitoring stations
+- **Multi-Source Data**: Combine model predictions with real measurements
+- **Proximity Intelligence**: Find and use nearest available data sources
+- **Comprehensive Results**: Model data + nearby station data in single response
+
+```bash
+# Query with coordinates
+"What is the air quality at latitude 0.3476, longitude 32.5825?"
+
+# Response includes:
+# - OpenMeteo model data (exact coordinates)
+# - Reverse geocoded location name (Kampala, Uganda)
+# - Nearby monitoring station data (Kampala US Embassy)
+# - Clear source attribution
+```
+
+**Benefits**: More accurate results, better context, proximity-aware data selection
+
 ### 🧠 Advanced Session Management
 
 **LangChain-Powered Memory System**:

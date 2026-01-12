@@ -755,23 +755,69 @@ class QueryAnalyzer:
                 except Exception as e:
                     logger.error(f"Proactive tool call failed for {city}: {e}")
 
-            # Call for coordinates (CRITICAL: Call this even if cities are present in composite queries)
+            # Call for coordinates (CRITICAL: Enhanced with reverse geocoding and nearby station search)
             if aq_analysis["coordinates"]:
                 try:
                     coords = aq_analysis["coordinates"]
-                    logger.info(f"🔧 PROACTIVE CALL: get_openmeteo_air_quality for {coords}")
-                    result = await tool_executor.execute_async(
+                    logger.info(f"🔧 PROACTIVE CALL: Enhanced coordinate handling for {coords}")
+                    
+                    # Step 1: Get OpenMeteo data for exact coordinates
+                    openmeteo_result = await tool_executor.execute_async(
                         "get_openmeteo_current_air_quality", coords
                     )
-                    tool_results["get_openmeteo_air_quality"] = result
+                    tool_results["get_openmeteo_air_quality"] = openmeteo_result
                     tools_called.append("get_openmeteo_current_air_quality")
-
-                    # Format result for context
+                    
+                    # Step 2: Reverse geocode to find nearby city/location name
+                    try:
+                        reverse_geo_result = await tool_executor.execute_async(
+                            "reverse_geocode_location",
+                            {"latitude": coords["latitude"], "longitude": coords["longitude"]}
+                        )
+                        
+                        if reverse_geo_result.get("success"):
+                            location_name = reverse_geo_result.get("location_name", "Unknown")
+                            city_name = reverse_geo_result.get("city")
+                            country = reverse_geo_result.get("country")
+                            
+                            logger.info(f"📍 Reverse geocoded: {location_name} ({city_name}, {country})")
+                            
+                            # Step 3: Try to find nearby monitoring stations using detected city
+                            if city_name:
+                                # Try WAQI for nearby stations
+                                try:
+                                    nearby_result = await tool_executor.execute_async(
+                                        "get_city_air_quality", {"city": city_name}
+                                    )
+                                    if nearby_result.get("success"):
+                                        tool_results[f"nearby_station_{city_name}"] = nearby_result
+                                        tools_called.append("get_city_air_quality")
+                                        logger.info(f"✅ Found nearby station in {city_name}")
+                                except Exception as e:
+                                    logger.debug(f"No nearby WAQI station found for {city_name}: {e}")
+                        
+                    except Exception as e:
+                        logger.debug(f"Reverse geocoding failed: {e}")
+                    
+                    # Format comprehensive result for context
                     context_parts.append(
-                        f"\n**REAL-TIME DATA from OpenMeteo for coordinates {coords['latitude']}, {coords['longitude']}:**\n{format_air_quality_result(result)}\n"
+                        f"\n**LOCATION-BASED AIR QUALITY DATA**\n"
+                        f"Coordinates: {coords['latitude']:.4f}, {coords['longitude']:.4f}\n"
+                        f"Location: {location_name if 'location_name' in locals() else 'coordinates provided'}\n\n"
+                        f"**Model Data (OpenMeteo):**\n{format_air_quality_result(openmeteo_result)}\n"
                     )
+                    
+                    # Add nearby station data if available
+                    if f"nearby_station_{city_name}" in tool_results and 'city_name' in locals():
+                        nearby_data = tool_results[f"nearby_station_{city_name}"]
+                        context_parts.append(
+                            f"\n**Nearby Monitoring Station ({city_name}):**\n"
+                            f"{format_air_quality_result(nearby_data)}\n"
+                            f"_Note: This is the closest official monitoring station to your coordinates._\n"
+                        )
+                    
                 except Exception as e:
-                    logger.error(f"Proactive tool call failed for coordinates: {e}")
+                    logger.error(f"Proactive coordinate handling failed: {e}")
 
             # Log composite query detection
             if has_and_keyword and has_multiple_locations:
