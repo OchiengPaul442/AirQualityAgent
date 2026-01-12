@@ -309,7 +309,7 @@ class VisualizationService:
                     raise ValueError("No numeric columns found for histogram")
 
             # ENHANCED: Intelligent label and data handling for large datasets
-            df_processed = self._preprocess_chart_data(df, chart_type, x_column, y_columns)
+            df_processed, data_was_modified = self._preprocess_chart_data(df, chart_type, x_column, y_columns)
 
             if chart_type == "line":
                 for y_col in y_columns:
@@ -322,9 +322,10 @@ class VisualizationService:
                     bars = ax.bar(df_processed[x_column], df_processed[y_columns[0]], alpha=0.8)
                     # Add value labels on bars for small datasets
                     if len(df_processed) <= 20:
+                        max_height = df_processed[y_columns[0]].max()
                         for bar in bars:
                             height = bar.get_height()
-                            ax.text(bar.get_x() + bar.get_width()/2., height + max(df_processed[y_columns[0]]) * 0.01,
+                            ax.text(bar.get_x() + bar.get_width()/2., height + max_height * 0.01,
                                   f'{height:.1f}', ha='center', va='bottom', fontsize=8, rotation=90)
                 else:
                     df_processed.plot(x=x_column, y=y_columns, kind="bar", ax=ax, alpha=0.8)
@@ -576,6 +577,72 @@ class VisualizationService:
             y_label="Value",
             **kwargs,
         )
+
+    def _preprocess_chart_data(
+        self,
+        df: pd.DataFrame,
+        chart_type: str,
+        x_column: str,
+        y_columns: list[str],
+        max_categories: int = 20,
+        max_label_length: int = 15
+    ) -> tuple[pd.DataFrame, bool]:
+        """
+        Preprocess chart data for better visualization with large datasets.
+        
+        Args:
+            df: Input DataFrame
+            chart_type: Type of chart being generated
+            x_column: X-axis column name
+            y_columns: Y-axis column names
+            max_categories: Maximum number of categories to display
+            max_label_length: Maximum length for category labels
+            
+        Returns:
+            Tuple of (processed_df, data_was_modified)
+        """
+        data_was_modified = False
+        df_processed = df.copy()
+        
+        # Handle categorical x-axis with too many categories
+        if x_column and x_column in df_processed.columns:
+            unique_x = df_processed[x_column].nunique()
+            if unique_x > max_categories:
+                logger.warning(f"Large number of categories ({unique_x}) in {x_column}, sampling top categories")
+                data_was_modified = True
+                
+                # Check if x_column is categorical (object type or low cardinality relative to total rows)
+                x_is_categorical = df_processed[x_column].dtype == 'object' or unique_x < len(df_processed) * 0.8
+                
+                if x_is_categorical and y_columns and len(y_columns) > 0 and y_columns[0] in df_processed.columns:
+                    # For categorical x-axis, keep top categories by sum of y-values
+                    try:
+                        category_totals = df_processed.groupby(x_column)[y_columns[0]].sum()
+                        # Only use abs() if the data is numeric
+                        if pd.api.types.is_numeric_dtype(category_totals):
+                            category_totals = category_totals.abs()
+                        top_categories = category_totals.nlargest(max_categories).index
+                        
+                        # Filter to top categories
+                        df_processed = df_processed[df_processed[x_column].isin(top_categories)]
+                        
+                        # Sort by total value for better visualization
+                        df_processed = df_processed.sort_values(by=y_columns[0], ascending=False)
+                    except (TypeError, ValueError):
+                        # Fallback: sample randomly if aggregation fails
+                        df_processed = df_processed.sample(min(max_categories, len(df_processed)), random_state=42)
+                else:
+                    # For non-categorical or when aggregation fails, sample randomly
+                    df_processed = df_processed.sample(min(max_categories, len(df_processed)), random_state=42)
+            
+            # Truncate long labels
+            if df_processed[x_column].dtype == 'object':
+                original_labels = df_processed[x_column].copy()
+                df_processed[x_column] = df_processed[x_column].astype(str).str.slice(0, max_label_length)
+                if not df_processed[x_column].equals(original_labels.astype(str).str.slice(0, max_label_length)):
+                    data_was_modified = True
+        
+        return df_processed, data_was_modified
 
     def generate_comparison_chart(
         self,
