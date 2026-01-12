@@ -332,8 +332,8 @@ def get_search_tools() -> list[dict]:
 
 🔄 THIS PROVIDES REAL INTERNET SEARCH RESULTS - NOT YOUR TRAINING DATA.
 
-📝 SOURCE CITATION FORMAT: When using search results, ALWAYS format sources professionally:
-- End your response with a "Sources & References" section
+📝 SOURCE CITATION FORMAT: When using search results, format sources professionally:
+- If not already present, add a "Sources & References" section at the end
 - Format each source as: "Source: Title (URL) - Brief summary"
 - Example:
   Source: Uganda Air Quality Regulations (https://example.com) - NEMA working with Ministry of Works to enforce new air quality standards

@@ -561,7 +561,11 @@ class ResponseValidator:
                 results = search_result["results"][:5]  # Top 5 results
                 
                 # Check if response already has a sources section
-                if "### Sources" not in response and "### References" not in response:
+                if ("### Sources" not in response and
+                    "### References" not in response and
+                    "## Sources" not in response and
+                    "## References" not in response and
+                    "Sources & References" not in response):
                     sources_section = ["", "### Sources & References", ""]
                     
                     for i, result in enumerate(results, 1):

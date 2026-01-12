@@ -1032,7 +1032,28 @@ class MarkdownFormatter:
         - Multiple sources get numbered references for scientific credibility
         - URLs become clickable links for easy access to environmental data
         - Maintains academic/professional appearance suitable for air quality reports
+
+        If sources are already properly formatted (### Sources & References header with numbered list),
+        leaves them unchanged to avoid duplication.
         """
+        # Check if sources are already properly formatted
+        if "### Sources & References" in text:
+            # Look for numbered sources after the header
+            lines = text.split("\n")
+            sources_header_found = False
+            numbered_sources_found = False
+
+            for line in lines:
+                if "### Sources & References" in line:
+                    sources_header_found = True
+                elif sources_header_found and re.match(r"^\d+\.\s+", line.strip()):
+                    numbered_sources_found = True
+                    break
+
+            # If already properly formatted, return unchanged
+            if sources_header_found and numbered_sources_found:
+                return text
+
         lines = text.split("\n")
         formatted_lines: list[str] = []
         sources_section_started = False
@@ -1232,10 +1253,8 @@ class MarkdownFormatter:
             if re.match(
                 r"^(?:Sources?|References?|Citations?)(?:\s*:)?\s*$", line.strip(), re.IGNORECASE
             ):
-                sources_section_started = True
-                formatted_lines.append("")  # Add blank line before sources section
-                formatted_lines.append("### Sources & References")
-                formatted_lines.append("")
+                # Skip this line if we've already started a sources section
+                # The formatter will add its own header when needed
                 continue
 
             # If we have accumulated sources and hit a non-source line, format them
@@ -1245,6 +1264,7 @@ class MarkdownFormatter:
                     formatted_lines.append("")
                     formatted_lines.append("### Sources & References")
                     formatted_lines.append("")
+                    sources_section_started = True
 
                 # Format sources as numbered list
                 for i, source in enumerate(current_sources, 1):
@@ -1262,6 +1282,7 @@ class MarkdownFormatter:
                 formatted_lines.append("")
                 formatted_lines.append("### Sources & References")
                 formatted_lines.append("")
+                sources_section_started = True
 
             for i, source in enumerate(current_sources, 1):
                 formatted_lines.append(f"{i}. {source}")
