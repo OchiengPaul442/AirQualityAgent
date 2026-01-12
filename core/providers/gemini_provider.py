@@ -604,7 +604,7 @@ class GeminiProvider(BaseAIProvider):
                     # Structured data (CSV/Excel)
                     rows = content.get("rows", [])
                     headers = content.get("headers", [])
-                    summary = f"📊 Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
+                    summary = f"Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
                 else:
                     summary = f"📄 Document '{filename}' ({file_type}) processed successfully."
 
@@ -619,7 +619,7 @@ class GeminiProvider(BaseAIProvider):
                 chart_data = result.get("chart_data", "")
 
                 # CRITICAL: Embed chart in markdown response
-                summary = f"📊 {chart_type.title()} Chart Generated\n\n"
+                summary = f"{chart_type.title()} Chart Generated\n\n"
                 summary += f"![{chart_type.title()} Chart]({chart_data})\n\n"
                 summary += f"Chart created with {data_rows} data points"
                 if data_sampled and original_rows > data_rows:

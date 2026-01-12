@@ -1365,12 +1365,7 @@ class AgentService:
             logger.warning(f"Conversation loop detected in session {session_id or 'default'}, providing helpful capabilities reminder")
             return {
                 "response": (
-                    "Let me help you differently. I can assist with:\n\n"
-                    "🌍 **Real-time Data** - Current AQI, PM2.5, pollutants for any city\n"
-                    "📊 **Health Advice** - Safe activity levels, vulnerable group guidance\n"
-                    "📈 **Trends** - Historical patterns, forecasts, comparisons\n"
-                    "💡 **Education** - Pollutant explanations, AQI scale, research\n\n"
-                    "What interests you?"
+                    "Let me help you differently. I can assist with real-time air quality data, health advice, trends analysis, and educational information about pollutants and air quality standards. What would you like to know?"
                 ),
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
@@ -1591,8 +1586,7 @@ class AgentService:
                     # Provide helpful fallback message
                     if "response" in response_data and response_data["response"]:
                         response_data["response"] += (
-                            "\n\n📊 **Chart Status**: Chart generation encountered an issue. "
-                            "Try: 1) Smaller dataset, 2) Specific date range, 3) Request summary instead"
+                            "\n\nI encountered an issue generating the chart. Try using a smaller dataset, a specific date range, or request a summary instead."
                         )
 
             # Track costs

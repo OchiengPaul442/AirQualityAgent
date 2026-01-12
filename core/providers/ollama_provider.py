@@ -575,13 +575,7 @@ class OllamaProvider(BaseAIProvider):
                     # Build result dict with chart_result
                     result = {
                         "response": (
-                            "📊 Chart generated successfully! The visualization shows your data trends.\n\n"
-                            "**Note**: Due to processing limits, I've kept the description brief. "
-                            "The chart displays the key patterns in your data.\n\n"
-                            "Need more details? Try:\n"
-                            "• Ask about specific data points\n"
-                            "• Request a smaller date range\n"
-                            "• Ask for summary statistics"
+                            "The chart was generated successfully and shows your data trends. Due to processing limits, I've kept the description brief, but the chart displays the key patterns in your data. For more details, you can ask about specific data points, request a smaller date range, or ask for summary statistics."
                         ),
                         "tools_used": tools_used,
                         "tokens_used": 0,
@@ -900,7 +894,7 @@ class OllamaProvider(BaseAIProvider):
                     # Structured data (CSV/Excel)
                     rows = content.get("rows", [])
                     headers = content.get("headers", [])
-                    summary = f"📊 Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
+                    summary = f"Data file '{filename}' contains {len(rows)} rows with columns: {', '.join(headers[:5])}{'...' if len(headers) > 5 else ''}"
                 else:
                     summary = f"📄 Document '{filename}' ({file_type}) processed successfully."
 
@@ -915,7 +909,7 @@ class OllamaProvider(BaseAIProvider):
                 chart_data = result.get("chart_data", "")
 
                 # CRITICAL: Embed chart in markdown response
-                summary = f"📊 {chart_type.title()} Chart Generated\n\n"
+                summary = f"{chart_type.title()} Chart Generated\n\n"
                 summary += f"![{chart_type.title()} Chart]({chart_data})\n\n"
                 summary += f"Chart created with {data_rows} data points"
                 if data_sampled and original_rows > data_rows:
