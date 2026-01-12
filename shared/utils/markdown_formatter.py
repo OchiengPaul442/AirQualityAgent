@@ -8,13 +8,14 @@ optimized for air quality research and environmental data presentation. It handl
 - Correct header hierarchy for research reports
 - Clean code block formatting with language detection and syntax highlighting
 - Clean line breaks and spacing
-- Professional source citation formatting for environmental research
+- Professional source citation formatting for environmental research with Unicode cleaning
 - Rich link previews with metadata extraction
 - Consistent formatting throughout
 
 Based on established markdown standards and best practices for scientific communication.
 """
 
+import html
 import logging
 import re
 from typing import Optional
@@ -359,6 +360,77 @@ class MarkdownFormatter:
         for emoji, regular in emoji_numbers.items():
             text = text.replace(emoji, regular)
 
+        return text
+
+    @staticmethod
+    def _clean_unicode_text(text: str) -> str:
+        """
+        Clean up Unicode issues and HTML entities in text.
+        Removes weird characters, HTML entities, and truncated Unicode sequences.
+        Prevents display of garbled Russian text, broken Unicode, and HTML artifacts.
+        """
+        if not text:
+            return text
+        
+        # Decode HTML entities (like &quot;, &#8230;, etc.)
+        text = html.unescape(text)
+        
+        # Remove or replace common problematic Unicode characters
+        replacements = {
+            '…': '...',  # Horizontal ellipsis
+            '–': '-',    # En dash
+            '—': '--',   # Em dash
+            ''': "'",    # Left single quote
+            ''': "'",    # Right single quote
+            '"': '"',    # Left double quote
+            '"': '"',    # Right double quote
+            '«': '"',    # Left guillemet
+            '»': '"',    # Right guillemet
+            '‹': "'",    # Single left guillemet
+            '›': "'",    # Single right guillemet
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        # Remove control characters except newlines and tabs
+        text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\t')
+        
+        # Process words to handle encoding issues and non-Latin scripts
+        words = text.split()
+        cleaned_words = []
+        for word in words:
+            # Count non-ASCII characters (Cyrillic, Chinese, etc.)
+            non_ascii_count = sum(1 for c in word if ord(c) > 127)
+            total_chars = len(word)
+            
+            # If word is predominantly non-ASCII (> 50%) or very long, it's likely encoding issue
+            if total_chars > 0:
+                non_ascii_ratio = non_ascii_count / total_chars
+                
+                # Skip words that are mostly non-Latin characters (likely Russian, Chinese, etc.)
+                # These cause display issues in many contexts
+                if non_ascii_ratio > 0.5:
+                    # Skip entirely - don't include garbled text
+                    continue
+                elif len(word) > 100:
+                    # Extremely long word - likely encoding error
+                    cleaned_words.append('[content truncated]')
+                else:
+                    cleaned_words.append(word)
+            else:
+                cleaned_words.append(word)
+        
+        text = ' '.join(cleaned_words)
+        
+        # Remove repeated spaces
+        text = re.sub(r'  +', ' ', text)
+        
+        # If text is now empty or too short, provide placeholder
+        text = text.strip()
+        if len(text) < 3:
+            return '[content unavailable]'
+        
         return text
 
     @staticmethod
@@ -822,41 +894,96 @@ class MarkdownFormatter:
     @staticmethod
     def _looks_like_code(text: str) -> bool:
         """
-        Heuristic to decide if a short piece of text looks like code.
-        Returns True if it contains characters or patterns common in code.
+        Determine if text looks like actual code.
+        Enhanced to avoid false positives with column names, lists, or simple text.
+
+        Args:
+            text: Text to analyze
+
+        Returns:
+            True if text appears to be code, False otherwise
         """
         if not text:
             return False
 
-        # Common code indicators: semicolons, parentheses, equals, arrows, braces, keywords
-        code_indicators = [
-            ";",
-            "()",
-            "={",
-            "=>",
-            "->",
-            "import ",
-            "def ",
-            "class ",
-            "console.log",
-            "{",
-            "}",
-            "function ",
-            "print(",
-            "printf(",
-            "$",
-            "<",
-            ">",
-            '"',
-            "'",
+        text_lower = text.lower()
+        text_stripped = text.strip()
+        
+        # Explicitly NOT code patterns (column names, lists, simple text)
+        non_code_patterns = [
+            r'^[a-z_][a-z0-9_]*$',  # Single snake_case word (like column_name)
+            r'^[A-Z][a-zA-Z]+$',     # Single PascalCase word
+            r'^[a-z]+(, [a-z]+)+$',  # Comma-separated words (like: name, age, city)
+            r'^[\w\s,.-]+$',         # Only letters, spaces, commas, dots, dashes
+            r'^\d+\. .+',            # Numbered list items
+            r'^[•\-\*] .+',          # Bullet point items
         ]
-        score = sum(1 for pat in code_indicators if pat in text)
+        
+        # Check if it matches non-code patterns
+        for pattern in non_code_patterns:
+            if re.match(pattern, text_stripped):
+                return False
+        
+        # If text is very short (< 20 chars) and has no code-specific chars, not code
+        if len(text_stripped) < 20:
+            code_specific_chars = ['{', '}', ';', '()', '=>', '</', '/>']
+            has_code_chars = any(char in text for char in code_specific_chars)
+            if not has_code_chars:
+                return False
 
-        # Also detect JSON-like or key:value patterns
-        if re.search(r"\"\w+\"\s*:\s*", text):
-            score += 2
+        # Strong code indicators (definitive signals)
+        strong_code_indicators = [
+            "function ",  # JavaScript function
+            "def ",       # Python function
+            "class ",     # Class definition
+            "import ",    # Imports
+            "from ",      # Python imports
+            "const ",     # JS const
+            "let ",       # JS let
+            "var ",       # JS var
+            "<?php",      # PHP
+            "#!/",        # Shebang
+            "SELECT ",    # SQL
+            "INSERT ",    # SQL
+            "CREATE ",    # SQL
+            "<html",      # HTML
+            "<div",       # HTML
+            "public static",  # Java
+            "private ",   # OOP
+            "protected ", # OOP
+        ]
+        
+        # Strong indicators are definitive
+        for indicator in strong_code_indicators:
+            if indicator in text_lower:
+                return True
+        
+        # Weak code indicators (need multiple)
+        weak_code_indicators = [
+            "=",  # Assignment (but also math)
+            "{",  # Braces
+            "}",
+            ";",  # Statement terminator
+            "//",  # Comments
+            "/*",  # Block comments
+            "*/",
+        ]
 
-        return score >= 1
+        indicator_count = sum(1 for indicator in weak_code_indicators if indicator in text)
+
+        # Need at least 3 weak indicators to be considered code
+        if indicator_count >= 3:
+            return True
+
+        # Check for multiple lines with consistent indentation (code structure)
+        lines = [line for line in text.split("\n") if line.strip()]
+        if len(lines) > 2:
+            indented_lines = sum(1 for line in lines if line.startswith(("    ", "\t")))
+            # More than half the lines are indented = likely code
+            if indented_lines > len(lines) / 2:
+                return True
+
+        return False
 
     @staticmethod
     def _clean_code_content(code_lines: list[str]) -> list[str]:
@@ -930,21 +1057,21 @@ class MarkdownFormatter:
                         r"(.+?)\s*\((https?://[^\s)]+)\)(?:\s*–\s*(.+))?", full_source_text
                     )
                     if url_match:
-                        title = url_match.group(1).strip()
+                        title = MarkdownFormatter._clean_unicode_text(url_match.group(1).strip())
                         url = url_match.group(2)
-                        summary = url_match.group(3).strip() if url_match.group(3) else ""
+                        summary = MarkdownFormatter._clean_unicode_text(url_match.group(3).strip()) if url_match.group(3) else ""
                     else:
-                        title = full_source_text.strip()
+                        title = MarkdownFormatter._clean_unicode_text(full_source_text.strip())
                         url = None
                         summary = ""
                 else:
                     # No URL: Title – summary
                     if " – " in full_source_text:
                         title, summary = full_source_text.split(" – ", 1)
-                        title = title.strip()
-                        summary = summary.strip()
+                        title = MarkdownFormatter._clean_unicode_text(title.strip())
+                        summary = MarkdownFormatter._clean_unicode_text(summary.strip())
                     else:
-                        title = full_source_text.strip()
+                        title = MarkdownFormatter._clean_unicode_text(full_source_text.strip())
                         summary = ""
 
                 # Check if summary continues on next lines

@@ -144,7 +144,7 @@ class DocumentScanner:
             return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
 
     def _scan_csv_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
-        """Extract data from CSV file bytes"""
+        """Extract data from CSV file bytes with multiple encoding support"""
         try:
             import gc  # Garbage collection for memory management
 
@@ -154,8 +154,25 @@ class DocumentScanner:
             if isinstance(file_bytes, bytes):
                 file_bytes = BytesIO(file_bytes)
 
-            # Read CSV from bytes
-            df = pd.read_csv(file_bytes, encoding="utf-8", on_bad_lines="skip")
+            # Try multiple encodings to handle various file formats
+            encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+            df = None
+            last_error = None
+            successful_encoding = None
+            
+            for encoding in encodings:
+                try:
+                    file_bytes.seek(0)  # Reset position
+                    df = pd.read_csv(file_bytes, encoding=encoding, on_bad_lines='skip')
+                    successful_encoding = encoding
+                    logger.info(f"Successfully read CSV with {encoding} encoding")
+                    break
+                except (UnicodeDecodeError, pd.errors.ParserError) as e:
+                    last_error = e
+                    continue
+            
+            if df is None:
+                raise last_error or ValueError("Could not read CSV with any encoding")
 
             # Get summary statistics
             summary = {
