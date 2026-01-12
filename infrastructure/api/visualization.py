@@ -249,69 +249,101 @@ class VisualizationService:
                 else:
                     raise ValueError("No numeric columns found for histogram")
 
+            # ENHANCED: Intelligent label and data handling for large datasets
+            df_processed = self._preprocess_chart_data(df, chart_type, x_column, y_columns)
+
             if chart_type == "line":
                 for y_col in y_columns:
-                    ax.plot(df[x_column], df[y_col], marker="o", label=y_col)
-                ax.legend()
+                    ax.plot(df_processed[x_column], df_processed[y_col], marker="o", markersize=3, linewidth=1.5, label=y_col)
+                if len(y_columns) <= 10:  # Only show legend if manageable
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
 
             elif chart_type == "bar":
                 if len(y_columns) == 1:
-                    ax.bar(df[x_column], df[y_columns[0]])
+                    bars = ax.bar(df_processed[x_column], df_processed[y_columns[0]], alpha=0.8)
+                    # Add value labels on bars for small datasets
+                    if len(df_processed) <= 20:
+                        for bar in bars:
+                            height = bar.get_height()
+                            ax.text(bar.get_x() + bar.get_width()/2., height + max(df_processed[y_columns[0]]) * 0.01,
+                                  f'{height:.1f}', ha='center', va='bottom', fontsize=8, rotation=90)
                 else:
-                    df.plot(x=x_column, y=y_columns, kind="bar", ax=ax)
+                    df_processed.plot(x=x_column, y=y_columns, kind="bar", ax=ax, alpha=0.8)
 
             elif chart_type == "scatter":
-                if color_column and color_column in df.columns:
+                if color_column and color_column in df_processed.columns:
                     scatter = ax.scatter(
-                        df[x_column],
-                        df[y_columns[0]],
-                        c=df[color_column],
+                        df_processed[x_column],
+                        df_processed[y_columns[0]],
+                        c=df_processed[color_column],
                         cmap="viridis",
-                        alpha=0.6,
+                        alpha=0.7,
+                        s=30,  # Smaller points for large datasets
                     )
-                    plt.colorbar(scatter, ax=ax, label=color_column)
+                    plt.colorbar(scatter, ax=ax, label=color_column, shrink=0.8)
                 else:
-                    ax.scatter(df[x_column], df[y_columns[0]], alpha=0.6)
+                    ax.scatter(df_processed[x_column], df_processed[y_columns[0]], alpha=0.7, s=30)
 
             elif chart_type == "histogram":
-                ax.hist(df[y_columns[0]], bins=kwargs.get("bins", 30), edgecolor="black", alpha=0.7)
+                bins = min(kwargs.get("bins", 30), len(df_processed) // 10 + 1)  # Adaptive binning
+                ax.hist(df_processed[y_columns[0]], bins=bins, edgecolor="black", alpha=0.7)
                 x_label = y_columns[0]
                 y_label = "Frequency"
 
             elif chart_type == "box":
                 if len(y_columns) == 1:
-                    ax.boxplot(df[y_columns[0]])
+                    ax.boxplot(df_processed[y_columns[0]], patch_artist=True,
+                             boxprops=dict(facecolor='lightblue', alpha=0.7))
                 else:
-                    df[y_columns].boxplot(ax=ax)
+                    df_processed[y_columns].boxplot(ax=ax, patch_artist=True,
+                                                   boxprops=dict(alpha=0.7))
 
             elif chart_type == "area":
                 for y_col in y_columns:
-                    ax.fill_between(df[x_column], df[y_col], alpha=0.4, label=y_col)
-                ax.legend()
+                    ax.fill_between(df_processed[x_column], df_processed[y_col], alpha=0.4, label=y_col)
+                if len(y_columns) <= 10:
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
 
             elif chart_type == "pie":
-                ax.pie(df[y_columns[0]], labels=df[x_column], autopct="%1.1f%%")
+                # Limit pie chart to top categories for readability
+                if len(df_processed) > 10:
+                    # Group small categories into "Others"
+                    top_data = df_processed.nlargest(9, y_columns[0])
+                    others_sum = df_processed[y_columns[0]].sum() - top_data[y_columns[0]].sum()
+                    if others_sum > 0:
+                        others_row = pd.DataFrame({x_column: ['Others'], y_columns[0]: [others_sum]})
+                        df_processed = pd.concat([top_data, others_row], ignore_index=True)
+
+                wedges, texts, autotexts = ax.pie(df_processed[y_columns[0]], labels=df_processed[x_column],
+                                                autopct=lambda pct: f'{pct:.1f}%' if pct > 2 else '',
+                                                startangle=90, textprops={'fontsize': 9})
+                ax.axis('equal')
 
             elif chart_type == "violin":
                 parts = ax.violinplot(
-                    [df[y_col].dropna() for y_col in y_columns], showmeans=True, showmedians=True
+                    [df_processed[y_col].dropna() for y_col in y_columns],
+                    showmeans=True, showmedians=True
                 )
                 ax.set_xticks(range(1, len(y_columns) + 1))
-                ax.set_xticklabels(y_columns)
+                ax.set_xticklabels(y_columns, rotation=45, ha='right', fontsize=9)
 
             elif chart_type == "timeseries":
                 # Try to parse x_column as datetime
-                df[x_column] = pd.to_datetime(df[x_column], errors="coerce")
+                df_processed[x_column] = pd.to_datetime(df_processed[x_column], errors="coerce")
                 for y_col in y_columns:
-                    ax.plot(df[x_column], df[y_col], marker="o", label=y_col)
-                ax.legend()
-                plt.xticks(rotation=45)
+                    ax.plot(df_processed[x_column], df_processed[y_col], marker="o", markersize=3,
+                           linewidth=1.5, label=y_col)
+                if len(y_columns) <= 10:
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+                plt.xticks(rotation=45, ha='right', fontsize=8)
 
             else:
                 # Default to line chart
                 for y_col in y_columns:
-                    ax.plot(df[x_column], df[y_col], marker="o", label=y_col)
-                ax.legend()
+                    ax.plot(df_processed[x_column], df_processed[y_col], marker="o", markersize=3,
+                           linewidth=1.5, label=y_col)
+                if len(y_columns) <= 10:
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
 
             # Set labels and title
             ax.set_title(title, fontsize=14, fontweight="bold")

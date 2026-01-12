@@ -1092,9 +1092,11 @@ class MarkdownFormatter:
 
                 # Create professional citation
                 if summary:
-                    citation = f"**{title}** - {summary} ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    citation = f"**{title}** ([link]({url}))"
+                    site_name = self._get_site_name(url)
+                    citation = f"**{title}** ([{site_name}]({url}))"
 
                 current_sources.append(citation)
                 continue  # Don't add the original line
