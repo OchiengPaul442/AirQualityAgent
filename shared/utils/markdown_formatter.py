@@ -965,12 +965,12 @@ class MarkdownFormatter:
 
                 # Format inline citation with line break
                 if summary and url:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 elif summary:
                     citation = f"**{title}** - {summary}"
                 elif url:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** ([{site_name}]({url}))"
                 else:
                     citation = f"**{title}**"
@@ -1016,7 +1016,7 @@ class MarkdownFormatter:
                 if summary:
                     citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** ([{site_name}]({url}))"
 
                 current_sources.append(citation)
@@ -1053,10 +1053,10 @@ class MarkdownFormatter:
 
                 # Create professional citation
                 if summary:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** ([{site_name}]({url}))"
 
                 current_sources.append(citation)
@@ -1092,10 +1092,10 @@ class MarkdownFormatter:
 
                 # Create professional citation
                 if summary:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    site_name = self._get_site_name(url)
+                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** ([{site_name}]({url}))"
 
                 current_sources.append(citation)
