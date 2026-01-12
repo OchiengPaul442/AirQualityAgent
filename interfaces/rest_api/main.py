@@ -1,9 +1,12 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -99,6 +102,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Mount static files for charts
+charts_dir = os.path.join(os.getcwd(), "charts")
+charts_dir = os.path.abspath(charts_dir)  # Ensure absolute path
+os.makedirs(charts_dir, exist_ok=True)
+logger.info(f"Mounting charts directory: {charts_dir}")
+app.mount("/charts", StaticFiles(directory=charts_dir), name="charts")
+
 # Add rate limiting (commented out due to compatibility issues with Python 3.13)
 # app.state.limiter = limiter
 # app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -163,6 +173,46 @@ app.include_router(router, prefix=settings.API_V1_STR)
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/charts/{filename}")
+async def serve_chart(filename: str):
+    """Serve chart files from the charts directory."""
+    charts_dir = os.path.join(os.getcwd(), "charts")
+    file_path = os.path.join(charts_dir, filename)
+
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return FileResponse(file_path, media_type="image/png")
+    else:
+        raise HTTPException(status_code=404, detail="Chart file not found")
+
+
+@app.on_event("startup")
+async def cleanup_old_charts():
+    """Clean up old chart files on startup to prevent disk space issues."""
+    import glob
+    import time
+
+    charts_dir = os.path.join(os.getcwd(), "charts")
+    if not os.path.exists(charts_dir):
+        return
+
+    # Keep only files from the last 24 hours
+    cutoff_time = time.time() - (24 * 60 * 60)  # 24 hours ago
+
+    chart_files = glob.glob(os.path.join(charts_dir, "chart_*.png"))
+    cleaned_count = 0
+
+    for file_path in chart_files:
+        if os.path.getmtime(file_path) < cutoff_time:
+            try:
+                os.remove(file_path)
+                cleaned_count += 1
+            except OSError:
+                pass  # Ignore errors when deleting
+
+    if cleaned_count > 0:
+        logger.info(f"Cleaned up {cleaned_count} old chart files")
 
 
 if __name__ == "__main__":

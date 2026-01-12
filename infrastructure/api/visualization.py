@@ -68,7 +68,7 @@ class VisualizationService:
         x_label: str | None = None,
         y_label: str | None = None,
         color_column: str | None = None,
-        output_format: ChartFormat = "base64",
+        output_format: ChartFormat = "file",
         interactive: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
@@ -208,6 +208,7 @@ class VisualizationService:
         x_label: str | None,
         y_label: str | None,
         color_column: str | None,
+        output_format: str = "base64",
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate chart using matplotlib."""
@@ -308,21 +309,43 @@ class VisualizationService:
             # Improve layout
             plt.tight_layout()
 
-            # Always use base64 encoding for inline display (like ChatGPT)
-            # This ensures charts render properly in markdown without needing file storage
-            buffer = io.BytesIO()
-            plt.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
-            plt.close(fig)
+            # Handle different output formats
+            if output_format == "file":
+                # Save to file and return file path
+                charts_dir = os.path.join(os.getcwd(), "charts")
+                os.makedirs(charts_dir, exist_ok=True)
+                
+                # Generate unique filename
+                import uuid
+                filename = f"chart_{uuid.uuid4().hex}.png"
+                filepath = os.path.join(charts_dir, filename)
+                
+                plt.savefig(filepath, format="png", dpi=100, bbox_inches="tight")
+                plt.close(fig)
+                
+                return {
+                    "success": True,
+                    "chart_data": f"/charts/{filename}",
+                    "format": "png",
+                    "engine": "matplotlib",
+                    "storage": "file",
+                    "filepath": filepath,
+                }
+            else:
+                # Default to base64 encoding for inline display
+                buffer = io.BytesIO()
+                plt.savefig(buffer, format="png", dpi=72, bbox_inches="tight")  # Reduced DPI for smaller size
+                buffer.seek(0)
+                image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+                plt.close(fig)
 
-            return {
-                "success": True,
-                "chart_data": f"data:image/png;base64,{image_base64}",
-                "format": "png",
-                "engine": "matplotlib",
-                "storage": "base64",
-            }
+                return {
+                    "success": True,
+                    "chart_data": f"data:image/png;base64,{image_base64}",
+                    "format": "png",
+                    "engine": "matplotlib",
+                    "storage": "base64",
+                }
 
         except Exception as e:
             plt.close(fig)

@@ -872,7 +872,7 @@ class ToolExecutor:
                         x_label=args.get("x_label"),
                         y_label=args.get("y_label"),
                         color_column=args.get("color_column"),
-                        output_format=args.get("output_format", "file"),
+                        output_format=args.get("output_format", "file"),  # Default to file instead of base64
                         interactive=args.get("interactive", False),
                     )
 
