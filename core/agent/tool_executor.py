@@ -725,7 +725,7 @@ class ToolExecutor:
             elif function_name == "scan_document":
                 file_path = args.get("file_path")
                 if not file_path:
-                    return {"error": "file_path parameter is required"}
+                    return {"error": "file_path parameter is required", "success": False}
 
                 # FALLBACK: Check if this is an uploaded document we have in memory
                 # Extract filename from path (user might pass just filename or full path)
@@ -735,7 +735,7 @@ class ToolExecutor:
 
                 # Check uploaded documents cache first (FALLBACK for when AI can't see context)
                 if filename in self.uploaded_documents:
-                    logger.info(f"scan_document: Found uploaded document in cache: {filename}")
+                    logger.info(f"\u2713 scan_document: Found uploaded document in cache: {filename}")
                     doc_data = self.uploaded_documents[filename]
                     return {
                         "success": True,
@@ -746,11 +746,39 @@ class ToolExecutor:
                         "truncated": doc_data.get("truncated", False),
                         "full_length": doc_data.get("full_length", 0),
                         "source": "uploaded_cache",
+                        "note": "Document was uploaded with your message and retrieved from memory"
+                    }
+
+                # Check if file path exists (for disk-based files)
+                if not os.path.exists(file_path):
+                    # Maybe it's in uploaded docs but with different casing?
+                    for uploaded_filename in self.uploaded_documents.keys():
+                        if uploaded_filename.lower() == filename.lower():
+                            logger.info(f"\u2713 scan_document: Found document with case mismatch: {uploaded_filename}")
+                            doc_data = self.uploaded_documents[uploaded_filename]
+                            return {
+                                "success": True,
+                                "filename": uploaded_filename,
+                                "file_type": doc_data.get("file_type", "unknown"),
+                                "content": doc_data.get("content", ""),
+                                "metadata": doc_data.get("metadata", {}),
+                                "truncated": doc_data.get("truncated", False),
+                                "full_length": doc_data.get("full_length", 0),
+                                "source": "uploaded_cache"
+                            }
+                    
+                    return {
+                        "success": False,
+                        "error": f"File not found: {file_path}. If you uploaded a document, it should already be in the conversation context.",
+                        "available_documents": list(self.uploaded_documents.keys())
                     }
 
                 # Otherwise try to scan from disk
-                logger.info(f"scan_document: Attempting to scan from disk: {file_path}")
-                return self.document_scanner.scan_file(file_path)
+                logger.info(f"\u2139 scan_document: Attempting to scan from disk: {file_path}")
+                result = self.document_scanner.scan_file(file_path)
+                if not result.get("success"):
+                    result["available_documents"] = list(self.uploaded_documents.keys())
+                return result
 
             # Geocoding tools
             elif function_name == "geocode_address":

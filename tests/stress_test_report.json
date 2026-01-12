@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-01-12T21:29:50.307057",
+  "timestamp": "2026-01-13T02:04:58.741245",
   "summary": {
     "total_tests": 14,
     "passed": 14,
     "failed": 0,
     "warnings": 0,
-    "total_duration": 298.80612421035767,
+    "total_duration": 212.92524528503418,
     "pass_rate": 100.0
   },
   "tests": [
     {
       "test": "health_check",
       "status": "PASSED",
-      "duration": 0.2568047046661377,
+      "duration": 0.25383615493774414,
       "response": {
         "status": "ok",
         "version": "1.0.0"
@@ -21,19 +21,19 @@
     {
       "test": "simple_chat",
       "status": "PASSED",
-      "duration": 16.48058772087097,
-      "response_length": 744,
-      "tokens_used": 166,
-      "session_id": "fd2e391b-8c5d-48aa-bab1-09bf68dfdac7"
+      "duration": 9.061814069747925,
+      "response_length": 1055,
+      "tokens_used": 210,
+      "session_id": "09f317bd-ef92-47d8-98b1-1f377ed46451"
     },
     {
       "test": "csv_upload",
       "status": "PASSED",
-      "duration": 75.74774169921875,
+      "duration": 30.044626474380493,
       "tools_used": [
-        "generate_chart",
-        "search_web",
         "get_african_city_air_quality",
+        "search_web",
+        "generate_chart",
         "scan_document",
         "document_scanner"
       ],
@@ -42,7 +42,7 @@
     {
       "test": "pdf_upload",
       "status": "PASSED",
-      "duration": 13.109030485153198,
+      "duration": 13.419028520584106,
       "tools_used": [
         "search_web",
         "scan_document",
@@ -52,15 +52,15 @@
     {
       "test": "context_retention",
       "status": "PASSED",
-      "duration": 16.482739686965942,
-      "mentions_london": false,
+      "duration": 21.381853580474854,
+      "mentions_london": true,
       "mentions_paris": true,
-      "session_id": "0ec5164f-90a2-4864-9fc3-aacfa899e893"
+      "session_id": "63006f76-0a6e-4730-be16-d423565bb97d"
     },
     {
       "test": "langchain_memory",
       "status": "PASSED",
-      "duration": 19.68447494506836,
+      "duration": 30.72607684135437,
       "has_name": true,
       "has_location": true,
       "still_remembers_after_conversation": true,
@@ -69,7 +69,7 @@
     {
       "test": "security_validation",
       "status": "PASSED",
-      "duration": 30.147266626358032,
+      "duration": 5.676762104034424,
       "tests_run": 5,
       "results": [
         {
@@ -97,9 +97,9 @@
     {
       "test": "naaqs_question",
       "status": "PASSED",
-      "duration": 13.593324184417725,
-      "response_length": 1762,
-      "tokens_used": 344,
+      "duration": 8.80146336555481,
+      "response_length": 2975,
+      "tokens_used": 628,
       "tools_used": [
         "search_web"
       ],
@@ -108,7 +108,7 @@
     {
       "test": "ozone_question",
       "status": "PASSED",
-      "duration": 11.844562768936157,
+      "duration": 9.901877164840698,
       "mentions_nox": true,
       "mentions_voc": true,
       "mentions_sunlight": true
@@ -116,15 +116,15 @@
     {
       "test": "naaqs_violation",
       "status": "PASSED",
-      "duration": 10.309531450271606,
-      "mentions_epa": true,
+      "duration": 8.36578631401062,
+      "mentions_epa": false,
       "mentions_designation": false,
       "mentions_timeline": true
     },
     {
       "test": "attainment_designations",
       "status": "PASSED",
-      "duration": 13.004247188568115,
+      "duration": 7.783601999282837,
       "mentions_attainment": true,
       "mentions_nonattainment": true,
       "mentions_maintenance": true,
@@ -133,7 +133,7 @@
     {
       "test": "concurrent_requests",
       "status": "PASSED",
-      "duration": 48.49615240097046,
+      "duration": 38.36346912384033,
       "total_requests": 5,
       "successful_requests": 5,
       "api_data_found": 5
@@ -141,16 +141,16 @@
     {
       "test": "session_management",
       "status": "PASSED",
-      "duration": 6.329869747161865,
+      "duration": 6.1801371574401855,
       "session_found": true
     },
     {
       "test": "performance_baseline",
       "status": "PASSED",
-      "duration": 16.24910259246826,
-      "avg_response_time": 4.911838531494141,
-      "min_response_time": 4.529079437255859,
-      "max_response_time": 5.132590055465698,
+      "duration": 15.831767797470093,
+      "avg_response_time": 4.772660732269287,
+      "min_response_time": 4.720641613006592,
+      "max_response_time": 4.86676025390625,
       "target": 30,
       "meets_target": true
     }

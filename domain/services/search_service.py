@@ -152,26 +152,60 @@ class SearchService:
 
     def _search_duckduckgo(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
         """
-        Search using DuckDuckGo with enhanced metadata and timeout protection.
+        Search using DuckDuckGo with enhanced metadata, timeout protection, and retry logic.
 
         Returns results with: title, href, body, and metadata (source, timestamp, relevance)
         """
         try:
-            # Use threading timeout for Windows compatibility
+            # Use threading timeout for Windows compatibility with retry logic
             import concurrent.futures
             
             def search_operation():
-                with DDGS() as ddgs:
-                    return list(ddgs.text(query, max_results=max_results))
-            
-            # Execute with timeout
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(search_operation)
                 try:
-                    raw_results = future.result(timeout=15.0)  # 15 second timeout
+                    with DDGS() as ddgs:
+                        results = list(ddgs.text(query, max_results=max_results * 2))  # Fetch 2x for filtering
+                        # Filter out low-quality results
+                        filtered = []
+                        for r in results:
+                            # Skip results with very short bodies (likely ads or low content)
+                            body = r.get("body", "")
+                            title = r.get("title", "")
+                            if len(body) > 50 and len(title) > 10:
+                                filtered.append(r)
+                        return filtered[:max_results]  # Return top quality results
+                except Exception as e:
+                    logger.error(f"DuckDuckGo search inner error: {e}")
+                    return []
+            
+            # Execute with timeout and retry
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(search_operation)
+                        raw_results = future.result(timeout=20.0)  # 20 second timeout
+                        
+                        if raw_results:
+                            break  # Success
+                        elif attempt < max_retries - 1:
+                            logger.warning(f"DuckDuckGo returned no results, retrying... (attempt {attempt + 1}/{max_retries})")
+                            time.sleep(1)  # Brief delay before retry
+                        else:
+                            logger.warning(f"No search results found for query after {max_retries} attempts: {query}")
+                            return []
+                            
                 except concurrent.futures.TimeoutError:
-                    logger.error(f"DuckDuckGo search timed out after 15s for '{query}'")
-                    return []  # Return empty results instead of failing
+                    if attempt < max_retries - 1:
+                        logger.warning(f"DuckDuckGo search timed out, retrying... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(1)
+                    else:
+                        logger.error(f"DuckDuckGo search timed out after {max_retries} attempts for '{query}'")
+                        return []
+                except Exception as e:
+                    logger.error(f"DuckDuckGo search attempt {attempt + 1} failed: {e}")
+                    if attempt == max_retries - 1:
+                        return []
+                    time.sleep(1)
 
             if not raw_results:
                 logger.warning(f"No search results found for query: {query}")
@@ -180,25 +214,27 @@ class SearchService:
             # Enhance results with metadata
             enhanced_results = []
             for idx, result in enumerate(raw_results):
+                href = result.get("href", "")
                 enhanced = {
-                    "title": result.get("title", ""),
-                    "href": result.get("href", ""),
-                    "body": result.get("body", ""),
+                    "title": result.get("title", "").strip(),
+                    "href": href,
+                    "body": result.get("body", "").strip(),
                     "metadata": {
-                        "source": self._extract_domain(result.get("href", "")),
+                        "source": self._extract_domain(href),
                         "relevance_rank": idx + 1,
-                        "is_trusted": self._is_trusted_source(result.get("href", "")),
+                        "is_trusted": self._is_trusted_source(href),
                         "snippet_length": len(result.get("body", "")),
                         "query": query,
+                        "search_provider": "duckduckgo",
                     },
                 }
                 enhanced_results.append(enhanced)
 
-            logger.info(f"Enhanced {len(enhanced_results)} search results with metadata")
+            logger.info(f"\u2713 Enhanced {len(enhanced_results)} search results with metadata for query: {query}")
             return enhanced_results
 
         except Exception as e:
-            logger.error(f"DuckDuckGo search failed for '{query}': {e}")
+            logger.error(f"DuckDuckGo search failed for '{query}': {e}", exc_info=True)
             return []  # Return empty results instead of failing
 
     def _search_dashscope(self, query: str, max_results: int = 5) -> list[dict[str, str]]:

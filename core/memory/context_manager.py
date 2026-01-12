@@ -84,13 +84,13 @@ class SessionContextManager:
 
         if filename and filename not in existing_filenames:
             context["documents"].append(document)
-            logger.info(f"Added document '{filename}' to session {session_id[:8]}...")
+            logger.info(f"✓ Added document '{filename}' to session {session_id[:8]} (total: {len(context['documents'])} docs)")
 
-            # Limit to last 3 documents to prevent memory bloat
-            if len(context["documents"]) > 3:
+            # Limit to last 5 documents to prevent memory bloat while maintaining context
+            if len(context["documents"]) > 5:
                 removed_doc = context["documents"].pop(0)
                 logger.info(
-                    f"Removed oldest document '{removed_doc.get('filename')}' from session {session_id[:8]}..."
+                    f"⚠ Removed oldest document '{removed_doc.get('filename')}' from session {session_id[:8]} (limit: 5 docs)"
                 )
 
     def get_session_documents(self, session_id: str) -> list[dict[str, Any]]:
