@@ -1091,15 +1091,16 @@ class MarkdownFormatter:
                 i += 1
                 continue
             
-            # Check for standalone source lines: "Source: Title (URL) - Summary"
+            # Check for standalone source lines: "Source: Title [Credibility] (URL) - Summary"
             source_match = re.match(
-                r"^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$",
+                r"^(?:Source|source):\s*(.+?)\s*(?:\[(.*?)\])?\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$",
                 stripped
             )
             
             if source_match:
-                title, url, summary = source_match.groups()
+                title, credibility, url, summary = source_match.groups()
                 title = title.strip()
+                credibility = credibility.strip() if credibility else ""
                 summary = summary.strip() if summary else ""
                 
                 # Check if summary continues on next line
@@ -1109,34 +1110,42 @@ class MarkdownFormatter:
                         summary += " " + next_line
                         i += 1  # Skip the next line
                 
-                # Create citation
+                # Create citation with credibility badge
                 site_name = MarkdownFormatter._get_site_name(url)
+                credibility_badge = f" **[{credibility}]**" if credibility else ""
+                
                 if summary:
-                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
+                    citation = f"**{title}**{credibility_badge} - {summary} ([{site_name}]({url}))"
                 else:
-                    citation = f"**{title}** ([{site_name}]({url}))"
+                    citation = f"**{title}**{credibility_badge} ([{site_name}]({url}))"
                 
                 all_sources.append(citation)
                 i += 1
                 continue
             
-            # Check for inline sources: "Some text Source: Title (URL) - Summary"
-            inline_match = re.search(r"(.+?)\s+(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$", line)
+            # Check for inline sources: "Some text Source: Title [Credibility] (URL) - Summary"
+            inline_match = re.search(
+                r"(.+?)\s+(?:Source|source):\s*(.+?)\s*(?:\[(.*?)\])?\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$",
+                line
+            )
             
             if inline_match:
-                content, title, url, summary = inline_match.groups()
+                content, title, credibility, url, summary = inline_match.groups()
                 title = title.strip()
+                credibility = credibility.strip() if credibility else ""
                 summary = summary.strip() if summary else ""
                 
                 # Add the content without the source
                 cleaned_lines.append(content.strip())
                 
-                # Create citation
+                # Create citation with credibility badge
                 site_name = MarkdownFormatter._get_site_name(url)
+                credibility_badge = f" **[{credibility}]**" if credibility else ""
+                
                 if summary:
-                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
+                    citation = f"**{title}**{credibility_badge} - {summary} ([{site_name}]({url}))"
                 else:
-                    citation = f"**{title}** ([{site_name}]({url}))"
+                    citation = f"**{title}**{credibility_badge} ([{site_name}]({url}))"
                 
                 all_sources.append(citation)
                 i += 1

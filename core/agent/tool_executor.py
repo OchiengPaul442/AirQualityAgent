@@ -696,16 +696,30 @@ class ToolExecutor:
                 if not query:
                     return {"success": False, "error": "No query provided"}
                 try:
-                    results = self.search.search(query)
+                    # Use enhanced search with real-time data for air quality queries
+                    results = self.search.search_with_realtime_data(query)
                     return {
                         "success": True,
                         "results": results,
                         "count": len(results),
-                        "query": query
+                        "query": query,
+                        "enhanced": True  # Mark as enhanced search
                     }
                 except Exception as e:
-                    logger.error(f"Web search error: {e}", exc_info=True)
-                    return {"success": False, "error": aeris_unavailable_message()}
+                    logger.error(f"Enhanced web search error: {e}", exc_info=True)
+                    # Fallback to regular search
+                    try:
+                        results = self.search.search(query)
+                        return {
+                            "success": True,
+                            "results": results,
+                            "count": len(results),
+                            "query": query,
+                            "enhanced": False
+                        }
+                    except Exception as e2:
+                        logger.error(f"Fallback web search also failed: {e2}", exc_info=True)
+                        return {"success": False, "error": aeris_unavailable_message()}
 
             elif function_name == "scrape_website":
                 url = args.get("url")

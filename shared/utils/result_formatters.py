@@ -138,10 +138,39 @@ class ResultFormatter:
             if isinstance(result, dict) and result.get("results"):
                 formatted = ""
                 for i, item in enumerate(result["results"][:max_results], 1):
-                    formatted += f"{i}. {item.get('title', 'No title')}\n"
-                    snippet = item.get('snippet', 'No snippet')
-                    formatted += f"   {snippet[:200]}...\n"
-                    formatted += f"   Source: {item.get('url', 'N/A')}\n\n"
+                    title = item.get('title', 'No title')
+                    
+                    # Add real-time data indicator if present
+                    realtime_indicator = ""
+                    if item.get('realtime_data'):
+                        realtime_indicator = " [LIVE DATA] "
+                    
+                    formatted += f"{i}. {realtime_indicator}{title}\n"
+                    
+                    # Include real-time measurements if available
+                    if item.get('realtime_data'):
+                        realtime_data = item.get('realtime_data', {})
+                        if realtime_data.get('aqi'):
+                            formatted += f"   AQI: {realtime_data['aqi']} | "
+                        if realtime_data.get('pm25'):
+                            formatted += f"PM2.5: {realtime_data['pm25']} µg/m³ | "
+                        if realtime_data.get('pm10'):
+                            formatted += f"PM10: {realtime_data['pm10']} µg/m³"
+                        formatted += "\n"
+                    
+                    snippet = item.get('body', item.get('snippet', 'No description'))
+                    formatted += f"   {snippet[:200]}{'...' if len(snippet) > 200 else ''}\n"
+                    
+                    # Add credibility badge
+                    credibility = item.get('credibility', {})
+                    if credibility.get('level'):
+                        level = credibility['level']
+                        formatted += f"   Credibility: {level}"
+                        if credibility.get('reason'):
+                            formatted += f" ({credibility['reason']})"
+                        formatted += "\n"
+                    
+                    formatted += f"   Source: {item.get('href', item.get('url', 'N/A'))}\n\n"
                 return formatted
 
             result_str = str(result)

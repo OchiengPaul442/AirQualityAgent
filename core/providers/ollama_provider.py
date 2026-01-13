@@ -921,24 +921,58 @@ class OllamaProvider(BaseAIProvider):
             if result.get("results") and isinstance(result["results"], list):
                 results = result["results"][:5]  # Top 5 results for better coverage
                 summary_parts = []
+                realtime_data_found = False
 
                 # Add search results with proper source citations for markdown formatting
                 for idx, r in enumerate(results, 1):
                     title = r.get("title", "No title").strip()
                     href = r.get("href", "").strip()
                     body = r.get("body", "").strip()[:200]  # Longer snippet for better context
+                    metadata = r.get("metadata", {})
+                    realtime_data = r.get("realtime_data")
 
                     if href and title:
+                        # Enhanced source citation with credibility information
+                        credibility_info = ""
+                        if metadata.get("credibility_level"):
+                            level = metadata["credibility_level"]
+                            credibility_info = f" [{level}]"
+
+                        # Add real-time data indicator
+                        data_indicator = ""
+                        if realtime_data:
+                            data_indicator = " [LIVE DATA]"
+                            realtime_data_found = True
+
                         # Format as source citation that markdown formatter can recognize
                         if body:
-                            summary_parts.append(f"Source: {title} ({href}) - {body}")
+                            summary_parts.append(f"Source: {title}{credibility_info}{data_indicator} ({href}) - {body}")
                         else:
-                            summary_parts.append(f"Source: {title} ({href})")
+                            summary_parts.append(f"Source: {title}{credibility_info}{data_indicator} ({href})")
 
-                # Add a summary section
-                if summary_parts:
-                    summary_parts.insert(0, f"Found {len(results)} relevant sources from web search:")
-                    summary_parts.append("")  # Add blank line before sources section
+                        # Add real-time data details if available
+                        if realtime_data:
+                            data_parts = []
+                            if 'aqi' in realtime_data:
+                                data_parts.append(f"AQI: {realtime_data['aqi']}")
+                            if 'pm25' in realtime_data:
+                                data_parts.append(f"PM2.5: {realtime_data['pm25']} µg/m³")
+                            if 'pm10' in realtime_data:
+                                data_parts.append(f"PM10: {realtime_data['pm10']} µg/m³")
+                            if 'location' in realtime_data:
+                                data_parts.insert(0, f"Location: {realtime_data['location']}")
+
+                            if data_parts:
+                                summary_parts.append(f"  Live Data: {', '.join(data_parts)}")
+
+                # Add search type indicator
+                search_type = "enhanced web search with real-time data" if result.get("enhanced") else "web search"
+                summary_parts.insert(0, f"Found {len(results)} relevant sources from {search_type}:")
+
+                if realtime_data_found:
+                    summary_parts.insert(1, "⚡ Real-time air quality data included where available")
+
+                summary_parts.append("")  # Add blank line before sources section
 
                 return "\n".join(summary_parts)
 
