@@ -5,13 +5,16 @@ import time
 from typing import Any, Optional
 from urllib.parse import urljoin
 
+logger = logging.getLogger(__name__)
+
 try:
     from ddgs import DDGS  # type: ignore
 except ImportError:
-    # Fallback if ddgs not installed yet
-    from duckduckgo_search import DDGS  # type: ignore
-
-logger = logging.getLogger(__name__)
+    try:
+        from duckduckgo_search import DDGS  # type: ignore
+    except ImportError:
+        logger.warning("DuckDuckGo search libraries not available. Search functionality will be limited.")
+        DDGS = None  # type: ignore
 
 
 class SearchService:
@@ -260,101 +263,52 @@ class SearchService:
 
     def _search_duckduckgo(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
-        Enhanced DuckDuckGo search with comprehensive coverage and credibility assessment.
+        Robust DuckDuckGo search with best practices for reliability.
 
         Features:
-        - Multiple search strategies for broader coverage
-        - Advanced filtering and quality assessment
-        - Credibility scoring based on trusted sources
-        - Source diversity to avoid bias
-        - Timeout protection and retry logic
-        - Metadata enrichment for transparency
+        - Simplified, reliable search execution
+        - Proper timeout management
+        - Graceful error handling and fallbacks
+        - Credibility assessment and source prioritization
+        - No complex concurrent operations that can cause timeouts
 
         Returns results with: title, href, body, and enhanced metadata
         """
+        # Check if DDGS is available
+        if DDGS is None:
+            logger.warning("DuckDuckGo search not available - library not installed")
+            return []
+
         try:
-            import concurrent.futures
-            import time
-
-            def comprehensive_search():
-                """Perform comprehensive search with multiple strategies"""
-                all_results = []
-
-                # Strategy 1: Primary search
-                try:
-                    with DDGS() as ddgs:
-                        primary_results = list(ddgs.text(query, max_results=max_results * 3))
-                        all_results.extend(primary_results)
-                except Exception as e:
-                    logger.warning(f"Primary search failed: {e}")
-
-                # Strategy 2: Add site-specific searches for trusted sources (if air quality related)
-                if any(keyword in query.lower() for keyword in ['air quality', 'aqi', 'pollution', 'environment']):
-                    trusted_sites = [
-                        'openaq.org', 'iqair.com', 'aqicn.org', 'waqi.info',
-                        'who.int', 'eea.europa.eu', 'epa.gov', 'airnow.gov'
-                    ]
-
-                    for site in trusted_sites[:3]:  # Limit to top 3 to avoid overload
-                        try:
-                            site_query = f"site:{site} {query}"
-                            with DDGS() as ddgs:
-                                site_results = list(ddgs.text(site_query, max_results=2))
-                                # Mark these as high-priority
-                                for result in site_results:
-                                    result['_high_priority'] = True
-                                    result['_source_type'] = 'trusted_site'
-                                all_results.extend(site_results)
-                        except Exception as e:
-                            logger.debug(f"Site-specific search failed for {site}: {e}")
-
-                # Strategy 3: Add research/academic sources
-                if any(keyword in query.lower() for keyword in ['study', 'research', 'health', 'impact']):
-                    try:
-                        research_query = f"{query} research study site:sciencedirect.com OR site:nature.com OR site:who.int"
-                        with DDGS() as ddgs:
-                            research_results = list(ddgs.text(research_query, max_results=2))
-                            for result in research_results:
-                                result['_source_type'] = 'research'
-                            all_results.extend(research_results)
-                    except Exception as e:
-                        logger.debug(f"Research search failed: {e}")
-
-                return all_results
-
-            # Execute search with timeout and retry
+            # Simple, reliable search execution
             max_retries = 3
             raw_results = []
 
             for attempt in range(max_retries):
                 try:
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(comprehensive_search)
-                        raw_results = future.result(timeout=25.0)  # Increased timeout for comprehensive search
-
-                        if raw_results:
+                    # Use a single DDGS instance with reasonable timeout
+                    with DDGS() as ddgs:
+                        # Simple search - let DDGS handle the complexity
+                        results = list(ddgs.text(query, max_results=max_results * 2, timelimit=10.0))
+                        if results:
+                            raw_results = results
                             break
-                        elif attempt < max_retries - 1:
-                            logger.warning(f"DuckDuckGo comprehensive search returned no results, retrying... (attempt {attempt + 1}/{max_retries})")
-                            time.sleep(1.5)
-                        else:
-                            logger.warning(f"No search results found after {max_retries} attempts: {query}")
-                            return []
 
-                except concurrent.futures.TimeoutError:
+                    # If we get here without results, wait before retry
                     if attempt < max_retries - 1:
-                        logger.warning(f"DuckDuckGo search timed out, retrying... (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(1.5)
-                    else:
-                        logger.error(f"DuckDuckGo search timed out after {max_retries} attempts")
-                        return []
+                        logger.info(f"DuckDuckGo search attempt {attempt + 1} returned no results, retrying...")
+                        time.sleep(2 ** attempt)  # Exponential backoff
+
                 except Exception as e:
-                    logger.error(f"DuckDuckGo search attempt {attempt + 1} failed: {e}")
-                    if attempt == max_retries - 1:
+                    logger.warning(f"DuckDuckGo search attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                    else:
+                        logger.error(f"All DuckDuckGo search attempts failed for query: {query}")
                         return []
-                    time.sleep(1.5)
 
             if not raw_results:
+                logger.warning(f"No search results found for query: {query}")
                 return []
 
             # Enhanced filtering and quality assessment
@@ -404,7 +358,7 @@ class SearchService:
             scored_results.sort(key=lambda x: x[0], reverse=True)
             top_results = [result for _, result in scored_results[:max_results]]
 
-            # Enhance results with comprehensive metadata
+            # Enhance results with metadata
             enhanced_results = []
             for idx, result in enumerate(top_results):
                 href = result.get("href", "").strip()
@@ -435,11 +389,59 @@ class SearchService:
                 }
                 enhanced_results.append(enhanced)
 
-            logger.info(f"✓ Enhanced comprehensive search returned {len(enhanced_results)} high-quality results from {len(domain_counts)} diverse sources")
+            logger.info(f"✓ DuckDuckGo search returned {len(enhanced_results)} high-quality results from {len(domain_counts)} diverse sources")
             return enhanced_results
 
         except Exception as e:
-            logger.error(f"DuckDuckGo comprehensive search failed for '{query}': {e}", exc_info=True)
+            logger.error(f"DuckDuckGo search failed for '{query}': {e}", exc_info=True)
+            return []
+
+            # Sort by quality and credibility
+            scored_results = []
+            for idx, result in enumerate(filtered_results):
+                score = self._calculate_result_score(result, idx)
+                result['_quality_score'] = score
+                scored_results.append((score, result))
+
+            scored_results.sort(key=lambda x: x[0], reverse=True)
+            top_results = [result for _, result in scored_results[:max_results]]
+
+            # Enhance results with metadata
+            enhanced_results = []
+            for idx, result in enumerate(top_results):
+                href = result.get("href", "").strip()
+                domain = self._extract_domain(href)
+                is_trusted = self._is_trusted_source(href)
+
+                # Determine source credibility level
+                credibility = self._assess_source_credibility(href, domain)
+
+                enhanced = {
+                    "title": result.get("title", "").strip(),
+                    "href": href,
+                    "body": result.get("body", "").strip(),
+                    "metadata": {
+                        "source": domain,
+                        "relevance_rank": idx + 1,
+                        "is_trusted": is_trusted,
+                        "credibility_level": credibility['level'],
+                        "credibility_reason": credibility['reason'],
+                        "source_type": result.get('_source_type', 'general'),
+                        "quality_score": result.get('_quality_score', 0),
+                        "snippet_length": len(result.get("body", "")),
+                        "query": query,
+                        "search_provider": "duckduckgo",
+                        "search_timestamp": time.time(),
+                        "total_sources_searched": len(domain_counts),
+                    },
+                }
+                enhanced_results.append(enhanced)
+
+            logger.info(f"✓ DuckDuckGo search returned {len(enhanced_results)} high-quality results from {len(domain_counts)} diverse sources")
+            return enhanced_results
+
+        except Exception as e:
+            logger.error(f"DuckDuckGo search failed for '{query}': {e}", exc_info=True)
             return []
 
     def _search_dashscope(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
@@ -763,32 +765,52 @@ class SearchService:
             Dict with scraped data and metadata, or None if failed
         """
         try:
+            import random
+
             import requests
             from bs4 import BeautifulSoup
 
-            # Rotate user agents to avoid blocking
+            # Enhanced user agents that mimic real browsers better
             user_agents = [
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             ]
 
+            # More realistic headers
             headers = {
-                'User-Agent': user_agents[hash(url) % len(user_agents)],
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
+                'User-Agent': random.choice(user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0',
             }
 
-            # Rate limiting - respect website limits
-            time.sleep(1)  # 1 second delay between requests
+            # Rate limiting - respect website limits (increased delay)
+            time.sleep(2)  # 2 second delay between requests
 
-            response = requests.get(url, headers=headers, timeout=timeout, verify=True)
+            # Add referer for some sites
+            if 'nih.gov' in url or 'nature.com' in url or 'sciencedirect.com' in url:
+                headers['Referer'] = 'https://www.google.com/'
+
+            response = requests.get(url, headers=headers, timeout=timeout, verify=True, allow_redirects=True)
             response.raise_for_status()
 
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # Handle encoding issues
+            if response.encoding is None or response.encoding == 'ISO-8859-1':
+                response.encoding = response.apparent_encoding or 'utf-8'
+
+            # Create BeautifulSoup with error handling
+            soup = BeautifulSoup(response.content.decode(response.encoding, errors='replace'), 'html.parser')
 
             # Extract real-time data patterns
             realtime_data = self._extract_realtime_aqi_data(soup, url)
@@ -802,13 +824,29 @@ class SearchService:
                     'source_type': 'realtime_scrape'
                 }
 
-            return None
+            # If no specific AQI data found, extract general page info
+            title = soup.title.text.strip() if soup.title else "No title"
+            return {
+                'url': url,
+                'data': {'location': title, 'type': 'general_page'},
+                'scraped_at': time.time(),
+                'status': 'success',
+                'source_type': 'general_scrape'
+            }
 
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                logger.debug(f"Access forbidden for {url}: {e}")
+            elif e.response.status_code == 429:
+                logger.debug(f"Rate limited for {url}: {e}")
+            else:
+                logger.debug(f"HTTP error for {url}: {e}")
+            return None
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Failed to scrape {url}: {e}")
+            logger.debug(f"Request error for {url}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Error scraping {url}: {e}")
+            logger.debug(f"Error scraping {url}: {e}")
             return None
 
     def _extract_realtime_aqi_data(self, soup, url: str) -> Optional[dict]:
@@ -920,22 +958,35 @@ class SearchService:
         if not is_aq_query:
             return search_results
 
-        # For air quality queries, try to get real-time data
+        # For air quality queries, try to get real-time data from select trusted sources only
         enhanced_results = []
+
+        # Only scrape from highly reliable sources to avoid 403 errors
+        reliable_scrape_sources = [
+            'aqicn.org', 'waqi.info', 'iqair.com', 'openaq.org',
+            'airnow.gov', 'epa.gov', 'eea.europa.eu'
+        ]
 
         for result in search_results:
             enhanced_result = dict(result)  # Copy original result
+            enhanced_result['data_freshness'] = 'search_only'  # Default
 
-            # Try to scrape real-time data from this URL
+            # Only attempt scraping for highly reliable sources
             url = result.get('href', '')
-            if url and self._is_trusted_source(url):
-                realtime_data = self.scrape_realtime_data(url)
-                if realtime_data and realtime_data.get('data'):
-                    enhanced_result['realtime_data'] = realtime_data['data']
-                    enhanced_result['data_freshness'] = 'realtime'
-                    logger.info(f"✓ Added real-time data for {url}")
-                else:
-                    enhanced_result['data_freshness'] = 'search_only'
+            if url:
+                domain = self._extract_domain(url)
+                if domain in reliable_scrape_sources:
+                    try:
+                        realtime_data = self.scrape_realtime_data(url)
+                        if realtime_data and realtime_data.get('data'):
+                            enhanced_result['realtime_data'] = realtime_data['data']
+                            enhanced_result['data_freshness'] = 'realtime'
+                            logger.debug(f"✓ Added real-time data for {domain}")
+                        else:
+                            logger.debug(f"No real-time data found for {domain}")
+                    except Exception as e:
+                        logger.debug(f"Failed to scrape {domain}: {e}")
+                        # Continue without real-time data - don't fail the entire search
 
             enhanced_results.append(enhanced_result)
 
