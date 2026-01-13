@@ -1033,263 +1033,144 @@ class MarkdownFormatter:
         - URLs become clickable links for easy access to environmental data
         - Maintains academic/professional appearance suitable for air quality reports
 
-        If sources are already properly formatted (### Sources & References header with numbered list),
+        If sources are already properly formatted (###Sources & References header with numbered list),
         leaves them unchanged to avoid duplication.
+        
+        CRITICAL: This is the SINGLE SOURCE OF TRUTH for source formatting. All other parts of the
+        system (orchestrator, LLM instructions) should NOT add "### Sources & References" headers
+        to prevent duplication.
+        
+        ALGORITHM:
+        1. Check if sources are already formatted - if yes, return unchanged
+        2. Extract ALL inline sources from the document (remove from content)
+        3. Clean up any duplicate "Sources & References" headers
+        4. Add a SINGLE "### Sources & References" section at the end with all sources numbered
         """
-        # Check if sources are already properly formatted
-        if "### Sources & References" in text:
-            # Look for numbered sources after the header
-            lines = text.split("\n")
-            sources_header_found = False
-            numbered_sources_found = False
-
-            for line in lines:
-                if "### Sources & References" in line:
-                    sources_header_found = True
-                elif sources_header_found and re.match(r"^\d+\.\s+", line.strip()):
-                    numbered_sources_found = True
-                    break
-
-            # If already properly formatted, return unchanged
-            if sources_header_found and numbered_sources_found:
-                return text
-
+        # STEP 1: Check if sources are already properly formatted
+        if "### Sources & References" in text or "## Sources & References" in text:
+            header_count = text.count("### Sources & References") + text.count("## Sources & References")
+            
+            if header_count == 1:
+                # Single header found - check if it's properly formatted
+                lines = text.split("\n")
+                sources_header_found = False
+                has_numbered_sources = False
+                
+                for line in lines:
+                    if "### Sources & References" in line or "## Sources & References" in line:
+                        sources_header_found = True
+                    elif sources_header_found and re.match(r"^\d+\.\s+\*\*", line.strip()):
+                        has_numbered_sources = True
+                        break
+                
+                # If properly formatted with numbered sources, return unchanged
+                if sources_header_found and has_numbered_sources:
+                    logger.debug("Sources already properly formatted - skipping")
+                    return text
+            elif header_count > 1:
+                # Multiple headers detected - need to consolidate
+                logger.warning(f"⚠️ Detected {header_count} 'Sources & References' headers - consolidating")
+        
+        # STEP 2: Extract all inline sources
         lines = text.split("\n")
-        formatted_lines: list[str] = []
-        sources_section_started = False
-        current_sources = []
-
-        for i, line in enumerate(lines):
-            # Check for inline sources (Source: appearing after content on the same line)
-            inline_source_match = re.search(r"(.+?)\s+(Source|source):\s*(.+)$", line)
-
-            if inline_source_match:
-                # Handle inline source citation
-                content_before, _, full_source_text = inline_source_match.groups()
-
-                # Initialize variables
-                url = None
-                summary = ""
-
-                # Parse the source text: can be "Title (URL) – summary" or "Title – summary" or just "Title"
-                if "(" in full_source_text and ")" in full_source_text:
-                    # Has URL in parentheses: Title (URL) – summary
-                    url_match = re.search(
-                        r"(.+?)\s*\((https?://[^\s)]+)\)(?:\s*–\s*(.+))?", full_source_text
-                    )
-                    if url_match:
-                        title = MarkdownFormatter._clean_unicode_text(url_match.group(1).strip())
-                        url = url_match.group(2)
-                        summary = MarkdownFormatter._clean_unicode_text(url_match.group(3).strip()) if url_match.group(3) else ""
-                    else:
-                        title = MarkdownFormatter._clean_unicode_text(full_source_text.strip())
-                        url = None
-                        summary = ""
-                else:
-                    # No URL: Title – summary
-                    if " – " in full_source_text:
-                        title, summary = full_source_text.split(" – ", 1)
-                        title = MarkdownFormatter._clean_unicode_text(title.strip())
-                        summary = MarkdownFormatter._clean_unicode_text(summary.strip())
-                    else:
-                        title = MarkdownFormatter._clean_unicode_text(full_source_text.strip())
-                        summary = ""
-
-                # Check if summary continues on next lines
-                if (
-                    summary
-                    and not summary.endswith(".")
-                    and not summary.endswith(")")
-                    and i + 1 < len(lines)
-                ):
-                    next_line = lines[i + 1].strip()
-                    if (
-                        next_line
-                        and not next_line.startswith("Source:")
-                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
-                    ):
-                        summary += " " + next_line
-                        lines[i + 1] = ""  # Mark as processed
-
-                # Format inline citation with line break
-                if summary and url:
-                    site_name = MarkdownFormatter._get_site_name(url)
-                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
-                elif summary:
-                    citation = f"**{title}** - {summary}"
-                elif url:
-                    site_name = MarkdownFormatter._get_site_name(url)
-                    citation = f"**{title}** ([{site_name}]({url}))"
-                else:
-                    citation = f"**{title}**"
-
-                # Add the content with source on new line
-                formatted_lines.append(content_before.strip())
-                formatted_lines.append(citation)
+        cleaned_lines = []
+        all_sources = []
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            
+            # Skip existing "Sources & References" headers (we'll add our own)
+            if re.match(
+                r"^(?:#{1,3}\s*)?(?:Sources?|References?|Citations?)(?:\s*&?\s*(?:References?|Sources?))?(?:\s*:)?\s*$",
+                stripped,
+                re.IGNORECASE
+            ):
+                logger.debug(f"Removing duplicate source header: '{stripped}'")
+                i += 1
                 continue
-
-            # Check if this is a standalone source line (handle multi-line summaries)
-            stripped_line = line.strip()
-
-            # Handle markdown link format: Source: [Title](URL) - Summary
-            markdown_link_match = re.match(
-                r"^(?:Source|source):\s*\[([^\]]+)\]\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
-                stripped_line,
-            )
-
-            if markdown_link_match:
-                title, url, summary = markdown_link_match.groups()
-                title = title.strip()
-                url = url.strip()
-                summary = summary.strip() if summary else ""
-
-                # Check if summary continues on next lines (incomplete summary)
-                if (
-                    summary
-                    and not summary.endswith(".")
-                    and not summary.endswith(")")
-                    and i + 1 < len(lines)
-                ):
-                    # Look ahead to find continuation of summary
-                    next_line = lines[i + 1].strip()
-                    if (
-                        next_line
-                        and not next_line.startswith("Source:")
-                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
-                    ):
-                        summary += " " + next_line
-                        lines[i + 1] = ""  # Mark as processed
-
-                # Create professional citation
-                if summary:
-                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
-                else:
-                    site_name = MarkdownFormatter._get_site_name(url)
-                    citation = f"**{title}** ([{site_name}]({url}))"
-
-                current_sources.append(citation)
-                continue  # Don't add the original line
-
-            # Handle general markdown links that might be sources: [Title](URL) - Summary
-            general_markdown_match = re.match(
-                r"^\[([^\]]+)\]\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
-                stripped_line,
-            )
-
-            if general_markdown_match and ("source" in stripped_line.lower() or "reference" in stripped_line.lower() or i > 0 and ("source" in lines[i-1].lower() or "reference" in lines[i-1].lower())):
-                title, url, summary = general_markdown_match.groups()
-                title = title.strip()
-                url = url.strip()
-                summary = summary.strip() if summary else ""
-
-                # Check if summary continues on next lines (incomplete summary)
-                if (
-                    summary
-                    and not summary.endswith(".")
-                    and not summary.endswith(")")
-                    and i + 1 < len(lines)
-                ):
-                    # Look ahead to find continuation of summary
-                    next_line = lines[i + 1].strip()
-                    if (
-                        next_line
-                        and not next_line.startswith("Source:")
-                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
-                    ):
-                        summary += " " + next_line
-                        lines[i + 1] = ""  # Mark as processed
-
-                # Create professional citation
-                if summary:
-                    site_name = MarkdownFormatter._get_site_name(url)
-                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
-                else:
-                    site_name = MarkdownFormatter._get_site_name(url)
-                    citation = f"**{title}** ([{site_name}]({url}))"
-
-                current_sources.append(citation)
-                continue  # Don't add the original line
-
+            
+            # Check for standalone source lines: "Source: Title (URL) - Summary"
             source_match = re.match(
-                r"^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*-\s*(.+))?$",
-                stripped_line,
+                r"^(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$",
+                stripped
             )
-
+            
             if source_match:
                 title, url, summary = source_match.groups()
                 title = title.strip()
-                url = url.strip()
                 summary = summary.strip() if summary else ""
-
-                # Check if summary continues on next lines (incomplete summary)
-                if (
-                    summary
-                    and not summary.endswith(".")
-                    and not summary.endswith(")")
-                    and i + 1 < len(lines)
-                ):
-                    # Look ahead to find continuation of summary
+                
+                # Check if summary continues on next line
+                if summary and i + 1 < len(lines):
                     next_line = lines[i + 1].strip()
-                    if (
-                        next_line
-                        and not next_line.startswith("Source:")
-                        and not re.match(r"^(?:Source|source):", next_line, re.IGNORECASE)
-                    ):
+                    if next_line and not next_line.startswith("Source:"):
                         summary += " " + next_line
-                        lines[i + 1] = ""  # Mark as processed
-
-                # Create professional citation
+                        i += 1  # Skip the next line
+                
+                # Create citation
+                site_name = MarkdownFormatter._get_site_name(url)
                 if summary:
-                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** - {summary} ([{site_name}]({url}))"
                 else:
-                    site_name = MarkdownFormatter._get_site_name(url)
                     citation = f"**{title}** ([{site_name}]({url}))"
-
-                current_sources.append(citation)
-                continue  # Don't add the original line
-
-            # Check if we're starting a sources/references section
-            if re.match(
-                r"^(?:Sources?|References?|Citations?)(?:\s*:)?\s*$", line.strip(), re.IGNORECASE
-            ):
-                # Skip this line if we've already started a sources section
-                # The formatter will add its own header when needed
+                
+                all_sources.append(citation)
+                i += 1
                 continue
-
-            # If we have accumulated sources and hit a non-source line, format them
-            if current_sources and not source_match and line.strip():
-                if not sources_section_started:
-                    # Add sources section if not already started
-                    formatted_lines.append("")
-                    formatted_lines.append("### Sources & References")
-                    formatted_lines.append("")
-                    sources_section_started = True
-
-                # Format sources as numbered list
-                for i, source in enumerate(current_sources, 1):
-                    formatted_lines.append(f"{i}. {source}")
-
-                formatted_lines.append("")  # Add blank line after sources
-                current_sources = []  # Reset sources
-                sources_section_started = False
-
-            formatted_lines.append(line)
-
-        # Handle any remaining sources at the end
-        if current_sources:
-            if not sources_section_started:
-                formatted_lines.append("")
-                formatted_lines.append("### Sources & References")
-                formatted_lines.append("")
-                sources_section_started = True
-
-            for i, source in enumerate(current_sources, 1):
-                formatted_lines.append(f"{i}. {source}")
-
-            formatted_lines.append("")
-
-        return "\n".join(formatted_lines)
+            
+            # Check for inline sources: "Some text Source: Title (URL) - Summary"
+            inline_match = re.search(r"(.+?)\s+(?:Source|source):\s*(.+?)\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$", line)
+            
+            if inline_match:
+                content, title, url, summary = inline_match.groups()
+                title = title.strip()
+                summary = summary.strip() if summary else ""
+                
+                # Add the content without the source
+                cleaned_lines.append(content.strip())
+                
+                # Create citation
+                site_name = MarkdownFormatter._get_site_name(url)
+                if summary:
+                    citation = f"**{title}** - {summary} ([{site_name}]({url}))"
+                else:
+                    citation = f"**{title}** ([{site_name}]({url}))"
+                
+                all_sources.append(citation)
+                i += 1
+                continue
+            
+            # Regular line - keep it
+            cleaned_lines.append(line)
+            i += 1
+        
+        # STEP 3: Rebuild the document
+        result = "\n".join(cleaned_lines).strip()
+        
+        # STEP 4: Add sources section at the end (if we found any)
+        if all_sources:
+            # Remove duplicate sources (same URL)
+            seen_urls = set()
+            unique_sources = []
+            for source in all_sources:
+                # Extract URL from citation
+                url_match = re.search(r"\((https?://[^\)]+)\)", source)
+                if url_match:
+                    url = url_match.group(1)
+                    if url not in seen_urls:
+                        seen_urls.add(url)
+                        unique_sources.append(source)
+                else:
+                    unique_sources.append(source)
+            
+            # Add the sources section
+            result += "\n\n### Sources & References\n\n"
+            for i, source in enumerate(unique_sources, 1):
+                result += f"{i}. {source}\n"
+        
+        return result
 
     @staticmethod
     def _format_bold_and_emphasis(text: str) -> str:

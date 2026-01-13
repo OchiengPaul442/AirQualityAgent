@@ -332,12 +332,12 @@ def get_search_tools() -> list[dict]:
 
 🔄 THIS PROVIDES REAL INTERNET SEARCH RESULTS - NOT YOUR TRAINING DATA.
 
-📝 SOURCE CITATION FORMAT: When using search results, format sources professionally:
-- If not already present, add a "Sources & References" section at the end
-- Format each source as: "Source: Title (URL) - Brief summary"
-- Example:
-  Source: Uganda Air Quality Regulations (https://example.com) - NEMA working with Ministry of Works to enforce new air quality standards
-- This ensures proper academic/professional citation formatting""",
+📝 SOURCE CITATION FORMAT: When using search results, cite sources inline using this exact format:
+- Format: "Source: Title (URL) - Brief summary"
+- Place inline after the relevant information
+- Example: "NEMA is working with the Ministry of Works to enforce new standards. Source: Uganda Air Quality Regulations (https://example.com) - NEMA working with Ministry of Works to enforce new air quality standards"
+- DO NOT add a "Sources & References" header yourself - the system will automatically consolidate all inline sources into a properly formatted section
+- This prevents source duplication while ensuring proper academic/professional citation formatting""",
                 "parameters": {
                     "type": "object",
                     "properties": {

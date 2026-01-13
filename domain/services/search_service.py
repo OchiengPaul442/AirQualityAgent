@@ -211,10 +211,19 @@ class SearchService:
                 logger.warning(f"No search results found for query: {query}")
                 return []
 
-            # Enhance results with metadata
+            # Enhance results with metadata and deduplicate
             enhanced_results = []
+            seen_urls = set()
+            
             for idx, result in enumerate(raw_results):
-                href = result.get("href", "")
+                href = result.get("href", "").strip()
+                
+                # Skip if we've already seen this URL
+                if href and href in seen_urls:
+                    continue
+                if href:
+                    seen_urls.add(href)
+                    
                 enhanced = {
                     "title": result.get("title", "").strip(),
                     "href": href,
