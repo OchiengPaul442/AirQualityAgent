@@ -480,6 +480,7 @@ class GeminiProvider(BaseAIProvider):
             "thinking_steps": thinking_steps,
             "reasoning_steps": [step.to_dict() for step in all_reasoning],
             "reasoning_content": reasoning.to_markdown(include_header=False),
+            "finish_reason": finish_reason if 'finish_reason' in locals() else "stop",  # Add finish_reason for consistency
         }
 
         # Add chart data if present

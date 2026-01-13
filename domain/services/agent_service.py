@@ -1207,6 +1207,12 @@ class AgentService:
 
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
+        
+        # Increase max_tokens if charts are expected (based on proactive tool calls)
+        if "generate_chart" in tools_called_proactively:
+            original_max_tokens = response_params.get("max_tokens", 1536)
+            response_params["max_tokens"] = max(original_max_tokens, 2048)  # Ensure at least 2048 for charts
+            logger.info(f"📊 Increased max_tokens to {response_params['max_tokens']} for chart generation")
 
         # Use SessionContextManager for document accumulation (replaces old document_cache)
         if document_data and session_id:
@@ -1678,6 +1684,9 @@ class AgentService:
             ai_response = response_data.get("response", "")
             original_length = len(ai_response)
             
+            # Clean incomplete JSON that might break response formatting
+            ai_response = self._clean_incomplete_json(ai_response)
+            
             # Check if provider indicated truncation via finish_reason
             finish_reason = response_data.get("finish_reason", "stop")
             provider_truncated = finish_reason == "length"
@@ -2054,6 +2063,99 @@ class AgentService:
             # Monitoring station IDs and codes may be public and useful
 
         return response_data
+
+    def _clean_incomplete_json(self, text: str) -> str:
+        """
+        Clean responses that contain incomplete JSON objects.
+        
+        This fixes issues where the AI generates JSON for charts but stops mid-object,
+        leaving malformed JSON that breaks parsing and display.
+        
+        Args:
+            text: Response text that may contain incomplete JSON
+            
+        Returns:
+            Cleaned text with incomplete JSON removed or completed
+        """
+        import json
+        import re
+
+        # Find all JSON-like objects in the text
+        # Look for patterns that start with { and should end with }
+        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        
+        # More sophisticated: find potential JSON blocks
+        potential_json_blocks = []
+        brace_count = 0
+        start_pos = -1
+        
+        for i, char in enumerate(text):
+            if char == '{':
+                if brace_count == 0:
+                    start_pos = i
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0 and start_pos != -1:
+                    # Found a complete JSON block
+                    block = text[start_pos:i+1]
+                    potential_json_blocks.append((start_pos, i+1, block))
+                    start_pos = -1
+        
+        # Check for incomplete JSON at the end
+        if brace_count > 0 and start_pos != -1:
+            # There's an incomplete JSON block at the end
+            logger.warning(f"Detected incomplete JSON at end of response, truncating from position {start_pos}")
+            
+            # Try to find the last complete sentence before the incomplete JSON
+            text_before_json = text[:start_pos].strip()
+            
+            # Find the last complete sentence (ending with . ! or ?)
+            sentences = re.split(r'(?<=[.!?])\s+', text_before_json)
+            if sentences:
+                # Keep all complete sentences
+                cleaned_text = ' '.join(sentences[:-1]) if len(sentences) > 1 else sentences[0]
+                cleaned_text = cleaned_text.strip()
+                
+                if cleaned_text:
+                    # Add a note about the truncation
+                    cleaned_text += "\n\n*Note: The response was truncated due to formatting issues.*"
+                    return cleaned_text
+                else:
+                    # If no complete sentences, keep a reasonable portion
+                    return text[:start_pos].strip() + "\n\n*Note: Response truncated for formatting.*"
+        
+        # Check each potential JSON block for validity
+        cleaned_parts = []
+        last_end = 0
+        
+        for start, end, block in potential_json_blocks:
+            # Add text before this block
+            cleaned_parts.append(text[last_end:start])
+            
+            # Try to parse the JSON
+            try:
+                json.loads(block)
+                # Valid JSON, keep it
+                cleaned_parts.append(block)
+            except json.JSONDecodeError:
+                # Invalid JSON, skip it
+                logger.warning(f"Skipping invalid JSON block: {block[:100]}...")
+                # Optionally add a placeholder
+                cleaned_parts.append("[Chart data unavailable]")
+            
+            last_end = end
+        
+        # Add remaining text
+        cleaned_parts.append(text[last_end:])
+        
+        result = ''.join(cleaned_parts)
+        
+        # If we removed content, add a note
+        if len(result) < len(text) * 0.9:  # Removed more than 10%
+            result += "\n\n*Note: Some content was removed due to formatting issues.*"
+        
+        return result
 
     async def cleanup(self):
         """Clean up resources (MCP clients, provider connections)."""

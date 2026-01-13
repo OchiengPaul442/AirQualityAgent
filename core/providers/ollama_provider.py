@@ -282,6 +282,7 @@ class OllamaProvider(BaseAIProvider):
                         "tools_used": [],
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
+                        "finish_reason": "stop",  # Default for error cases
                     }
 
             except TimeoutError as e:
@@ -297,6 +298,7 @@ class OllamaProvider(BaseAIProvider):
                         "tools_used": [],
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
+                        "finish_reason": "stop",  # Default for error cases
                     }
 
             except Exception as e:
@@ -341,6 +343,7 @@ class OllamaProvider(BaseAIProvider):
                             "tokens_used": 0,
                             "cost_estimate": 0.0,
                             "context_truncated": True,
+                            "finish_reason": "stop",  # Default for error cases
                         }
 
                 # Check for rate limiting or quota issues
@@ -368,6 +371,7 @@ class OllamaProvider(BaseAIProvider):
                         "rate_limit_info": error_details,
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
+                        "finish_reason": "stop",  # Default for error cases
                     }
 
                 # Check for 500 Internal Server Error from Ollama
@@ -379,6 +383,7 @@ class OllamaProvider(BaseAIProvider):
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
                         "error_type": "ollama_500",
+                        "finish_reason": "stop",  # Default for error cases
                     }
 
                 if attempt < max_retries - 1:
@@ -394,6 +399,7 @@ class OllamaProvider(BaseAIProvider):
                             "tools_used": [],
                             "tokens_used": 0,
                             "cost_estimate": 0.0,
+                            "finish_reason": "stop",  # Default for error cases
                         }
                     elif "model" in error_msg:
                         return {
@@ -401,6 +407,7 @@ class OllamaProvider(BaseAIProvider):
                             "tools_used": [],
                             "tokens_used": 0,
                             "cost_estimate": 0.0,
+                            "finish_reason": "stop",  # Default for error cases
                         }
                     else:
                         # Log the full error for developers but provide user-friendly message
@@ -416,6 +423,7 @@ class OllamaProvider(BaseAIProvider):
                             "error_logged": True,  # Flag for internal tracking
                             "tokens_used": 0,
                             "cost_estimate": 0.0,
+                            "finish_reason": "stop",  # Default for error cases
                         }
 
         # Validate response before accessing (outside retry loop)
@@ -445,6 +453,7 @@ class OllamaProvider(BaseAIProvider):
                 "tools_used": [],
                 "tokens_used": 0,
                 "cost_estimate": 0.0,
+                "finish_reason": "stop",  # Default for error cases
             }
 
         # Normalize message object access
@@ -530,6 +539,7 @@ class OllamaProvider(BaseAIProvider):
                         "tools_used": tools_used,
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
+                        "finish_reason": "stop",  # Default for error cases
                     }
                 response_text = final_message.content
             except Exception as e:
@@ -674,6 +684,7 @@ class OllamaProvider(BaseAIProvider):
             "reasoning_content": "\n".join(thinking_steps) if thinking_steps else None,
             "tokens_used": 0,  # Ollama doesn't provide token counts
             "cost_estimate": 0.0,  # Local model, no cost
+            "finish_reason": "stop",  # Ollama doesn't provide finish_reason, default to "stop"
         }
 
         # Add chart_result if chart was generated

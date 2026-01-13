@@ -623,6 +623,7 @@ class OpenAIProvider(BaseAIProvider):
                         return {
                             "response": "I successfully gathered the information but encountered a network error generating the response. Please try asking again.",
                             "tools_used": tools_used,
+                            "finish_reason": "stop",  # Default finish_reason for error cases
                         }
                 except Exception as e:
                     error_msg = str(e).lower()
@@ -636,11 +637,13 @@ class OpenAIProvider(BaseAIProvider):
                             ),
                             "tools_used": tools_used,
                             "chart_result": chart_result if chart_result else None,
+                            "finish_reason": "stop",  # Default finish_reason for error cases
                         }
 
                     return {
                         "response": f"I executed the tools successfully but encountered an error generating the final response: {str(e)}",
                         "tools_used": tools_used,
+                        "finish_reason": "stop",  # Default finish_reason for error cases
                     }
         else:
             response_text = response.choices[0].message.content
@@ -693,7 +696,7 @@ class OpenAIProvider(BaseAIProvider):
             "response": response_text
             or "I was unable to generate a response. Please try again.",
             "tools_used": tools_used,
-            "finish_reason": finish_reason,  # Pass finish_reason to agent_service
+            "finish_reason": finish_reason or "stop",  # Default to "stop" if None
         }
 
         if "chart_result" in locals() and chart_result:
