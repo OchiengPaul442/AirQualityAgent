@@ -32,6 +32,28 @@ SANITIZE_PATTERNS = [
     (r"javascript:\s*void\s*\(", ""),  # JavaScript protocol
 ]
 
+# Prompt injection detection patterns (audit requirement: SECURITY BOUNDARIES)
+# These patterns detect attempts to manipulate the AI or extract system information
+PROMPT_INJECTION_PATTERNS = [
+    # Direct override attempts
+    r"(?i)\b(ignore|disregard|forget)\s+(previous|all|above|prior)\s+(instructions|prompts|rules|directions)",
+    r"(?i)\b(override|bypass|disable)\s+(system|security|safety|rules)",
+    
+    # Role manipulation
+    r"(?i)\b(you\s+are\s+now|act\s+as|pretend\s+to\s+be|simulate)\s+(a\s+)?(jailbreak|dan|evil|unethical)",
+    r"(?i)system\s*[:=]\s*['\"]",  # system: "new instructions"
+    r"(?i)new\s+(role|personality|character|mode)\s*[:=]",
+    
+    # Instruction extraction
+    r"(?i)(repeat|show|display|tell\s+me|what\s+are)\s+(your|the)\s+(instructions|system\s+prompt|rules|guidelines)",
+    r"(?i)\b(print|output|echo|reveal)\s+(system|internal|hidden)\s+(prompt|instructions|config)",
+    
+    # API key fishing
+    r"(?i)(what\s+is|show\s+me|tell\s+me)\s+(your|the)\s+(api\s*key|token|secret|password)",
+    r"(?i)sk-[a-zA-Z0-9]{20,}",  # OpenAI API key pattern
+    r"(?i)AIza[a-zA-Z0-9_-]{35}",  # Google API key pattern
+]
+
 
 class InputSanitizer:
     """Comprehensive input sanitization and validation."""
@@ -159,6 +181,88 @@ class InputSanitizer:
         return filename
 
     @staticmethod
+    def detect_prompt_injection(text: str) -> tuple[bool, str | None]:
+        """
+        Detect prompt injection attempts in user input.
+        
+        Per audit requirement: "SECURITY BOUNDARIES - Detection Trigger & Response Protocol"
+        
+        Strategy:
+        1. Scan for injection keywords/patterns
+        2. If detected, extract legitimate air quality query
+        3. Log incident but continue processing legitimate query
+        4. NEVER acknowledge or respond to injection attempt
+        
+        Args:
+            text: User input to check
+            
+        Returns:
+            Tuple of (injection_detected: bool, cleaned_query: str | None)
+            - If no injection: (False, None)
+            - If injection detected: (True, extracted_air_quality_query)
+        """
+        if not isinstance(text, str) or not text.strip():
+            return (False, None)
+        
+        # Check for prompt injection patterns
+        injection_detected = False
+        for pattern in PROMPT_INJECTION_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL):
+                injection_detected = True
+                break
+        
+        if not injection_detected:
+            return (False, None)
+        
+        # Extract legitimate air quality query
+        # Common patterns: "what is AQI in [location]", "air quality in [location]", etc.
+        air_quality_patterns = [
+            r"(?i)(what\s+is\s+the\s+)?(air\s+quality|aqi|pm2\.?5|pollution)(\s+in| for| at)?\s+([a-zA-Z\s,]+)",
+            r"(?i)(is\s+it\s+safe|should\s+i)(\s+to)?\s+(go\s+out|exercise|run|bike)(\s+in)?\s+([a-zA-Z\s,]+)?",
+            r"(?i)(how\s+is|check|get|show)(\s+the)?\s+(air\s+quality|aqi)(\s+in)?\s+([a-zA-Z\s,]+)?",
+        ]
+        
+        for pattern in air_quality_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                # Extract the matched air quality query
+                query = match.group(0).strip()
+                return (True, query)
+        
+        # If no specific query extracted, return generic request
+        return (True, "What is the current air quality?")
+
+    @staticmethod
+    def sanitize_filename(filename: str) -> str:
+        """
+        Sanitize filename to prevent path traversal and other attacks.
+
+        Args:
+            filename: Original filename
+
+        Returns:
+            Sanitized filename
+        """
+        if not isinstance(filename, str):
+            raise ValueError("Filename must be a string")
+
+        # Remove path separators
+        filename = re.sub(r"[\/\\]", "", filename)
+
+        # Remove dangerous characters
+        filename = re.sub(r'[<>:"|?*]', "", filename)
+
+        # Limit length
+        if len(filename) > 255:
+            filename = filename[:255]
+
+        # Ensure it's not empty
+        if not filename.strip():
+            filename = "unnamed_file"
+
+        return filename
+
+    @staticmethod
     def sanitize_sql_like_input(input_str: str) -> str:
         """
         Sanitize input that might be used in SQL LIKE queries.
@@ -179,6 +283,38 @@ class InputSanitizer:
         input_str = re.sub(r"[;\'\"]", "", input_str)
 
         return input_str
+
+    @staticmethod
+    def sanitize_api_keys(text: str) -> str:
+        """
+        Sanitize text to remove exposed API keys and tokens.
+        
+        Per audit requirement: "SECURITY BOUNDARIES - API Key Sanitization"
+        Detects and redacts common API key patterns to prevent accidental exposure.
+        
+        Args:
+            text: Text that may contain API keys
+            
+        Returns:
+            Text with API keys replaced by [REDACTED_API_KEY]
+        """
+        if not isinstance(text, str):
+            return str(text)
+        
+        # API key patterns (common providers)
+        api_key_patterns = [
+            (r"sk-[a-zA-Z0-9]{20,}", "[REDACTED_OPENAI_KEY]"),  # OpenAI
+            (r"AIza[a-zA-Z0-9_-]{35}", "[REDACTED_GOOGLE_KEY]"),  # Google
+            (r"Bearer\s+[a-zA-Z0-9_\-\.]{20,}", "[REDACTED_BEARER_TOKEN]"),  # Bearer tokens
+            (r"token[=:]\s*['\"]?[a-zA-Z0-9_\-]{20,}['\"]?", "token=[REDACTED_TOKEN]"),  # Generic tokens
+            (r"api[_-]?key[=:]\s*['\"]?[a-zA-Z0-9_\-]{20,}['\"]?", "api_key=[REDACTED_KEY]"),  # Generic API keys
+            (r"password[=:]\s*['\"]?[^\s'\"]{8,}['\"]?", "password=[REDACTED_PASSWORD]"),  # Passwords
+        ]
+        
+        for pattern, replacement in api_key_patterns:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        
+        return text
 
 
 class ResponseFilter:
@@ -216,7 +352,10 @@ class ResponseFilter:
         if not isinstance(response, str):
             return str(response)
 
-        # Remove API keys and tokens (more aggressive patterns)
+        # First pass: Use comprehensive API key sanitization (audit requirement)
+        response = InputSanitizer.sanitize_api_keys(response)
+
+        # Second pass: Remove additional API key patterns
         # Pattern 1: "API key is abc123" or "token is def456"
         response = re.sub(
             r"(?i)(api\s*key|token|secret|password|auth\s*key)\s+(is|are|:|=)\s+[a-zA-Z0-9_\-]+",
@@ -316,8 +455,22 @@ def validate_request_data(data: dict[str, Any]) -> dict[str, Any]:
                 if re.search(pattern, value, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                     raise ValueError("Critical security threat detected")
 
-            # Sanitize the message SILENTLY (cleans patterns, never blocks)
-            sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
+            # Check for prompt injection attempts (audit requirement)
+            injection_detected, cleaned_query = InputSanitizer.detect_prompt_injection(value)
+            if injection_detected:
+                # Log the incident (will be handled by error logger)
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Prompt injection attempt detected. Original length: {len(value)}, "
+                    f"Extracted query: {cleaned_query}"
+                )
+                # Replace message with extracted legitimate query
+                # This allows the agent to process the air quality request while ignoring the injection
+                sanitized[key] = cleaned_query if cleaned_query else "What is the current air quality?"
+            else:
+                # Sanitize the message SILENTLY (cleans patterns, never blocks)
+                sanitized[key] = InputSanitizer.sanitize_text_input(value, html_escape=False)
 
         elif key == "session_id":
             if value is not None:

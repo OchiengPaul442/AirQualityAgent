@@ -31,9 +31,190 @@ class DocumentScanner:
 
     def __init__(self):
         self.settings = get_settings()
+        # Track if document was already processed (audit requirement)
+        self._document_processed = False
+        self._processed_content_cache = None
+
+    def verify_document_in_context(self, context: str) -> tuple[bool, str | None]:
+        """
+        Verify if document content is already in context.
+        
+        Per audit requirement: "Check context for <document_content> tags"
+        
+        Args:
+            context: Current conversation context or message history
+            
+        Returns:
+            Tuple of (found: bool, content: str | None)
+            - If found: (True, extracted_content)
+            - If not found: (False, None)
+        """
+        if not context:
+            return (False, None)
+        
+        # Check for document content markers
+        if "<document_content>" in context and "</document_content>" in context:
+            # Extract content between tags
+            start = context.find("<document_content>") + len("<document_content>")
+            end = context.find("</document_content>")
+            content = context[start:end].strip()
+            logger.info("Document content found in context - using existing data")
+            return (True, content)
+        
+        # Check for markdown code blocks with document metadata
+        if "```" in context and any(marker in context for marker in ["CSV File:", "Excel File:", "PDF File:"]):
+            logger.info("Document content detected in markdown - using existing data")
+            return (True, None)  # Content is in markdown, not extracted
+        
+        return (False, None)
+
+    def smart_document_handling(
+        self, 
+        file_bytes: BytesIO | bytes, 
+        filename: str,
+        interactive: bool = True
+    ) -> dict[str, Any]:
+        """
+        Intelligent document handling with user disambiguation for large files.
+        
+        Per audit requirement: "Smart handling for large files with chunking strategy"
+        
+        Args:
+            file_bytes: Document bytes
+            filename: Original filename
+            interactive: Whether to prompt user for disambiguation (default True)
+            
+        Returns:
+            Dictionary with content or disambiguation request
+        """
+        file_lower = filename.lower()
+        
+        # Pre-scan file size and structure
+        if isinstance(file_bytes, bytes):
+            file_size_mb = len(file_bytes) / (1024 * 1024)
+            file_bytes_io = BytesIO(file_bytes)
+        else:
+            file_bytes.seek(0, 2)  # Seek to end
+            file_size_mb = file_bytes.tell() / (1024 * 1024)
+            file_bytes.seek(0)  # Seek back to start
+            file_bytes_io = file_bytes
+        
+        # Handle PDF files
+        if file_lower.endswith(".pdf"):
+            try:
+                import PyPDF2
+                file_bytes_io.seek(0)
+                reader = PyPDF2.PdfReader(file_bytes_io)
+                page_count = len(reader.pages)
+                
+                if page_count > 100 and interactive:
+                    # Request user disambiguation (audit requirement)
+                    return {
+                        "needs_disambiguation": True,
+                        "filename": filename,
+                        "file_type": "pdf",
+                        "page_count": page_count,
+                        "size_mb": round(file_size_mb, 2),
+                        "message": (
+                            f"Large PDF detected: {page_count} pages ({file_size_mb:.2f} MB). "
+                            f"To optimize processing, please specify:\n"
+                            f"- Which pages to prioritize? (e.g., '1-10', 'all', 'summary sections')\n"
+                            f"- What information are you looking for? (e.g., 'air quality data', 'statistics')"
+                        ),
+                        "suggested_actions": [
+                            "Process first 50 pages",
+                            "Process last 50 pages",
+                            "Process all pages (may take longer)",
+                            "Specify custom page range"
+                        ]
+                    }
+                
+                logger.info(f"Processing PDF: {filename} - {page_count} pages ({file_size_mb:.2f} MB)")
+            except Exception as e:
+                logger.warning(f"Error pre-scanning PDF: {e}")
+        
+        # Handle Excel files
+        elif file_lower.endswith((".xlsx", ".xls")):
+            try:
+                import pandas as pd
+                file_bytes_io.seek(0)
+                excel_file = pd.ExcelFile(file_bytes_io)
+                sheet_names = excel_file.sheet_names
+                
+                if len(sheet_names) > 3 and interactive:
+                    # Request user disambiguation (audit requirement)
+                    return {
+                        "needs_disambiguation": True,
+                        "filename": filename,
+                        "file_type": "excel",
+                        "sheet_count": len(sheet_names),
+                        "sheet_names": sheet_names,
+                        "size_mb": round(file_size_mb, 2),
+                        "message": (
+                            f"Multi-sheet Excel file detected: {len(sheet_names)} sheets ({file_size_mb:.2f} MB).\n"
+                            f"Sheets: {', '.join(sheet_names)}\n\n"
+                            f"To optimize processing, please specify:\n"
+                            f"- Which sheet(s) contain air quality data?\n"
+                            f"- What specific data should I focus on?"
+                        ),
+                        "suggested_actions": [
+                            f"Process sheet: {sheet_names[0]}",
+                            "Process all sheets",
+                            "Specify sheet name(s)"
+                        ]
+                    }
+                
+                logger.info(f"Processing Excel: {filename} - {len(sheet_names)} sheets ({file_size_mb:.2f} MB)")
+            except Exception as e:
+                logger.warning(f"Error pre-scanning Excel: {e}")
+        
+        # Handle CSV files
+        elif file_lower.endswith(".csv"):
+            try:
+                import pandas as pd
+                file_bytes_io.seek(0)
+                # Quick scan to count rows
+                df_shape = pd.read_csv(file_bytes_io, nrows=1)
+                file_bytes_io.seek(0)
+                # Count total rows efficiently
+                total_rows = sum(1 for _ in file_bytes_io) - 1  # Subtract header
+                file_bytes_io.seek(0)
+                
+                if total_rows > 1000 and interactive:
+                    # Request user disambiguation (audit requirement)
+                    return {
+                        "needs_disambiguation": True,
+                        "filename": filename,
+                        "file_type": "csv",
+                        "row_count": total_rows,
+                        "column_count": len(df_shape.columns),
+                        "columns": df_shape.columns.tolist(),
+                        "size_mb": round(file_size_mb, 2),
+                        "message": (
+                            f"Large CSV file detected: {total_rows:,} rows ({file_size_mb:.2f} MB).\n"
+                            f"Columns: {', '.join(df_shape.columns.tolist())}\n\n"
+                            f"To optimize processing, please specify:\n"
+                            f"- What data range should I focus on? (e.g., 'recent data', 'specific date range')\n"
+                            f"- Which columns are most important?"
+                        ),
+                        "suggested_actions": [
+                            "Process first 500 rows",
+                            "Process last 500 rows",
+                            "Process all data (may take longer)",
+                            "Specify date range or filter"
+                        ]
+                    }
+                
+                logger.info(f"Processing CSV: {filename} - {total_rows:,} rows ({file_size_mb:.2f} MB)")
+            except Exception as e:
+                logger.warning(f"Error pre-scanning CSV: {e}")
+        
+        # If no disambiguation needed or not interactive, proceed with normal scanning
+        logger.info(f"Processing {filename} - {file_size_mb:.2f} MB")
+        return self.scan_document_from_bytes(file_bytes_io, filename)
 
     def scan_document_from_bytes(
-        self, file_bytes: BytesIO | bytes, filename: str
+        self, file_bytes: BytesIO | bytes, filename: str, use_smart_handling: bool = True
     ) -> dict[str, Any]:
         """
         Read and extract text/data from document bytes (in-memory processing)
@@ -43,6 +224,7 @@ class DocumentScanner:
         Args:
             file_bytes: BytesIO object or bytes containing file data
             filename: Original filename with extension
+            use_smart_handling: Enable smart handling for large files (default True)
 
         Returns:
             Dictionary with content, file type, metadata, or error
@@ -52,19 +234,40 @@ class DocumentScanner:
             if isinstance(file_bytes, bytes):
                 file_bytes = BytesIO(file_bytes)
 
+            # Use smart handling if enabled (audit requirement)
+            if use_smart_handling:
+                return self.smart_document_handling(file_bytes, filename, interactive=True)
+
             file_lower = filename.lower()
+
+            # Log processing details (audit requirement)
+            file_bytes.seek(0, 2)  # Seek to end
+            file_size = file_bytes.tell()
+            file_bytes.seek(0)  # Seek back
+            logger.info(
+                f"Document processing started - "
+                f"Filename: {filename}, "
+                f"Size: {file_size / 1024:.2f} KB, "
+                f"Type: {os.path.splitext(filename)[1]}"
+            )
 
             # Handle PDF files
             if file_lower.endswith(".pdf"):
-                return self._scan_pdf_bytes(file_bytes, filename)
+                result = self._scan_pdf_bytes(file_bytes, filename)
+                self._log_processing_result(result)
+                return result
 
             # Handle CSV files
             elif file_lower.endswith(".csv"):
-                return self._scan_csv_bytes(file_bytes, filename)
+                result = self._scan_csv_bytes(file_bytes, filename)
+                self._log_processing_result(result)
+                return result
 
             # Handle Excel files
             elif file_lower.endswith((".xlsx", ".xls")):
-                return self._scan_excel_bytes(file_bytes, filename)
+                result = self._scan_excel_bytes(file_bytes, filename)
+                self._log_processing_result(result)
+                return result
 
             else:
                 return {
@@ -76,6 +279,39 @@ class DocumentScanner:
         except Exception as e:
             logger.error(f"Error scanning document {filename}: {e}", exc_info=True)
             return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
+
+    def _log_processing_result(self, result: dict[str, Any]):
+        """
+        Log document processing results.
+        
+        Per audit requirement: "Log processing details: filename, type, size"
+        """
+        if result.get("success"):
+            logger.info(
+                f"Document processed successfully - "
+                f"Filename: {result.get('filename')}, "
+                f"Type: {result.get('file_type')}, "
+                f"Content length: {result.get('full_length', 0)} chars, "
+                f"Truncated: {result.get('truncated', False)}"
+            )
+            
+            # Additional metadata logging
+            metadata = result.get("metadata", {})
+            if result.get("file_type") == "pdf":
+                logger.info(f"PDF details - Pages: {metadata.get('pages')}")
+            elif result.get("file_type") == "csv":
+                logger.info(f"CSV details - Rows: {metadata.get('rows')}, Columns: {metadata.get('columns')}")
+            elif result.get("file_type") == "excel":
+                logger.info(
+                    f"Excel details - Sheets: {metadata.get('sheet_count')}, "
+                    f"Total rows: {metadata.get('total_rows')}"
+                )
+        else:
+            logger.warning(
+                f"Document processing failed - "
+                f"Filename: {result.get('filename')}, "
+                f"Error: {result.get('error')}"
+            )
 
     def scan_file(self, file_path: str) -> dict[str, Any]:
         """

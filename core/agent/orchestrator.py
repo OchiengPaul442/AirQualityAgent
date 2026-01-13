@@ -103,19 +103,252 @@ class ToolOrchestrator:
         self.circuit_threshold = 5
         self.circuit_timeout = 300  # 5 minutes
 
-        # Fallback chains for tools
+        # Fallback chains for tools (Audit Requirement: 5-level cascade)
         self.fallback_chains = {
             "get_african_city_air_quality": [
-                "get_city_air_quality",  # WAQI as fallback
-                "get_openmeteo_current_air_quality"  # OpenMeteo as last resort
+                "get_city_air_quality",  # Level 2: WAQI as fallback
+                "get_openmeteo_current_air_quality",  # Level 3: OpenMeteo
+                "search_web",  # Level 4: Web search for city data
+                "get_seasonal_context"  # Level 5: Seasonal estimates (Africa intelligence)
             ],
             "get_city_air_quality": [
-                "get_openmeteo_current_air_quality"  # OpenMeteo as fallback
+                "get_openmeteo_current_air_quality",  # Level 2: OpenMeteo as fallback
+                "search_web",  # Level 3: Web search
+                "get_seasonal_context"  # Level 4: Seasonal estimates
             ],
             "search_web": [
                 "scrape_website"  # If search fails, try scraping known URLs
             ]
         }
+        
+        # Tool relevance scoring (Audit Requirement: Confidence scoring 0-1)
+        self.tool_capabilities = {
+            "get_african_city_air_quality": {
+                "regions": ["africa"],
+                "metrics": ["pm2.5", "pm10", "aqi"],
+                "cities": ["nairobi", "kampala", "lagos", "accra", "addis ababa", "dar es salaam", "kigali"],
+                "realtime": True,
+                "historical": False,
+                "confidence": 0.95  # AirQo is primary source for Africa
+            },
+            "get_city_air_quality": {
+                "regions": ["global"],
+                "metrics": ["pm2.5", "pm10", "o3", "no2", "so2", "co", "aqi"],
+                "cities": ["*"],  # Worldwide
+                "realtime": True,
+                "historical": False,
+                "confidence": 0.85  # WAQI is reliable globally
+            },
+            "get_openmeteo_current_air_quality": {
+                "regions": ["global"],
+                "metrics": ["pm2.5", "pm10", "o3", "no2", "so2", "aqi"],
+                "cities": ["*"],
+                "realtime": True,
+                "historical": False,
+                "confidence": 0.75  # Open-Meteo is modeled data
+            },
+            "get_weather_forecast": {
+                "regions": ["global"],
+                "metrics": ["temperature", "humidity", "wind", "precipitation"],
+                "cities": ["*"],
+                "realtime": True,
+                "historical": False,
+                "confidence": 0.90  # Weather is reliable
+            },
+            "search_web": {
+                "regions": ["global"],
+                "metrics": ["*"],  # Can search for anything
+                "cities": ["*"],
+                "realtime": False,
+                "historical": True,
+                "confidence": 0.60  # Search is unpredictable
+            }
+        }
+
+    def evaluate_query_requirements(self, query: str) -> dict[str, Any]:
+        """
+        Intelligent query parsing to determine tool requirements.
+        
+        Per audit requirement: "Parse: locations (count), time ranges, data types, comparison intent"
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            Dictionary with parsed requirements:
+            - locations: List of city names detected
+            - location_count: Number of locations
+            - time_range: "current", "forecast", "historical", or "comparison"
+            - metrics: List of metrics requested (aqi, pm2.5, etc.)
+            - comparison_intent: Boolean indicating if comparing multiple locations
+            - is_african_city: Boolean for each location
+            - complexity: "simple", "moderate", "complex"
+        """
+        query_lower = query.lower()
+        
+        # Known African cities
+        african_cities = [
+            "nairobi", "kampala", "lagos", "accra", "addis ababa", "dar es salaam", 
+            "kigali", "johannesburg", "cape town", "cairo", "casablanca", "tunis"
+        ]
+        
+        # Detect locations
+        locations = []
+        is_african = []
+        for city in african_cities:
+            if city in query_lower:
+                locations.append(city.title())
+                is_african.append(True)
+        
+        # Generic location detection (vs, versus, compared to, etc.)
+        if " vs " in query_lower or " versus " in query_lower or " compared to " in query_lower:
+            comparison_intent = True
+        else:
+            comparison_intent = len(locations) > 1
+        
+        # Detect time range
+        time_range = "current"  # Default
+        if any(word in query_lower for word in ["forecast", "tomorrow", "next week", "upcoming"]):
+            time_range = "forecast"
+        elif any(word in query_lower for word in ["yesterday", "last week", "trend", "history", "past"]):
+            time_range = "historical"
+        elif any(word in query_lower for word in ["weekend", "week", "daily", "hourly"]):
+            time_range = "comparison"
+        
+        # Detect metrics
+        metrics = []
+        metric_keywords = {
+            "aqi": ["aqi", "air quality index", "quality"],
+            "pm2.5": ["pm2.5", "pm 2.5", "fine particles", "particulate"],
+            "pm10": ["pm10", "pm 10", "coarse particles"],
+            "o3": ["ozone", "o3"],
+            "no2": ["nitrogen dioxide", "no2"],
+            "so2": ["sulfur dioxide", "so2"],
+            "co": ["carbon monoxide", "co"],
+        }
+        for metric, keywords in metric_keywords.items():
+            if any(kw in query_lower for kw in keywords):
+                metrics.append(metric)
+        
+        # If no specific metrics, default to AQI
+        if not metrics:
+            metrics.append("aqi")
+        
+        # Determine complexity
+        complexity = "simple"
+        if len(locations) > 2 or (comparison_intent and time_range == "historical"):
+            complexity = "complex"
+        elif len(locations) == 2 or time_range in ["forecast", "comparison"]:
+            complexity = "moderate"
+        
+        return {
+            "locations": locations,
+            "location_count": len(locations),
+            "time_range": time_range,
+            "metrics": metrics,
+            "comparison_intent": comparison_intent,
+            "is_african_city": is_african,
+            "complexity": complexity,
+            "raw_query": query
+        }
+
+    def score_tool_relevance(self, tool_name: str, requirements: dict[str, Any]) -> float:
+        """
+        Score tool relevance (0-1) based on query requirements.
+        
+        Per audit requirement: "Score: Tool relevance 0-1 for EACH requirement"
+        
+        Args:
+            tool_name: Name of the tool to score
+            requirements: Parsed query requirements from evaluate_query_requirements()
+            
+        Returns:
+            Relevance score 0.0-1.0 (higher = more relevant)
+        """
+        if tool_name not in self.tool_capabilities:
+            return 0.5  # Unknown tool, neutral score
+        
+        capabilities = self.tool_capabilities[tool_name]
+        score = capabilities["confidence"]  # Start with base confidence
+        
+        # Boost for African cities if tool specializes in Africa
+        if "africa" in capabilities["regions"] and any(requirements.get("is_african_city", [])):
+            score *= 1.2  # 20% boost for specialized tool
+        
+        # Boost for realtime if query is current
+        if requirements.get("time_range") == "current" and capabilities.get("realtime"):
+            score *= 1.1  # 10% boost for realtime capability
+        
+        # Penalty for historical if tool doesn't support it
+        if requirements.get("time_range") == "historical" and not capabilities.get("historical"):
+            score *= 0.7  # 30% penalty
+        
+        # Cap at 1.0
+        return min(score, 1.0)
+
+    def build_execution_plan(self, requirements: dict[str, Any]) -> list[ToolCall]:
+        """
+        Build intelligent execution plan with dependencies and priorities.
+        
+        Per audit requirement: "Graph: Execution dependencies (parallel vs sequential)"
+        
+        Args:
+            requirements: Parsed query requirements
+            
+        Returns:
+            List of ToolCall objects with priorities and dependencies
+        """
+        plan = []
+        
+        # Determine primary tools based on requirements
+        locations = requirements.get("locations", [])
+        is_african = requirements.get("is_african_city", [])
+        comparison_intent = requirements.get("comparison_intent", False)
+        
+        if locations:
+            for idx, location in enumerate(locations):
+                # Choose tool based on location
+                if idx < len(is_african) and is_african[idx]:
+                    tool_name = "get_african_city_air_quality"
+                    priority = 100  # Highest priority for African cities
+                else:
+                    tool_name = "get_city_air_quality"
+                    priority = 90  # High priority for global cities
+                
+                # Score relevance
+                relevance = self.score_tool_relevance(tool_name, requirements)
+                
+                # Create tool call
+                tool_call = ToolCall(
+                    name=tool_name,
+                    args={"city": location},
+                    priority=int(priority * relevance),
+                    dependencies=[]  # Parallel execution for multiple cities
+                )
+                plan.append(tool_call)
+        
+        # Add weather if forecast requested
+        if requirements.get("time_range") == "forecast":
+            for location in locations:
+                tool_call = ToolCall(
+                    name="get_weather_forecast",
+                    args={"city": location, "days": 3},
+                    priority=80,
+                    dependencies=[]  # Can run in parallel
+                )
+                plan.append(tool_call)
+        
+        # Add search for historical or if no locations detected
+        if requirements.get("time_range") == "historical" or not locations:
+            tool_call = ToolCall(
+                name="search_web",
+                args={"query": requirements.get("raw_query", "")},
+                priority=60,
+                dependencies=[]  # Can run in parallel
+            )
+            plan.append(tool_call)
+        
+        return plan
 
     def _is_circuit_open(self, tool_name: str) -> bool:
         """Check if circuit breaker is open for a tool."""
