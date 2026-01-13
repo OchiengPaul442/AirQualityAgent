@@ -1207,12 +1207,6 @@ class AgentService:
 
         # Get response parameters for the style
         response_params = get_response_parameters(style or "general", temperature, top_p)
-        
-        # Increase max_tokens if charts are expected (based on proactive tool calls)
-        if "generate_chart" in tools_called_proactively:
-            original_max_tokens = response_params.get("max_tokens", 1536)
-            response_params["max_tokens"] = max(original_max_tokens, 2048)  # Ensure at least 2048 for charts
-            logger.info(f"📊 Increased max_tokens to {response_params['max_tokens']} for chart generation")
 
         # Use SessionContextManager for document accumulation (replaces old document_cache)
         if document_data and session_id:
@@ -1405,6 +1399,12 @@ class AgentService:
 
         query_type = classification.get("query_type", "general")
         logger.info(f"📊 Query classified as: {query_type}")
+
+        # Increase max_tokens if charts are expected (based on proactive tool calls)
+        if "generate_chart" in tools_called_proactively:
+            original_max_tokens = response_params.get("max_tokens", 1536)
+            response_params["max_tokens"] = max(original_max_tokens, 2048)  # Ensure at least 2048 for charts
+            logger.info(f"📊 Increased max_tokens to {response_params['max_tokens']} for chart generation")
 
         # Deterministic personal-info recall (doesn't depend on the model remembering).
         # Only triggers for explicit recall questions (e.g., "What's my name?").
