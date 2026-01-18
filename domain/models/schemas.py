@@ -48,7 +48,6 @@ class ChatResponse(BaseModel):
         False, description="Whether a document was uploaded and processed"
     )
     document_filename: str | None = Field(None, description="Name of the uploaded document if any")
-    reasoning_content: str | None = Field(None, description="Reasoning trace from AI model (for deepseek-r1)")
 
     # Continuation tracking fields for truncated responses
     requires_continuation: bool = Field(
@@ -57,7 +56,7 @@ class ChatResponse(BaseModel):
     )
     finish_reason: str | None = Field(
         None,
-        description="Reason why generation stopped: 'stop' (complete), 'length' (truncated), 'content_filter', etc."
+        description="Why generation stopped: 'stop' (complete) or 'length' (truncated)"
     )
     truncated: bool = Field(
         False,

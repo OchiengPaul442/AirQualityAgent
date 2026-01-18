@@ -749,6 +749,10 @@ async def chat(
             document_processed=bool(document_filenames or document_filename),
             document_filename=document_filenames[0] if document_filenames else document_filename,
             reasoning_content=reasoning_content,
+            # Truncation and continuation flags - critical for Continue button
+            truncated=is_truncated,
+            requires_continuation=requires_continuation,
+            finish_reason=finish_reason,
         )
     except HTTPException:
         raise
