@@ -203,8 +203,9 @@ class OllamaProvider(BaseAIProvider):
 
         tools_used = []
 
-        # Track truncation status
+        # Track truncation status and finish reason
         was_truncated = False
+        done_reason = "stop"  # Default to stop
 
         # Retry configuration with longer delays for low-end models
         max_retries = 3
@@ -261,10 +262,11 @@ class OllamaProvider(BaseAIProvider):
 
                 # Check if response was truncated
                 if isinstance(response, dict):
-                    done_reason = response.get("done_reason")
+                    done_reason = response.get("done_reason", "stop")
                     if done_reason == "length":
                         logger.warning("Response was truncated due to max_tokens limit - will add notification")
                         was_truncated = True
+                    logger.info(f"📊 Ollama done_reason: {done_reason}")
 
                 break  # Success, exit retry loop
 
@@ -526,6 +528,15 @@ class OllamaProvider(BaseAIProvider):
                         "top_p": top_p,
                     },
                 )
+                
+                # Check done_reason from final response
+                if isinstance(final_response, dict):
+                    done_reason = final_response.get("done_reason", "stop")
+                    if done_reason == "length":
+                        logger.warning("Final response was truncated due to max_tokens limit")
+                        was_truncated = True
+                    logger.info(f"📊 Final response done_reason: {done_reason}")
+                
                 final_message = (
                     final_response.get("message")
                     if isinstance(final_response, dict)
@@ -538,7 +549,7 @@ class OllamaProvider(BaseAIProvider):
                         "tools_used": tools_used,
                         "tokens_used": 0,
                         "cost_estimate": 0.0,
-                        "finish_reason": "stop",  # Default for error cases
+                        "finish_reason": done_reason,
                     }
                 response_text = final_message.content
             except Exception as e:
@@ -683,7 +694,7 @@ class OllamaProvider(BaseAIProvider):
             "reasoning_content": "\n".join(thinking_steps) if thinking_steps else None,
             "tokens_used": 0,  # Ollama doesn't provide token counts
             "cost_estimate": 0.0,  # Local model, no cost
-            "finish_reason": "stop",  # Ollama doesn't provide finish_reason, default to "stop"
+            "finish_reason": done_reason,  # Use actual done_reason from Ollama response
         }
 
         # Add chart_result if chart was generated

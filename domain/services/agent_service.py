@@ -382,14 +382,88 @@ class AgentService:
         return False
 
     def _check_response_completeness(self, response: str) -> bool:
-        """Check if response appears incomplete."""
+        """
+        Check if response appears incomplete or truncated mid-thought.
+        
+        Best practices from ChatGPT:
+        1. Check for incomplete sentences (no ending punctuation)
+        2. Check for incomplete lists or enumerations
+        3. Check for incomplete code blocks or markdown
+        4. Check for text that ends abruptly mid-word or mid-phrase
+        
+        Args:
+            response: The response text to check
+            
+        Returns:
+            bool: True if response appears incomplete, False otherwise
+        """
         if not response or len(response) < 50:
             return False
-        # Check if ends mid-sentence
-        tail = response[-50:].strip()
-        if tail.endswith((",", "(", "[", "{")):
-            logger.warning("Response appears incomplete")
+        
+        # Get last 100 characters for analysis
+        tail = response[-100:].strip()
+        last_50 = response[-50:].strip()
+        
+        # 1. Check if ends with incomplete punctuation marks
+        incomplete_punctuation = (",", "(", "[", "{", ":", ";", "\\", "-")
+        if last_50.endswith(incomplete_punctuation):
+            logger.warning(f"Response appears incomplete: ends with '{last_50[-1]}'")
             return True
+        
+        # 2. Check for incomplete markdown lists (ends with list marker)
+        list_markers = ("- ", "* ", "• ", "1. ", "2. ", "3. ", "4. ", "5. ")
+        for marker in list_markers:
+            if tail.endswith(marker) or f"\n{marker}" in tail[-30:]:
+                logger.warning(f"Response appears incomplete: incomplete list marker '{marker}'")
+                return True
+        
+        # 3. Check for incomplete numbered steps or headings
+        import re
+        if re.search(r'\n\s*#+\s*$', tail):  # Markdown heading with no text
+            logger.warning("Response appears incomplete: incomplete markdown heading")
+            return True
+        
+        if re.search(r'\n\s*\d+\.\s*\*\*[^*]*$', tail):  # Numbered item with incomplete bold
+            logger.warning("Response appears incomplete: incomplete numbered item with formatting")
+            return True
+        
+        # 4. Check for incomplete sentences (no ending punctuation in last sentence)
+        # Get last sentence (after last period, exclamation, or question mark)
+        last_sentence_match = re.search(r'[.!?]\s*([^.!?]+)$', response)
+        if last_sentence_match:
+            last_sentence = last_sentence_match.group(1).strip()
+            # If last sentence is long (>30 chars) and has no ending punctuation, likely incomplete
+            if len(last_sentence) > 30 and not last_sentence[-1] in '.!?':
+                logger.warning(f"Response appears incomplete: long sentence without ending punctuation")
+                return True
+        
+        # 5. Check for incomplete markdown formatting
+        # Count opening/closing markers
+        bold_count = response.count("**") % 2  # Odd number means unclosed
+        code_block_count = response.count("```") % 2  # Odd number means unclosed
+        
+        if code_block_count != 0:
+            logger.warning("Response appears incomplete: unclosed code block")
+            return True
+        
+        if bold_count != 0 and "**" in tail:  # Only if bold marker near the end
+            logger.warning("Response appears incomplete: unclosed bold formatting")
+            return True
+        
+        # 6. Check for incomplete table rows (ends with pipe)
+        if re.search(r'\|[^|\n]*$', tail):
+            logger.warning("Response appears incomplete: incomplete table row")
+            return True
+        
+        # 7. Check if response ends mid-word (no space before end)
+        if len(response) > 100:
+            last_char = response[-1]
+            second_last = response[-2] if len(response) > 1 else ' '
+            # If ends with alphanumeric and previous char is also alphanumeric (mid-word)
+            if last_char.isalnum() and second_last.isalnum() and not tail.endswith(('.', '!', '?')):
+                logger.warning("Response appears incomplete: ends mid-word")
+                return True
+        
         return False
 
     def _manage_memory(self, session_id: str | None = None):
