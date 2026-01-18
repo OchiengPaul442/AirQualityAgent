@@ -2,10 +2,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -180,7 +179,7 @@ async def cleanup_old_charts():
     """Clean up old chart files on startup to prevent disk space issues."""
     try:
         from infrastructure.storage.chart_storage import get_chart_storage_service
-        
+
         storage_service = get_chart_storage_service()
         cleaned_count = storage_service.cleanup_old_charts(max_age_hours=24)
         logger.info(f"✓ Startup cleanup: {cleaned_count} old charts removed")

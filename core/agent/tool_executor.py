@@ -492,7 +492,6 @@ class ToolExecutor:
             elif function_name == "get_air_quality_forecast":
                 # Intelligent routing: Use AirQo for African cities, WAQI for others
                 city = args.get("city", "").lower()
-                days = args.get("days", 3)
 
                 # List of African countries/cities that should use AirQo
                 african_indicators = [
@@ -780,7 +779,7 @@ class ToolExecutor:
                                 "full_length": doc_data.get("full_length", 0),
                                 "source": "uploaded_cache"
                             }
-                    
+
                     return {
                         "success": False,
                         "error": f"File not found: {file_path}. If you uploaded a document, it should already be in the conversation context.",

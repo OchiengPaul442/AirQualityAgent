@@ -139,14 +139,14 @@ class ResultFormatter:
                 formatted = ""
                 for i, item in enumerate(result["results"][:max_results], 1):
                     title = item.get('title', 'No title')
-                    
+
                     # Add real-time data indicator if present
                     realtime_indicator = ""
                     if item.get('realtime_data'):
                         realtime_indicator = " [LIVE DATA] "
-                    
+
                     formatted += f"{i}. {realtime_indicator}{title}\n"
-                    
+
                     # Include real-time measurements if available
                     if item.get('realtime_data'):
                         realtime_data = item.get('realtime_data', {})
@@ -157,10 +157,10 @@ class ResultFormatter:
                         if realtime_data.get('pm10'):
                             formatted += f"PM10: {realtime_data['pm10']} µg/m³"
                         formatted += "\n"
-                    
+
                     snippet = item.get('body', item.get('snippet', 'No description'))
                     formatted += f"   {snippet[:200]}{'...' if len(snippet) > 200 else ''}\n"
-                    
+
                     # Add credibility badge
                     credibility = item.get('credibility', {})
                     if credibility.get('level'):
@@ -169,7 +169,7 @@ class ResultFormatter:
                         if credibility.get('reason'):
                             formatted += f" ({credibility['reason']})"
                         formatted += "\n"
-                    
+
                     formatted += f"   Source: {item.get('href', item.get('url', 'N/A'))}\n\n"
                 return formatted
 

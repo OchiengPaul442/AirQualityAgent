@@ -153,20 +153,20 @@ class WAQIService:
         # Add success flag based on WAQI API status
         if data.get("status") == "ok" and "data" in data:
             formatted["success"] = True
-            
+
             # Extract key data and add to top level for easy AI access
             waqi_data = data.get("data", {})
             formatted["overall_aqi"] = waqi_data.get("aqi")
             formatted["city_name"] = waqi_data.get("city", {}).get("name", city)
             formatted["timestamp"] = waqi_data.get("time", {}).get("s")
             formatted["dominant_pollutant"] = waqi_data.get("dominentpol")
-            
+
             # Extract PM2.5 and PM10 AQI values from iaqi and add to root for easy access
             iaqi = waqi_data.get("iaqi", {})
-            
+
             # Initialize pollutants dict for easy access
             formatted["pollutants"] = {}
-            
+
             if "pm25" in iaqi and isinstance(iaqi["pm25"], dict):
                 pm25_aqi = iaqi["pm25"].get("v")
                 if pm25_aqi is not None:
@@ -181,7 +181,7 @@ class WAQIService:
                             "concentration_ugm3": round(pm25_conc, 1),
                             "unit": "µg/m³"
                         }
-            
+
             if "pm10" in iaqi and isinstance(iaqi["pm10"], dict):
                 pm10_aqi = iaqi["pm10"].get("v")
                 if pm10_aqi is not None:
@@ -196,7 +196,7 @@ class WAQIService:
                             "concentration_ugm3": round(pm10_conc, 1),
                             "unit": "µg/m³"
                         }
-            
+
             # Extract other pollutants if available
             for pollutant in ["no2", "o3", "so2", "co"]:
                 if pollutant in iaqi and isinstance(iaqi[pollutant], dict):

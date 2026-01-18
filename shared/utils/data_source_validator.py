@@ -17,7 +17,7 @@ class DataSourceValidator:
 
     @staticmethod
     def validate_and_enhance(
-        data: dict[str, Any], 
+        data: dict[str, Any],
         source_name: str,
         api_endpoint: str = "",
         require_timestamp: bool = True
@@ -85,7 +85,7 @@ class DataSourceValidator:
             Formatted citation string
         """
         source = data.get("source", "Unknown")
-        
+
         # Extract timestamp
         timestamp = None
         if "timestamp" in data:
@@ -97,7 +97,7 @@ class DataSourceValidator:
 
         # Build citation
         citation_parts = [f"Source: {source}"]
-        
+
         if include_timestamp and timestamp:
             # Try to format timestamp nicely
             try:

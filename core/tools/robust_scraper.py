@@ -98,7 +98,7 @@ class RobustScraper:
             # Remove script, style, and navigation elements
             for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "iframe"]):
                 script.decompose()
-            
+
             # Remove comments
             from bs4 import Comment
             for comment in soup.find_all(text=lambda text: isinstance(text, Comment)):

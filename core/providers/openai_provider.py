@@ -937,7 +937,6 @@ class OpenAIProvider(BaseAIProvider):
                         or result.get("search_location")
                         or "Unknown site"
                     )
-                    site_id = m.get("site_id") or site.get("site_id") or "Unknown"
                     time = m.get("time") or m.get("timestamp") or "Unknown time"
                     pm25 = m.get("pm2_5", {})
                     pm10 = m.get("pm10", {})
@@ -972,12 +971,12 @@ class OpenAIProvider(BaseAIProvider):
                     "",
                     f"- Overall AQI: {aqi}" + (f" (Dominant: {dominant})" if dominant else ""),
                 ]
-                
+
                 if pm25_conc is not None:
                     summary_lines.append(f"- PM2.5: {pm25_conc} µg/m³")
                 if pm10_conc is not None:
                     summary_lines.append(f"- PM10: {pm10_conc} µg/m³")
-                    
+
                 summary_lines.append(f"- Time: {time}")
 
                 return "\n".join(summary_lines)

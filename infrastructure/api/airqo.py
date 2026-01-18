@@ -579,7 +579,7 @@ class AirQoService:
                 "message": "Invalid coordinates: latitude and longitude are required",
                 "error": "missing_coordinates",
             }
-        
+
         try:
             # Step 1: Reverse geocode to get city name first
             city_name = self._reverse_geocode(latitude, longitude)
@@ -851,7 +851,7 @@ class AirQoService:
                 "message": f"No monitoring sites found for '{location}'",
                 "sites": [],
             }
-        except Exception as e:
+        except Exception:
             return {
                 "success": False,
                 "message": provider_unavailable_message("AirQo"),

@@ -236,7 +236,7 @@ class AfricaIntelligence:
             (station_distance_km < 5 or is_satellite)
             and data_age_hours < 6
         ):
-            explanation = f"Medium confidence: "
+            explanation = "Medium confidence: "
             if is_satellite:
                 explanation += "Satellite data (11-25km resolution)"
             else:

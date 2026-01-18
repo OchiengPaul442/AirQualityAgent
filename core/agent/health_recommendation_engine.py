@@ -247,7 +247,7 @@ class HealthRecommendationEngine:
         )
 
         if is_sensitive:
-            reasoning += f". Your health condition(s) require stricter limits."
+            reasoning += ". Your health condition(s) require stricter limits."
 
         # Build alternatives
         alternatives = []

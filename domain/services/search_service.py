@@ -3,7 +3,6 @@ import logging
 import os
 import time
 from typing import Any, Optional
-from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 

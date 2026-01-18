@@ -13,15 +13,7 @@ import os
 from io import BytesIO
 from typing import Any
 
-try:
-    import tiktoken
-
-    TIKTOKEN_AVAILABLE = True
-except ImportError:
-    TIKTOKEN_AVAILABLE = False
-
 from shared.config.settings import get_settings
-from shared.utils.provider_errors import aeris_unavailable_message
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +43,7 @@ class DocumentScanner:
         """
         if not context:
             return (False, None)
-        
+
         # Check for document content markers
         if "<document_content>" in context and "</document_content>" in context:
             # Extract content between tags
@@ -60,17 +52,17 @@ class DocumentScanner:
             content = context[start:end].strip()
             logger.info("Document content found in context - using existing data")
             return (True, content)
-        
+
         # Check for markdown code blocks with document metadata
         if "```" in context and any(marker in context for marker in ["CSV File:", "Excel File:", "PDF File:"]):
             logger.info("Document content detected in markdown - using existing data")
             return (True, None)  # Content is in markdown, not extracted
-        
+
         return (False, None)
 
     def smart_document_handling(
-        self, 
-        file_bytes: BytesIO | bytes, 
+        self,
+        file_bytes: BytesIO | bytes,
         filename: str,
         interactive: bool = True
     ) -> dict[str, Any]:
@@ -88,7 +80,7 @@ class DocumentScanner:
             Dictionary with content or disambiguation request
         """
         file_lower = filename.lower()
-        
+
         # Pre-scan file size and structure
         if isinstance(file_bytes, bytes):
             file_size_mb = len(file_bytes) / (1024 * 1024)
@@ -98,7 +90,7 @@ class DocumentScanner:
             file_size_mb = file_bytes.tell() / (1024 * 1024)
             file_bytes.seek(0)  # Seek back to start
             file_bytes_io = file_bytes
-        
+
         # Handle PDF files
         if file_lower.endswith(".pdf"):
             try:
@@ -106,7 +98,7 @@ class DocumentScanner:
                 file_bytes_io.seek(0)
                 reader = PyPDF2.PdfReader(file_bytes_io)
                 page_count = len(reader.pages)
-                
+
                 if page_count > 100 and interactive:
                     # Request user disambiguation (audit requirement)
                     return {
@@ -128,11 +120,11 @@ class DocumentScanner:
                             "Specify custom page range"
                         ]
                     }
-                
+
                 logger.info(f"Processing PDF: {filename} - {page_count} pages ({file_size_mb:.2f} MB)")
             except Exception as e:
                 logger.warning(f"Error pre-scanning PDF: {e}")
-        
+
         # Handle Excel files
         elif file_lower.endswith((".xlsx", ".xls")):
             try:
@@ -140,7 +132,7 @@ class DocumentScanner:
                 file_bytes_io.seek(0)
                 excel_file = pd.ExcelFile(file_bytes_io)
                 sheet_names = excel_file.sheet_names
-                
+
                 if len(sheet_names) > 3 and interactive:
                     # Request user disambiguation (audit requirement)
                     return {
@@ -163,11 +155,11 @@ class DocumentScanner:
                             "Specify sheet name(s)"
                         ]
                     }
-                
+
                 logger.info(f"Processing Excel: {filename} - {len(sheet_names)} sheets ({file_size_mb:.2f} MB)")
             except Exception as e:
                 logger.warning(f"Error pre-scanning Excel: {e}")
-        
+
         # Handle CSV files
         elif file_lower.endswith(".csv"):
             try:
@@ -179,7 +171,7 @@ class DocumentScanner:
                 # Count total rows efficiently
                 total_rows = sum(1 for _ in file_bytes_io) - 1  # Subtract header
                 file_bytes_io.seek(0)
-                
+
                 if total_rows > 1000 and interactive:
                     # Request user disambiguation (audit requirement)
                     return {
@@ -204,14 +196,15 @@ class DocumentScanner:
                             "Specify date range or filter"
                         ]
                     }
-                
+
                 logger.info(f"Processing CSV: {filename} - {total_rows:,} rows ({file_size_mb:.2f} MB)")
             except Exception as e:
                 logger.warning(f"Error pre-scanning CSV: {e}")
-        
+
         # If no disambiguation needed or not interactive, proceed with normal scanning
+        # IMPORTANT: Disable smart_handling to prevent infinite recursion
         logger.info(f"Processing {filename} - {file_size_mb:.2f} MB")
-        return self.scan_document_from_bytes(file_bytes_io, filename)
+        return self.scan_document_from_bytes(file_bytes_io, filename, use_smart_handling=False)
 
     def scan_document_from_bytes(
         self, file_bytes: BytesIO | bytes, filename: str, use_smart_handling: bool = True
@@ -277,8 +270,15 @@ class DocumentScanner:
                 }
 
         except Exception as e:
-            logger.error(f"Error scanning document {filename}: {e}", exc_info=True)
-            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
+            # Avoid recursion in error logging - use simple error message without exc_info
+            error_msg = f"Error scanning document {filename}: {str(e)}"
+            try:
+                logger.error(error_msg)
+            except:
+                # If logging fails, fail silently to prevent cascading errors
+                print(error_msg)
+
+            return {"error": "Failed to process document.", "message": str(e), "filename": filename}
 
     def _log_processing_result(self, result: dict[str, Any]):
         """
@@ -294,7 +294,7 @@ class DocumentScanner:
                 f"Content length: {result.get('full_length', 0)} chars, "
                 f"Truncated: {result.get('truncated', False)}"
             )
-            
+
             # Additional metadata logging
             metadata = result.get("metadata", {})
             if result.get("file_type") == "pdf":
@@ -333,10 +333,11 @@ class DocumentScanner:
                 "filename": os.path.basename(file_path),
             }
         except Exception as e:
-            logger.error(f"Error reading file {file_path}: {e}", exc_info=True)
+            # Avoid recursion in error logging
+            logger.error(f"Error reading file {file_path}: {str(e)}")
             return {
                 "error": "Failed to process document.",
-                "message": aeris_unavailable_message(),
+                "message": str(e),
                 "filename": os.path.basename(file_path),
             }
 
@@ -376,8 +377,8 @@ class DocumentScanner:
                 "install_command": "pip install PyPDF2",
             }
         except Exception as e:
-            logger.error(f"Error reading PDF {filename}: {e}", exc_info=True)
-            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
+            logger.error(f"Error reading PDF {filename}: {str(e)}")
+            return {"error": "Failed to process PDF document.", "message": str(e), "filename": filename}
 
     def _scan_csv_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract data from CSV file bytes with multiple encoding support"""
@@ -395,18 +396,17 @@ class DocumentScanner:
             df = None
             last_error = None
             successful_encoding = None
-            
+
             for encoding in encodings:
                 try:
                     file_bytes.seek(0)  # Reset position
                     df = pd.read_csv(file_bytes, encoding=encoding, on_bad_lines='skip')
-                    successful_encoding = encoding
                     logger.info(f"Successfully read CSV with {encoding} encoding")
                     break
                 except (UnicodeDecodeError, pd.errors.ParserError) as e:
                     last_error = e
                     continue
-            
+
             if df is None:
                 raise last_error or ValueError("Could not read CSV with any encoding")
 
@@ -468,8 +468,8 @@ class DocumentScanner:
                 "install_command": "pip install pandas",
             }
         except Exception as e:
-            logger.error(f"Error reading CSV {filename}: {e}", exc_info=True)
-            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
+            logger.error(f"Error reading CSV {filename}: {str(e)}")
+            return {"error": "Failed to process CSV document.", "message": str(e), "filename": filename}
 
     def _scan_excel_bytes(self, file_bytes: BytesIO | bytes, filename: str) -> dict[str, Any]:
         """Extract data from Excel file bytes - processes ALL sheets"""
@@ -591,5 +591,5 @@ class DocumentScanner:
                 "install_command": f"pip install {missing_lib}",
             }
         except Exception as e:
-            logger.error(f"Error reading Excel file {filename}: {e}", exc_info=True)
-            return {"error": "Failed to process document.", "message": aeris_unavailable_message(), "filename": filename}
+            logger.error(f"Error reading Excel file {filename}: {str(e)}")
+            return {"error": "Failed to process Excel document.", "message": str(e), "filename": filename}

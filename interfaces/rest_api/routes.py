@@ -5,11 +5,9 @@ import re
 import time
 import uuid
 from io import BytesIO
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -233,11 +231,11 @@ async def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
         if hasattr(agent, "session_manager"):
             agent.session_manager.clear_session(session_id)
             logger.info(f"Cleaned up agent session context for {session_id[:8]}...")
-        
+
         # Clean up charts associated with this session
         try:
             from infrastructure.storage.chart_storage import get_chart_storage_service
-            
+
             storage_service = get_chart_storage_service()
             cleanup_result = storage_service.delete_session_charts(session_id)
             logger.info(f"✓ Chart cleanup for session {session_id[:8]}: {cleanup_result['message']}")
@@ -872,7 +870,7 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
 
             except HTTPException:
                 raise  # Re-raise HTTP exceptions
-            except Exception as e:
+            except Exception:
                 logger.exception("Document processing failed")
                 errors["document"] = "Failed to process document"
             finally:
@@ -942,7 +940,7 @@ async def query_air_quality(request: AirQualityQueryRequest, document: UploadFil
 
                 if openmeteo_result:
                     results["openmeteo"] = sanitize_response(openmeteo_result)
-            except Exception as e:
+            except Exception:
                 logger.exception("Open-Meteo API failed")
                 errors["openmeteo"] = provider_unavailable_message("Open-Meteo")
 
@@ -999,7 +997,7 @@ async def connect_mcp_server(request: MCPConnectionRequest):
                 pass
 
         return MCPConnectionResponse(status="connected", name=request.name, available_tools=tools)
-    except Exception as e:
+    except Exception:
         logger.error("Failed to connect MCP server", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()})
 
@@ -1011,7 +1009,7 @@ async def list_mcp_connections():
         agent = get_agent()
         connections = [{"name": name, "status": "connected"} for name in agent.mcp_clients.keys()]
         return MCPListResponse(connections=connections)
-    except Exception as e:
+    except Exception:
         logger.error("Failed to list MCP connections", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()})
 
@@ -1030,7 +1028,7 @@ async def disconnect_mcp_server(name: str):
             raise HTTPException(status_code=404, detail=f"MCP server '{name}' not found")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.error("Failed to disconnect MCP server", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": aeris_unavailable_message()})
 

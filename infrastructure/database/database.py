@@ -5,8 +5,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from shared.config.settings import get_settings

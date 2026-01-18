@@ -38,16 +38,16 @@ PROMPT_INJECTION_PATTERNS = [
     # Direct override attempts
     r"(?i)\b(ignore|disregard|forget)\s+(previous|all|above|prior)\s+(instructions|prompts|rules|directions)",
     r"(?i)\b(override|bypass|disable)\s+(system|security|safety|rules)",
-    
+
     # Role manipulation
     r"(?i)\b(you\s+are\s+now|act\s+as|pretend\s+to\s+be|simulate)\s+(a\s+)?(jailbreak|dan|evil|unethical)",
     r"(?i)system\s*[:=]\s*['\"]",  # system: "new instructions"
     r"(?i)new\s+(role|personality|character|mode)\s*[:=]",
-    
+
     # Instruction extraction
     r"(?i)(repeat|show|display|tell\s+me|what\s+are)\s+(your|the)\s+(instructions|system\s+prompt|rules|guidelines)",
     r"(?i)\b(print|output|echo|reveal)\s+(system|internal|hidden)\s+(prompt|instructions|config)",
-    
+
     # API key fishing
     r"(?i)(what\s+is|show\s+me|tell\s+me)\s+(your|the)\s+(api\s*key|token|secret|password)",
     r"(?i)sk-[a-zA-Z0-9]{20,}",  # OpenAI API key pattern
@@ -203,17 +203,17 @@ class InputSanitizer:
         """
         if not isinstance(text, str) or not text.strip():
             return (False, None)
-        
+
         # Check for prompt injection patterns
         injection_detected = False
         for pattern in PROMPT_INJECTION_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL):
                 injection_detected = True
                 break
-        
+
         if not injection_detected:
             return (False, None)
-        
+
         # Extract legitimate air quality query
         # Common patterns: "what is AQI in [location]", "air quality in [location]", etc.
         air_quality_patterns = [
@@ -221,14 +221,14 @@ class InputSanitizer:
             r"(?i)(is\s+it\s+safe|should\s+i)(\s+to)?\s+(go\s+out|exercise|run|bike)(\s+in)?\s+([a-zA-Z\s,]+)?",
             r"(?i)(how\s+is|check|get|show)(\s+the)?\s+(air\s+quality|aqi)(\s+in)?\s+([a-zA-Z\s,]+)?",
         ]
-        
+
         for pattern in air_quality_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 # Extract the matched air quality query
                 query = match.group(0).strip()
                 return (True, query)
-        
+
         # If no specific query extracted, return generic request
         return (True, "What is the current air quality?")
 
@@ -300,7 +300,7 @@ class InputSanitizer:
         """
         if not isinstance(text, str):
             return str(text)
-        
+
         # API key patterns (common providers)
         api_key_patterns = [
             (r"sk-[a-zA-Z0-9]{20,}", "[REDACTED_OPENAI_KEY]"),  # OpenAI
@@ -310,10 +310,10 @@ class InputSanitizer:
             (r"api[_-]?key[=:]\s*['\"]?[a-zA-Z0-9_\-]{20,}['\"]?", "api_key=[REDACTED_KEY]"),  # Generic API keys
             (r"password[=:]\s*['\"]?[^\s'\"]{8,}['\"]?", "password=[REDACTED_PASSWORD]"),  # Passwords
         ]
-        
+
         for pattern, replacement in api_key_patterns:
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-        
+
         return text
 
 

@@ -8,8 +8,6 @@ Charts can be returned as base64 encoded images or saved to files.
 import base64
 import io
 import logging
-import os
-import re
 import warnings
 from datetime import datetime
 from typing import Any, Literal
@@ -57,10 +55,10 @@ class VisualizationService:
                 "ytick.labelsize": 9,
             }
         )
-        
+
         # Initialize chart storage service
         self._chart_storage = None
-    
+
     @property
     def chart_storage(self):
         """Lazy-load chart storage service."""
@@ -78,45 +76,45 @@ class VisualizationService:
         - Optimizes for different chart types
         """
         df_processed = df.copy()
-        
+
         # Handle categorical x-axis data with too many unique values
         if x_column and x_column in df_processed.columns:
             unique_x = df_processed[x_column].nunique()
-            
+
             # For bar/pie charts, limit categories to prevent overcrowding
             if chart_type in ["bar", "pie"] and unique_x > 15:
                 logger.warning(f"Large number of categories ({unique_x}) in {x_column}, sampling top categories")
-                
+
                 # For bar charts, keep top 15 by sum of y values
                 if chart_type == "bar" and y_columns:
                     # Calculate total y value for each x category
                     category_totals = df_processed.groupby(x_column)[y_columns[0]].sum().sort_values(ascending=False)
                     top_categories = category_totals.head(15).index
-                    
+
                     # Filter to top categories and add "Others" category
                     df_top = df_processed[df_processed[x_column].isin(top_categories)]
                     df_others = df_processed[~df_processed[x_column].isin(top_categories)]
-                    
+
                     if not df_others.empty:
                         others_row = df_others[y_columns].sum().to_dict()
                         others_row[x_column] = "Others"
                         df_processed = pd.concat([df_top, pd.DataFrame([others_row])], ignore_index=True)
                     else:
                         df_processed = df_top
-                        
+
                 # For pie charts, similar logic
                 elif chart_type == "pie":
                     category_totals = df_processed.groupby(x_column)[y_columns[0]].sum().sort_values(ascending=False)
                     top_categories = category_totals.head(10).index
                     df_processed = df_processed[df_processed[x_column].isin(top_categories)]
-            
+
             # For line/scatter plots with too many x points, sample
             elif chart_type in ["line", "scatter", "timeseries"] and len(df_processed) > 200:
                 # Sample every nth point for readability
                 sample_rate = max(1, len(df_processed) // 200)
                 df_processed = df_processed.iloc[::sample_rate].copy()
                 logger.info(f"Sampled {chart_type} chart data: {len(df_processed)} points for readability")
-        
+
         # Handle very long text labels by truncating
         for col in [x_column] + y_columns:
             if col and col in df_processed.columns and df_processed[col].dtype == 'object':
@@ -125,7 +123,7 @@ class VisualizationService:
                 # Add ellipsis if truncated
                 mask = df_processed[col].str.len() == 30
                 df_processed.loc[mask, col] = df_processed.loc[mask, col] + "..."
-        
+
         return df_processed
 
     def generate_chart(
@@ -423,15 +421,15 @@ class VisualizationService:
                 buffer.seek(0)
                 chart_bytes = buffer.read()
                 plt.close(fig)
-                
+
                 # Use session_id or default
                 sess_id = session_id or "default"
-                
+
                 # Save using chart storage service (Cloudinary with local fallback)
                 storage_result = self.chart_storage.save_chart(
                     chart_bytes, sess_id, chart_type
                 )
-                
+
                 return {
                     "success": True,
                     "chart_data": storage_result["url"],
@@ -603,17 +601,17 @@ class VisualizationService:
         """
         data_was_modified = False
         df_processed = df.copy()
-        
+
         # Handle categorical x-axis with too many categories
         if x_column and x_column in df_processed.columns:
             unique_x = df_processed[x_column].nunique()
             if unique_x > max_categories:
                 logger.warning(f"Large number of categories ({unique_x}) in {x_column}, sampling top categories")
                 data_was_modified = True
-                
+
                 # Check if x_column is categorical (object type or low cardinality relative to total rows)
                 x_is_categorical = df_processed[x_column].dtype == 'object' or unique_x < len(df_processed) * 0.8
-                
+
                 if x_is_categorical and y_columns and len(y_columns) > 0 and y_columns[0] in df_processed.columns:
                     # For categorical x-axis, keep top categories by sum of y-values
                     try:
@@ -622,10 +620,10 @@ class VisualizationService:
                         if pd.api.types.is_numeric_dtype(category_totals):
                             category_totals = category_totals.abs()
                         top_categories = category_totals.nlargest(max_categories).index
-                        
+
                         # Filter to top categories
                         df_processed = df_processed[df_processed[x_column].isin(top_categories)]
-                        
+
                         # Sort by total value for better visualization
                         df_processed = df_processed.sort_values(by=y_columns[0], ascending=False)
                     except (TypeError, ValueError):
@@ -634,14 +632,14 @@ class VisualizationService:
                 else:
                     # For non-categorical or when aggregation fails, sample randomly
                     df_processed = df_processed.sample(min(max_categories, len(df_processed)), random_state=42)
-            
+
             # Truncate long labels
             if df_processed[x_column].dtype == 'object':
                 original_labels = df_processed[x_column].copy()
                 df_processed[x_column] = df_processed[x_column].astype(str).str.slice(0, max_label_length)
                 if not df_processed[x_column].equals(original_labels.astype(str).str.slice(0, max_label_length)):
                     data_was_modified = True
-        
+
         return df_processed, data_was_modified
 
     def generate_comparison_chart(

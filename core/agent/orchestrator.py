@@ -120,7 +120,7 @@ class ToolOrchestrator:
                 "scrape_website"  # If search fails, try scraping known URLs
             ]
         }
-        
+
         # Tool relevance scoring (Audit Requirement: Confidence scoring 0-1)
         self.tool_capabilities = {
             "get_african_city_air_quality": {
@@ -185,13 +185,13 @@ class ToolOrchestrator:
             - complexity: "simple", "moderate", "complex"
         """
         query_lower = query.lower()
-        
+
         # Known African cities
         african_cities = [
-            "nairobi", "kampala", "lagos", "accra", "addis ababa", "dar es salaam", 
+            "nairobi", "kampala", "lagos", "accra", "addis ababa", "dar es salaam",
             "kigali", "johannesburg", "cape town", "cairo", "casablanca", "tunis"
         ]
-        
+
         # Detect locations
         locations = []
         is_african = []
@@ -199,13 +199,13 @@ class ToolOrchestrator:
             if city in query_lower:
                 locations.append(city.title())
                 is_african.append(True)
-        
+
         # Generic location detection (vs, versus, compared to, etc.)
         if " vs " in query_lower or " versus " in query_lower or " compared to " in query_lower:
             comparison_intent = True
         else:
             comparison_intent = len(locations) > 1
-        
+
         # Detect time range
         time_range = "current"  # Default
         if any(word in query_lower for word in ["forecast", "tomorrow", "next week", "upcoming"]):
@@ -214,7 +214,7 @@ class ToolOrchestrator:
             time_range = "historical"
         elif any(word in query_lower for word in ["weekend", "week", "daily", "hourly"]):
             time_range = "comparison"
-        
+
         # Detect metrics
         metrics = []
         metric_keywords = {
@@ -229,18 +229,18 @@ class ToolOrchestrator:
         for metric, keywords in metric_keywords.items():
             if any(kw in query_lower for kw in keywords):
                 metrics.append(metric)
-        
+
         # If no specific metrics, default to AQI
         if not metrics:
             metrics.append("aqi")
-        
+
         # Determine complexity
         complexity = "simple"
         if len(locations) > 2 or (comparison_intent and time_range == "historical"):
             complexity = "complex"
         elif len(locations) == 2 or time_range in ["forecast", "comparison"]:
             complexity = "moderate"
-        
+
         return {
             "locations": locations,
             "location_count": len(locations),
@@ -267,22 +267,22 @@ class ToolOrchestrator:
         """
         if tool_name not in self.tool_capabilities:
             return 0.5  # Unknown tool, neutral score
-        
+
         capabilities = self.tool_capabilities[tool_name]
         score = capabilities["confidence"]  # Start with base confidence
-        
+
         # Boost for African cities if tool specializes in Africa
         if "africa" in capabilities["regions"] and any(requirements.get("is_african_city", [])):
             score *= 1.2  # 20% boost for specialized tool
-        
+
         # Boost for realtime if query is current
         if requirements.get("time_range") == "current" and capabilities.get("realtime"):
             score *= 1.1  # 10% boost for realtime capability
-        
+
         # Penalty for historical if tool doesn't support it
         if requirements.get("time_range") == "historical" and not capabilities.get("historical"):
             score *= 0.7  # 30% penalty
-        
+
         # Cap at 1.0
         return min(score, 1.0)
 
@@ -299,12 +299,12 @@ class ToolOrchestrator:
             List of ToolCall objects with priorities and dependencies
         """
         plan = []
-        
+
         # Determine primary tools based on requirements
         locations = requirements.get("locations", [])
         is_african = requirements.get("is_african_city", [])
         comparison_intent = requirements.get("comparison_intent", False)
-        
+
         if locations:
             for idx, location in enumerate(locations):
                 # Choose tool based on location
@@ -314,10 +314,10 @@ class ToolOrchestrator:
                 else:
                     tool_name = "get_city_air_quality"
                     priority = 90  # High priority for global cities
-                
+
                 # Score relevance
                 relevance = self.score_tool_relevance(tool_name, requirements)
-                
+
                 # Create tool call
                 tool_call = ToolCall(
                     name=tool_name,
@@ -326,7 +326,7 @@ class ToolOrchestrator:
                     dependencies=[]  # Parallel execution for multiple cities
                 )
                 plan.append(tool_call)
-        
+
         # Add weather if forecast requested
         if requirements.get("time_range") == "forecast":
             for location in locations:
@@ -337,7 +337,7 @@ class ToolOrchestrator:
                     dependencies=[]  # Can run in parallel
                 )
                 plan.append(tool_call)
-        
+
         # Add search for historical or if no locations detected
         if requirements.get("time_range") == "historical" or not locations:
             tool_call = ToolCall(
@@ -347,7 +347,7 @@ class ToolOrchestrator:
                 dependencies=[]  # Can run in parallel
             )
             plan.append(tool_call)
-        
+
         return plan
 
     def _is_circuit_open(self, tool_name: str) -> bool:
@@ -786,20 +786,20 @@ class ResponseValidator:
         Returns:
             Enhanced response
         """
-        
+
         # Always add detailed sources section when search_web was used
         if "search_web" in tools_used and "search_web" in tool_results:
             search_result = tool_results["search_web"]
             if search_result.get("success") and search_result.get("results"):
                 results = search_result["results"][:5]  # Top 5 results
-                
+
                 # Note: Source formatting is handled by MarkdownFormatter.format_response()
                 # which properly consolidates all sources into a single "Sources & References" section.
                 # We no longer add sources here to prevent duplication.
-                
+
                 # The LLM is instructed to use "Source: Title (URL)" inline format,
                 # and MarkdownFormatter will extract and consolidate these automatically.
-                
+
                 logger.info(f"✓ Search returned {len(results)} results for context enrichment")
             else:
                 logger.debug(f"Search result: success={search_result.get('success')}, has_results={bool(search_result.get('results'))}")

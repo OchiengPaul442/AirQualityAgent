@@ -704,7 +704,7 @@ class AgentService:
             r"\btell me about.*document\b",
             r"\btell me about.*file\b",
         ]
-        
+
         import re
 
         # Check if query is about uploaded documents (legitimate)
@@ -712,7 +712,7 @@ class AgentService:
             if re.search(pattern, message_lower, re.IGNORECASE):
                 logger.debug(f"Legitimate document query detected: {message_lower[:100]}")
                 return False  # Not a security violation
-        
+
         # Security violation patterns (only for actual attacks)
         security_patterns = [
             # Tool/function enumeration attempts (but NOT document/file questions)
@@ -1018,7 +1018,7 @@ class AgentService:
                     if langchain_history:
                         logger.info(f"📚 Loaded {len(langchain_history)} messages from LangChain memory for session {session_id}")
                         logger.debug(f"LangChain history content: {langchain_history}")
-                        
+
                         # If no database history, use LangChain as primary source
                         if not history:
                             history = langchain_history
@@ -1030,7 +1030,7 @@ class AgentService:
                             for lc_msg in langchain_history:
                                 if lc_msg.get("content", "") not in db_contents:
                                     history.append(lc_msg)
-                                    logger.debug(f"Added unique message from LangChain to history")
+                                    logger.debug("Added unique message from LangChain to history")
                             logger.info(f"✅ Using database history ({len(history)} messages total after LangChain merge)")
                     else:
                         logger.info(f"📚 LangChain memory exists but is empty for session {session_id}")
@@ -1183,7 +1183,7 @@ class AgentService:
         # CRITICAL: Quick classification for cache-skipping decision
         # Personal information queries must NEVER use cache (need real-time memory recall)
         is_personal_info = any(pattern in message.lower() for pattern in [
-            'my name', 'i live', 'i am from', "i'm from", 'remember', 
+            'my name', 'i live', 'i am from', "i'm from", 'remember',
             "what's my", "what is my", "where do i", "who am i",
             "what city", "which city", "what location"
         ])
@@ -1328,7 +1328,7 @@ class AgentService:
             self.tool_executor.client_ip = client_ip
             self.tool_executor.client_location = None
             logger.info(f"Set IP location for tool executor (fallback): {client_ip}")
-        
+
         # Set session_id for chart organization
         self.tool_executor.session_id = session_id
         logger.debug(f"Set session_id for tool executor: {session_id}")
@@ -1430,10 +1430,10 @@ class AgentService:
             import re
             name_match = re.search(r'my name is (\w+)', message, re.IGNORECASE)
             location_match = re.search(r'i (?:live in|am from|\'m from|\'m in) ([\w\s]+?)(?:\.|$|,|\sand\s)', message, re.IGNORECASE)
-            
+
             logger.info(f"👤 Name match: {name_match.group(1) if name_match else None}")
             logger.info(f"👤 Location match: {location_match.group(1) if location_match else None}")
-            
+
             # If user is SHARING info (not asking)
             if name_match or location_match:
                 name = name_match.group(1) if name_match else None
@@ -1445,20 +1445,20 @@ class AgentService:
                         entry["name"] = name
                     if location:
                         entry["location"] = location
-                
+
                 response_parts = []
                 if name:
                     response_parts.append(f"Nice to meet you, {name}!")
                 if location:
                     response_parts.append(f"Got it - you're in {location}.")
-                
+
                 if response_parts:
                     response_parts.append("I'll remember that for our conversation.")
-                    
+
                     # Create response and add to memory immediately
                     ai_response = " ".join(response_parts)
                     logger.info(f"👤 Generated acknowledgment: {ai_response}")
-                    
+
                     # Add to LangChain memory
                     token_count = None
                     if session_id:
@@ -1471,10 +1471,10 @@ class AgentService:
                                 logger.info(f"📚 Stored personal info in LangChain memory ({token_count} tokens)")
                         except Exception as e:
                             logger.warning(f"Failed to store in LangChain memory: {e}")
-                    
+
                     # Add to database memory
                     self._add_to_memory(message, ai_response, session_id)
-                    
+
                     # Return response without calling AI
                     logger.info("✅ Returning personal info acknowledgment response")
                     return {
@@ -1486,7 +1486,7 @@ class AgentService:
                         "query_type": "personal_info",
                         "memory_tokens": token_count,
                     }
-            
+
             # If user is ASKING about stored info (e.g., "what's my name?")
             # Continue to AI processing with history
             logger.info("📚 Personal info recall query - will use conversation history")
@@ -1683,17 +1683,17 @@ class AgentService:
             # MEMORY MANAGEMENT: Add to conversation memory and enforce limits
             ai_response = response_data.get("response", "")
             original_length = len(ai_response)
-            
+
             # Clean incomplete JSON that might break response formatting
             ai_response = self._clean_incomplete_json(ai_response)
-            
+
             # Check if provider indicated truncation via finish_reason
             finish_reason = response_data.get("finish_reason", "stop")
             provider_truncated = finish_reason == "length"
-            
+
             # Check if we need to truncate internally
             internal_truncation_needed = len(ai_response) > self.max_response_length
-            
+
             # Handle any truncation (provider or internal)
             if provider_truncated or internal_truncation_needed:
                 # Add professional continuation prompt
@@ -1706,7 +1706,7 @@ class AgentService:
                     "• Or request a focused summary\n\n"
                     "💡 **Tip**: Break complex questions into smaller parts for better results."
                 )
-                
+
                 if internal_truncation_needed:
                     # Truncate and add continuation message
                     ai_response = (
@@ -1715,12 +1715,12 @@ class AgentService:
                 else:
                     # Provider truncated - just add continuation message
                     ai_response += continuation_message
-                
+
                 response_data["response"] = ai_response
                 response_data["truncated"] = True
                 response_data["requires_continuation"] = True
                 response_data["finish_reason"] = finish_reason
-                
+
                 logger.info(
                     f"Response truncated: original={original_length} chars, "
                     f"final={len(ai_response)} chars, reason={finish_reason}, "
@@ -1756,7 +1756,7 @@ class AgentService:
             # Add any tool results from the provider response
             if "tool_results" in response_data:
                 tool_results.update(response_data["tool_results"])
-            
+
             response_data["response"] = ResponseValidator.enhance_response(
                 response_data["response"], all_tools_used, tool_results
             )
@@ -2083,12 +2083,12 @@ class AgentService:
         # Find all JSON-like objects in the text
         # Look for patterns that start with { and should end with }
         json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-        
+
         # More sophisticated: find potential JSON blocks
         potential_json_blocks = []
         brace_count = 0
         start_pos = -1
-        
+
         for i, char in enumerate(text):
             if char == '{':
                 if brace_count == 0:
@@ -2101,22 +2101,22 @@ class AgentService:
                     block = text[start_pos:i+1]
                     potential_json_blocks.append((start_pos, i+1, block))
                     start_pos = -1
-        
+
         # Check for incomplete JSON at the end
         if brace_count > 0 and start_pos != -1:
             # There's an incomplete JSON block at the end
             logger.warning(f"Detected incomplete JSON at end of response, truncating from position {start_pos}")
-            
+
             # Try to find the last complete sentence before the incomplete JSON
             text_before_json = text[:start_pos].strip()
-            
+
             # Find the last complete sentence (ending with . ! or ?)
             sentences = re.split(r'(?<=[.!?])\s+', text_before_json)
             if sentences:
                 # Keep all complete sentences
                 cleaned_text = ' '.join(sentences[:-1]) if len(sentences) > 1 else sentences[0]
                 cleaned_text = cleaned_text.strip()
-                
+
                 if cleaned_text:
                     # Add a note about the truncation
                     cleaned_text += "\n\n*Note: The response was truncated due to formatting issues.*"
@@ -2124,15 +2124,15 @@ class AgentService:
                 else:
                     # If no complete sentences, keep a reasonable portion
                     return text[:start_pos].strip() + "\n\n*Note: Response truncated for formatting.*"
-        
+
         # Check each potential JSON block for validity
         cleaned_parts = []
         last_end = 0
-        
+
         for start, end, block in potential_json_blocks:
             # Add text before this block
             cleaned_parts.append(text[last_end:start])
-            
+
             # Try to parse the JSON
             try:
                 json.loads(block)
@@ -2143,18 +2143,18 @@ class AgentService:
                 logger.warning(f"Skipping invalid JSON block: {block[:100]}...")
                 # Optionally add a placeholder
                 cleaned_parts.append("[Chart data unavailable]")
-            
+
             last_end = end
-        
+
         # Add remaining text
         cleaned_parts.append(text[last_end:])
-        
+
         result = ''.join(cleaned_parts)
-        
+
         # If we removed content, add a note
         if len(result) < len(text) * 0.9:  # Removed more than 10%
             result += "\n\n*Note: Some content was removed due to formatting issues.*"
-        
+
         return result
 
     async def cleanup(self):

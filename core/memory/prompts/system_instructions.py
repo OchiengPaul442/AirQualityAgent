@@ -1146,13 +1146,13 @@ def get_system_instruction(
         Complete system instruction string optimized for model tier
     """
     parts = []
-    
+
     if custom_prefix:
         parts.append(custom_prefix.strip())
-    
+
     # Core identity (always include)
     parts.append(AGENT_IDENTITY)
-    
+
     # Add components based on model tier
     if model_tier in ["large", "medium"]:
         # Full reasoning framework for capable models
@@ -1172,20 +1172,20 @@ def get_system_instruction(
         parts.append(AFRICA_CONTEXT.split("COMMUNICATION STYLE")[0])  # Key Africa facts only
         parts.append(SECURITY_BOUNDARIES.split("INPUT VALIDATION")[1])  # Core security only
         parts.append("<formatting>Keep responses short. Use simple sentences. No bullet points for <3 items.</formatting>")
-        
+
     # Always include low-model optimization guidance
     parts.append(LOW_MODEL_OPTIMIZATION)
-    
+
     # Apply style-specific persona modifier
     style_key = style.lower()
     if style_key in STYLE_PRESETS:
         modifier = STYLE_PRESETS[style_key].get("persona_modifier", "")
         if modifier:
             parts.append(modifier)
-    
+
     if custom_suffix:
         parts.append(custom_suffix.strip())
-    
+
     return "\n\n".join(parts)
 
 
@@ -1233,7 +1233,7 @@ def get_response_parameters(
             "top_k": 50,
             "max_tokens": 2048,
         }
-    
+
     # Apply style preset adjustments
     style_key = style.lower()
     if style_key in STYLE_PRESETS:
@@ -1242,11 +1242,11 @@ def get_response_parameters(
         params["top_p"] = preset.get("top_p", params["top_p"])
         params["top_k"] = preset.get("top_k", params["top_k"])
         params["max_tokens"] = preset.get("max_tokens", params["max_tokens"])
-    
+
     # Health-critical applications: Lower temperature for factual accuracy
     if model_tier != "small":  # Small models already at low temp
         params["temperature"] = min(0.4, params["temperature"])
-    
+
     # Apply explicit overrides
     if temperature is not None:
         params["temperature"] = temperature
@@ -1256,7 +1256,7 @@ def get_response_parameters(
         params["top_k"] = top_k
     if max_tokens is not None:
         params["max_tokens"] = max_tokens
-    
+
     return params
 
 
@@ -1266,7 +1266,7 @@ def get_response_parameters(
 
 if __name__ == "__main__":
     print("=== AERIS-AQ SYSTEM PROMPTS V3.0 ===\n")
-    
+
     # Example 1: Large model with general style
     print("EXAMPLE 1: Gemini 2.5 Flash (general style)")
     system_prompt = get_system_instruction(
@@ -1276,7 +1276,7 @@ if __name__ == "__main__":
     params = get_response_parameters(style="general", model_tier="large")
     print(f"Prompt length: {len(system_prompt)} chars")
     print(f"Parameters: {params}\n")
-    
+
     # Example 2: Small model with simple style
     print("EXAMPLE 2: Qwen 2.5 3B (simple style)")
     system_prompt_small = get_system_instruction(
@@ -1286,7 +1286,7 @@ if __name__ == "__main__":
     params_small = get_response_parameters(style="simple", model_tier="small")
     print(f"Prompt length: {len(system_prompt_small)} chars")
     print(f"Parameters: {params_small}\n")
-    
+
     # Example 3: Policy advisor
     print("EXAMPLE 3: GPT-4o (policy style)")
     system_prompt_policy = get_system_instruction(
@@ -1296,7 +1296,7 @@ if __name__ == "__main__":
     params_policy = get_response_parameters(style="policy", model_tier="large")
     print(f"Prompt length: {len(system_prompt_policy)} chars")
     print(f"Parameters: {params_policy}\n")
-    
+
     print("=" * 50)
     print("System prompts ready for production deployment.")
     print("=" * 50)

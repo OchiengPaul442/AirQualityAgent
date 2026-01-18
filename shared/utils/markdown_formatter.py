@@ -18,7 +18,6 @@ Based on established markdown standards and best practices for scientific commun
 import html
 import logging
 import re
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -214,42 +213,42 @@ class MarkdownFormatter:
         extractor = get_link_extractor()
         if not extractor:
             return text  # Skip if extractor unavailable
-        
+
         # Match markdown links: [text](url) but not ![image](url)
         link_pattern = r'(?<!!)\[([^\]]+)\]\(([^)"\s]+)(?:\s+"[^"]*")?\)'
-        
+
         def enhance_link(match):
             link_text = match.group(1)
             url = match.group(2)
-            
+
             # Skip data URIs, anchors, and relative links
             if url.startswith(('data:', '#', '/', '.')):
                 return match.group(0)
-            
+
             # Only enhance http/https links
             if not url.startswith(('http://', 'https://')):
                 return match.group(0)
-            
+
             try:
                 # Get rich metadata
                 metadata = extractor.extract_metadata(url)
-                
+
                 # Create hover text with title and description
                 hover_text = metadata.get('title', link_text)
                 description = metadata.get('description', '')
-                
+
                 if description:
                     # Truncate description to 150 chars
                     if len(description) > 150:
                         description = description[:147] + '...'
                     hover_text += f' - {description}'
-                
+
                 # Return enhanced link with title attribute
                 return f'[{link_text}]({url} "{hover_text}")'
             except Exception as e:
                 logger.debug(f"Failed to enhance link {url}: {e}")
                 return match.group(0)  # Return original on error
-        
+
         # Apply enhancement to all links
         enhanced_text = re.sub(link_pattern, enhance_link, text)
         return enhanced_text
@@ -266,14 +265,14 @@ class MarkdownFormatter:
         """
         try:
             from urllib.parse import urlparse
-            
+
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
-            
+
             # Remove www. prefix
             if domain.startswith('www.'):
                 domain = domain[4:]
-            
+
             # Handle common sites with better names
             site_mappings = {
                 'epa.gov': 'EPA',
@@ -302,11 +301,11 @@ class MarkdownFormatter:
                 'hackernews.com': 'Hacker News',
                 'ycombinator.com': 'Y Combinator',
             }
-            
+
             # Return mapped name if available
             if domain in site_mappings:
                 return site_mappings[domain]
-            
+
             # For other sites, capitalize first letter of each word
             parts = domain.split('.')
             if parts:
@@ -318,9 +317,9 @@ class MarkdownFormatter:
                     return ' '.join(word.capitalize() for word in main_domain.split('_'))
                 else:
                     return main_domain.capitalize()
-            
+
             return domain
-            
+
         except Exception:
             # Fallback to domain extraction
             try:
@@ -371,10 +370,10 @@ class MarkdownFormatter:
         """
         if not text:
             return text
-        
+
         # Decode HTML entities (like &quot;, &#8230;, etc.)
         text = html.unescape(text)
-        
+
         # Remove or replace common problematic Unicode characters
         replacements = {
             '…': '...',  # Horizontal ellipsis
@@ -389,13 +388,13 @@ class MarkdownFormatter:
             '‹': "'",    # Single left guillemet
             '›': "'",    # Single right guillemet
         }
-        
+
         for old, new in replacements.items():
             text = text.replace(old, new)
-        
+
         # Remove control characters except newlines and tabs
         text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\t')
-        
+
         # Process words to handle encoding issues and non-Latin scripts
         words = text.split()
         cleaned_words = []
@@ -403,11 +402,11 @@ class MarkdownFormatter:
             # Count non-ASCII characters (Cyrillic, Chinese, etc.)
             non_ascii_count = sum(1 for c in word if ord(c) > 127)
             total_chars = len(word)
-            
+
             # If word is predominantly non-ASCII (> 50%) or very long, it's likely encoding issue
             if total_chars > 0:
                 non_ascii_ratio = non_ascii_count / total_chars
-                
+
                 # Skip words that are mostly non-Latin characters (likely Russian, Chinese, etc.)
                 # These cause display issues in many contexts
                 if non_ascii_ratio > 0.5:
@@ -420,17 +419,17 @@ class MarkdownFormatter:
                     cleaned_words.append(word)
             else:
                 cleaned_words.append(word)
-        
+
         text = ' '.join(cleaned_words)
-        
+
         # Remove repeated spaces
         text = re.sub(r'  +', ' ', text)
-        
+
         # If text is now empty or too short, provide placeholder
         text = text.strip()
         if len(text) < 3:
             return '[content unavailable]'
-        
+
         return text
 
     @staticmethod
@@ -908,7 +907,7 @@ class MarkdownFormatter:
 
         text_lower = text.lower()
         text_stripped = text.strip()
-        
+
         # Explicitly NOT code patterns (column names, lists, simple text)
         non_code_patterns = [
             r'^[a-z_][a-z0-9_]*$',  # Single snake_case word (like column_name)
@@ -918,12 +917,12 @@ class MarkdownFormatter:
             r'^\d+\. .+',            # Numbered list items
             r'^[•\-\*] .+',          # Bullet point items
         ]
-        
+
         # Check if it matches non-code patterns
         for pattern in non_code_patterns:
             if re.match(pattern, text_stripped):
                 return False
-        
+
         # If text is very short (< 20 chars) and has no code-specific chars, not code
         if len(text_stripped) < 20:
             code_specific_chars = ['{', '}', ';', '()', '=>', '</', '/>']
@@ -952,12 +951,12 @@ class MarkdownFormatter:
             "private ",   # OOP
             "protected ", # OOP
         ]
-        
+
         # Strong indicators are definitive
         for indicator in strong_code_indicators:
             if indicator in text_lower:
                 return True
-        
+
         # Weak code indicators (need multiple)
         weak_code_indicators = [
             "=",  # Assignment (but also math)
@@ -1049,20 +1048,20 @@ class MarkdownFormatter:
         # STEP 1: Check if sources are already properly formatted
         if "### Sources & References" in text or "## Sources & References" in text:
             header_count = text.count("### Sources & References") + text.count("## Sources & References")
-            
+
             if header_count == 1:
                 # Single header found - check if it's properly formatted
                 lines = text.split("\n")
                 sources_header_found = False
                 has_numbered_sources = False
-                
+
                 for line in lines:
                     if "### Sources & References" in line or "## Sources & References" in line:
                         sources_header_found = True
                     elif sources_header_found and re.match(r"^\d+\.\s+\*\*", line.strip()):
                         has_numbered_sources = True
                         break
-                
+
                 # If properly formatted with numbered sources, return unchanged
                 if sources_header_found and has_numbered_sources:
                     logger.debug("Sources already properly formatted - skipping")
@@ -1070,17 +1069,17 @@ class MarkdownFormatter:
             elif header_count > 1:
                 # Multiple headers detected - need to consolidate
                 logger.warning(f"⚠️ Detected {header_count} 'Sources & References' headers - consolidating")
-        
+
         # STEP 2: Extract all inline sources
         lines = text.split("\n")
         cleaned_lines = []
         all_sources = []
-        
+
         i = 0
         while i < len(lines):
             line = lines[i]
             stripped = line.strip()
-            
+
             # Skip existing "Sources & References" headers (we'll add our own)
             if re.match(
                 r"^(?:#{1,3}\s*)?(?:Sources?|References?|Citations?)(?:\s*&?\s*(?:References?|Sources?))?(?:\s*:)?\s*$",
@@ -1090,74 +1089,74 @@ class MarkdownFormatter:
                 logger.debug(f"Removing duplicate source header: '{stripped}'")
                 i += 1
                 continue
-            
+
             # Check for standalone source lines: "Source: Title [Credibility] (URL) - Summary"
             source_match = re.match(
                 r"^(?:Source|source):\s*(.+?)\s*(?:\[(.*?)\])?\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$",
                 stripped
             )
-            
+
             if source_match:
                 title, credibility, url, summary = source_match.groups()
                 title = title.strip()
                 credibility = credibility.strip() if credibility else ""
                 summary = summary.strip() if summary else ""
-                
+
                 # Check if summary continues on next line
                 if summary and i + 1 < len(lines):
                     next_line = lines[i + 1].strip()
                     if next_line and not next_line.startswith("Source:"):
                         summary += " " + next_line
                         i += 1  # Skip the next line
-                
+
                 # Create citation with credibility badge
                 site_name = MarkdownFormatter._get_site_name(url)
                 credibility_badge = f" **[{credibility}]**" if credibility else ""
-                
+
                 if summary:
                     citation = f"**{title}**{credibility_badge} - {summary} ([{site_name}]({url}))"
                 else:
                     citation = f"**{title}**{credibility_badge} ([{site_name}]({url}))"
-                
+
                 all_sources.append(citation)
                 i += 1
                 continue
-            
+
             # Check for inline sources: "Some text Source: Title [Credibility] (URL) - Summary"
             inline_match = re.search(
                 r"(.+?)\s+(?:Source|source):\s*(.+?)\s*(?:\[(.*?)\])?\s*\((https?://[^\s)]+)\)(?:\s*[-–]\s*(.+))?$",
                 line
             )
-            
+
             if inline_match:
                 content, title, credibility, url, summary = inline_match.groups()
                 title = title.strip()
                 credibility = credibility.strip() if credibility else ""
                 summary = summary.strip() if summary else ""
-                
+
                 # Add the content without the source
                 cleaned_lines.append(content.strip())
-                
+
                 # Create citation with credibility badge
                 site_name = MarkdownFormatter._get_site_name(url)
                 credibility_badge = f" **[{credibility}]**" if credibility else ""
-                
+
                 if summary:
                     citation = f"**{title}**{credibility_badge} - {summary} ([{site_name}]({url}))"
                 else:
                     citation = f"**{title}**{credibility_badge} ([{site_name}]({url}))"
-                
+
                 all_sources.append(citation)
                 i += 1
                 continue
-            
+
             # Regular line - keep it
             cleaned_lines.append(line)
             i += 1
-        
+
         # STEP 3: Rebuild the document
         result = "\n".join(cleaned_lines).strip()
-        
+
         # STEP 4: Add sources section at the end (if we found any)
         if all_sources:
             # Remove duplicate sources (same URL)
@@ -1173,12 +1172,12 @@ class MarkdownFormatter:
                         unique_sources.append(source)
                 else:
                     unique_sources.append(source)
-            
+
             # Add the sources section
             result += "\n\n### Sources & References\n\n"
             for i, source in enumerate(unique_sources, 1):
                 result += f"{i}. {source}\n"
-        
+
         return result
 
     @staticmethod

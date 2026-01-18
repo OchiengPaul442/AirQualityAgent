@@ -64,13 +64,13 @@ class LangChainSessionMemory:
 
         # Try Redis first, fallback to in-memory
         self.chat_history: BaseChatMessageHistory = None
-        
+
         # Check if Redis is enabled in settings
         if not self.settings.REDIS_ENABLED:
             logger.info(f"Redis disabled in settings (REDIS_ENABLED={self.settings.REDIS_ENABLED}). Using in-memory chat history for session {session_id}")
             self.chat_history = InMemoryChatMessageHistory()
             return
-        
+
         redis_url = f"redis://{self.settings.REDIS_HOST}:{self.settings.REDIS_PORT}"
 
         try:
