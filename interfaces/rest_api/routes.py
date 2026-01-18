@@ -577,10 +577,23 @@ async def chat(
             logger.error(f"Failed to save user message to database: {db_error}")
             # Continue processing even if db save fails
 
-        # Modify message if GPS is available and user is asking about location
+        # Modify message if GPS is available and user is asking about THEIR location
+        # BUT: Don't modify if they're asking about a specific named location
         original_message = message
         if latitude is not None and longitude is not None:
-            # Check if message is about current location
+            # Check if message mentions a specific city/location name
+            # If it does, DON'T override with GPS - user wants that specific place
+            import re
+            has_specific_location = bool(re.search(
+                r'\b(in|at|for|near)\s+[A-Z][a-z]+|\b(New York|Los Angeles|London|Tokyo|Beijing|'  
+                r'Paris|Berlin|Rome|Madrid|Sydney|Melbourne|Toronto|Montreal|Mumbai|Delhi|'  
+                r'Shanghai|Seoul|Singapore|Bangkok|Dubai|Cairo|Lagos|Nairobi|Kampala|'  
+                r'Johannesburg|Cape Town|Accra|Kigali|Addis Ababa)\b',
+                message,
+                re.IGNORECASE
+            ))
+            
+            # Check if message is about current/user's location (not a specific named place)
             location_keywords = [
                 "my location",
                 "current location",
@@ -590,10 +603,17 @@ async def chat(
                 "my area",
                 "local",
             ]
-            if any(keyword in message.lower() for keyword in location_keywords):
+            is_about_user_location = any(keyword in message.lower() for keyword in location_keywords)
+            
+            # Only inject GPS if asking about "my location" AND not asking about a specific city
+            if is_about_user_location and not has_specific_location:
                 message = f"Get air quality data for GPS coordinates {latitude:.4f}, {longitude:.4f} (user has already consented by providing GPS data)"
                 logger.info(
                     f"Modified location query with GPS coordinates: '{original_message}' -> '{message}'"
+                )
+            elif has_specific_location:
+                logger.info(
+                    f"User asked about specific location '{original_message}' - not overriding with GPS"
                 )
 
         # Prepare location data - prefer GPS over IP
@@ -648,6 +668,11 @@ async def chat(
         # Apply professional markdown formatting
         final_response = MarkdownFormatter.format_response(final_response)
 
+        # Extract truncation and continuation flags from agent result
+        is_truncated = result.get("truncated", False)
+        requires_continuation = result.get("requires_continuation", False)
+        finish_reason = result.get("finish_reason", "stop")
+        
         tools_used = result.get("tools_used", [])
 
         # Add document processing tool to tools_used if document was processed

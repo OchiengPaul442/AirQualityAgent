@@ -1318,7 +1318,23 @@ class AgentService:
         # Get location context
         location_context = ""
         if location_data and location_data.get("source") == "gps":
-            location_context = f"\n\n**GPS LOCATION AVAILABLE**: The user has provided precise GPS coordinates ({location_data['latitude']:.4f}, {location_data['longitude']:.4f}). When they ask about air quality in their location, use the get_location_from_ip tool directly without asking for consent."
+            lat = location_data["latitude"]
+            lon = location_data["longitude"]
+            location_context = f"\\n\\nUSER GPS LOCATION: ({lat:.4f}, {lon:.4f})\\n"
+        
+        # Check if this is a continuation request (user wants to resume truncated response)
+        is_continuation = False
+        if history and len(history) > 0:
+            last_ai_message = ""
+            # Find the last assistant message
+            for msg in reversed(history):
+                if msg.get("role") == "assistant":
+                    last_ai_message = msg.get("content", "")
+                    break
+            
+            if "Response Incomplete" in last_ai_message or "truncated due to length" in last_ai_message:
+                is_continuation = True
+                logger.info("🔄 Detected continuation request - will resume from where stopped")
 
         # Add session summary for better long-conversation context
         session_summary = ""
@@ -1346,6 +1362,23 @@ class AgentService:
             custom_prefix=document_context,  # Documents FIRST
             custom_suffix=location_context + session_summary,  # Other context after
         )
+        
+        # Add continuation instruction if this is a resume request
+        if is_continuation:
+            system_instruction += (
+                "\n\n<CONTINUATION_MODE>\n"
+                "🔄 **The user has asked you to continue your previous response.**\n\n"
+                "CRITICAL INSTRUCTIONS:\n"
+                "• Review the conversation history to see where you left off\n"
+                "• Resume EXACTLY where the previous response ended - DO NOT repeat anything\n"
+                "• DO NOT start over, DO NOT summarize what was already said\n"
+                "• Continue seamlessly as if the response was never interrupted\n"
+                "• If the previous response ended mid-sentence, complete that sentence first\n"
+                "• Maintain the same tone, style, and level of detail as before\n"
+                "• You have the FULL conversation history - use it to pick up exactly where you stopped\n"
+                "</CONTINUATION_MODE>\n"
+            )
+            logger.info("📝 Added continuation instruction to system prompt")
 
         # Log if document context was added
         if accumulated_docs:
@@ -1794,7 +1827,7 @@ class AgentService:
                     "\n\n---\n"
                     "**📝 Response Incomplete**: This response was truncated due to length limits.\n\n"
                     "**To continue:**\n"
-                    "• Click the 'Continue' button to generate the rest\n"
+                    "• Click the 'Continue' button to resume exactly where this left off\n"
                     "• Or ask for specific sections (e.g., 'Tell me about health effects')\n"
                     "• Or request a focused summary\n\n"
                     "💡 **Tip**: Break complex questions into smaller parts for better results."
@@ -1813,6 +1846,16 @@ class AgentService:
                 response_data["truncated"] = True
                 response_data["requires_continuation"] = True
                 response_data["finish_reason"] = finish_reason
+                
+                # Store continuation state - the full response is already in conversation history
+                # When user says "continue", we detect it and add special instruction to resume
+                if session_id:
+                    logger.info(f"📦 Continuation state ready for session {session_id} - response in memory")
+                
+                # Store continuation state for resumption
+                if session_id:
+                    logger.info(f"Storing continuation state for session {session_id}")
+                    # The response is already in memory, next message will have full context
 
                 logger.info(
                     f"Response truncated: original={original_length} chars, "
