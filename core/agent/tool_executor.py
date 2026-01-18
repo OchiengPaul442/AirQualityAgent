@@ -564,6 +564,7 @@ class ToolExecutor:
                 """
                 Get air quality by GPS coordinates with intelligent fallback.
                 Prioritizes AirQo for African coordinates, WAQI for global, then OpenMeteo.
+                Returns enriched data with monitor metadata for transparency.
                 """
                 latitude = args.get("latitude")
                 longitude = args.get("longitude")
@@ -585,6 +586,23 @@ class ToolExecutor:
                         if result.get("success"):
                             self._record_success("airqo")
                             result["data_source"] = "AirQo monitoring network"
+                            result["data_source_type"] = "ground_sensor"
+                            result["confidence_level"] = "high"
+                            result["spatial_resolution"] = "local (<5km)"
+                            result["measurement_method"] = "low-cost optical particle counter"
+                            
+                            # Add monitor count if multiple sites in response
+                            if "measurements" in result and isinstance(result["measurements"], list):
+                                monitor_count = len(result["measurements"])
+                                if monitor_count > 1:
+                                    result["multiple_monitors"] = True
+                                    result["monitor_count"] = monitor_count
+                                    result["note_to_ai"] = (
+                                        f"IMPORTANT: This location has {monitor_count} AirQo monitors. "
+                                        "You must explain which monitor(s) you're using and why. "
+                                        "Consider spatial variation when advising users."
+                                    )
+                            
                             return result
                         logger.info(f"AirQo returned no data for coordinates ({latitude}, {longitude})")
                         self._record_failure("airqo")
@@ -601,8 +619,48 @@ class ToolExecutor:
                         if result.get("success"):
                             self._record_success("waqi")
                             result["data_source"] = "World Air Quality Index monitoring network"
+                            result["data_source_type"] = "ground_sensor"
+                            result["spatial_resolution"] = "local (<15km)"
+                            
+                            # Extract station distance if available
+                            if "data" in result and isinstance(result["data"], dict):
+                                station_data = result["data"]
+                                if "city" in station_data and isinstance(station_data["city"], dict):
+                                    city_info = station_data["city"]
+                                    station_name = city_info.get("name", "Unknown station")
+                                    result["station_name"] = station_name
+                                    
+                                    # Check for geo data to calculate distance
+                                    if "geo" in city_info and isinstance(city_info["geo"], list) and len(city_info["geo"]) == 2:
+                                        station_lat, station_lon = city_info["geo"]
+                                        # Calculate approximate distance in km
+                                        from math import atan2, cos, radians, sin, sqrt
+                                        lat1, lon1 = radians(latitude), radians(longitude)
+                                        lat2, lon2 = radians(station_lat), radians(station_lon)
+                                        dlat = lat2 - lat1
+                                        dlon = lon2 - lon1
+                                        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                                        c = 2 * atan2(sqrt(a), sqrt(1-a))
+                                        distance_km = 6371 * c  # Earth radius in km
+                                        result["distance_from_query_km"] = round(distance_km, 1)
+                                        
+                                        # Set confidence based on distance
+                                        if distance_km < 1:
+                                            result["confidence_level"] = "high"
+                                            result["note_to_ai"] = f"Monitor is {distance_km:.1f}km from user's coordinates - very close, high confidence."
+                                        elif distance_km < 5:
+                                            result["confidence_level"] = "high"
+                                            result["note_to_ai"] = f"Monitor is {distance_km:.1f}km from user's coordinates - close enough for high confidence."
+                                        elif distance_km < 15:
+                                            result["confidence_level"] = "medium"
+                                            result["note_to_ai"] = f"Monitor is {distance_km:.1f}km from user's coordinates - moderate distance, local conditions may vary."
+                                        else:
+                                            result["confidence_level"] = "low"
+                                            result["note_to_ai"] = f"⚠️ Monitor is {distance_km:.1f}km from user's coordinates - significant distance, lower confidence."
+                            
                             if is_african:
-                                result["note"] = "AirQo data unavailable for this location. Using WAQI global network."
+                                result["regional_note"] = "AirQo data unavailable for this African location. Using WAQI global network."
+                            
                             return result
                         self._record_failure("waqi")
                     except Exception as e:
@@ -617,7 +675,15 @@ class ToolExecutor:
                         if result.get("success"):
                             self._record_success("openmeteo")
                             result["data_source"] = "OpenMeteo atmospheric modeling (CAMS satellite)"
-                            result["note"] = "Ground station data unavailable. Using satellite/model data (25km resolution)."
+                            result["data_source_type"] = "satellite_model"
+                            result["confidence_level"] = "medium"
+                            result["spatial_resolution"] = "regional (25km grid)"
+                            result["measurement_method"] = "ECMWF CAMS atmospheric chemistry model"
+                            result["note_to_ai"] = (
+                                "⚠️ Ground station data unavailable. Using satellite/model data with 25km resolution. "
+                                "This is less precise than ground sensors - actual local conditions may vary by ±30-50%. "
+                                "Good for general area assessment, not suitable for micro-scale queries."
+                            )
                             return result
                         self._record_failure("openmeteo")
                     except Exception as e:
