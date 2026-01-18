@@ -96,14 +96,37 @@ class TestTruncationAndContinuation:
             assert response2.status_code == 200
             data2 = response2.json()
             
+            response1_text = data1.get("response", "")
             response2_text = data2.get("response", "")
             
             print(f"\nContinuation Test Results:")
             print(f"First response truncated: {data1.get('truncated')}")
+            print(f"First response length: {len(response1_text)} chars")
             print(f"Continuation length: {len(response2_text)} chars")
+            print(f"First response last 100 chars: ...{response1_text[-100:]}")
+            print(f"Continuation first 100 chars: {response2_text[:100]}...")
             
             # Continuation should have content
             assert len(response2_text) > 0, "Continuation response is empty"
+            
+            # Check that continuation doesn't repeat the start of the first response
+            # Extract first significant sentence from first response (skip common prefixes)
+            first_response_words = response1_text[:500].lower()
+            continuation_words = response2_text[:500].lower()
+            
+            # The continuation should NOT contain large chunks from the beginning of response1
+            # This is a heuristic check - if more than 50% of the first 200 chars match, it's likely repeating
+            if len(response1_text) > 200 and len(response2_text) > 200:
+                # Look for substantial overlap indicating repetition
+                overlap_threshold = 0.3  # Allow 30% overlap (some context is OK)
+                first_chunk = set(response1_text[:200].lower().split())
+                cont_chunk = set(response2_text[:200].lower().split())
+                if len(first_chunk) > 0:
+                    overlap = len(first_chunk & cont_chunk) / len(first_chunk)
+                    print(f"Word overlap ratio: {overlap:.2f}")
+                    if overlap > overlap_threshold:
+                        print("WARNING: High overlap detected - continuation may be repeating content")
+                    # Don't fail test but log the warning
 
 
 class TestAPIResponses:

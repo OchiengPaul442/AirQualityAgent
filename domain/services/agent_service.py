@@ -1398,15 +1398,13 @@ class AgentService:
         
         # Check if this is a continuation request (user wants to resume truncated response)
         is_continuation = False
-        if history and len(history) > 0:
-            last_ai_message = ""
-            # Find the last assistant message
-            for msg in reversed(history):
-                if msg.get("role") == "assistant":
-                    last_ai_message = msg.get("content", "")
-                    break
+        if session_id:
+            # Check if last response was truncated using session flag
+            was_truncated = self.session_manager.was_last_response_truncated(session_id)
+            # Also check if user is asking to continue
+            is_continue_request = message.lower().strip() in ["continue", "please continue", "continue please", "go on", "keep going"]
             
-            if "Response Incomplete" in last_ai_message or "truncated due to length" in last_ai_message:
+            if was_truncated and is_continue_request:
                 is_continuation = True
                 logger.info("🔄 Detected continuation request - will resume from where stopped")
 
@@ -1439,20 +1437,33 @@ class AgentService:
         
         # Add continuation instruction if this is a resume request
         if is_continuation:
-            system_instruction += (
-                "\n\n<CONTINUATION_MODE>\n"
-                "🔄 **The user has asked you to continue your previous response.**\n\n"
-                "CRITICAL INSTRUCTIONS:\n"
-                "• Review the conversation history to see where you left off\n"
-                "• Resume EXACTLY where the previous response ended - DO NOT repeat anything\n"
-                "• DO NOT start over, DO NOT summarize what was already said\n"
-                "• Continue seamlessly as if the response was never interrupted\n"
-                "• If the previous response ended mid-sentence, complete that sentence first\n"
-                "• Maintain the same tone, style, and level of detail as before\n"
-                "• You have the FULL conversation history - use it to pick up exactly where you stopped\n"
-                "</CONTINUATION_MODE>\n"
+            # Get the last assistant message to show where it ended
+            last_response_end = ""
+            if history:
+                for msg in reversed(history):
+                    if msg.get("role") == "assistant":
+                        last_content = msg.get("content", "")
+                        # Get last 500 characters to show more context
+                        last_response_end = last_content[-500:] if len(last_content) > 500 else last_content
+                        break
+            
+            # Instead of just adding to system prompt, MODIFY the user's message to be very explicit
+            # This works better with modern LLMs that prioritize user instructions
+            original_message = message
+            message = (
+                f"[CONTINUATION REQUEST - DO NOT START OVER]\n\n"
+                f"My previous message was: \"{history[-2].get('content', '') if len(history) >= 2 else 'see history'}\"\\n\\n"
+                f"Your response was CUT OFF and ended with these exact words:\n"
+                f"\"{last_response_end}\"\n\n"
+                f"IMPORTANT: Continue writing from EXACTLY where you stopped. "
+                f"Do NOT restart, do NOT repeat anything you already said. "
+                f"Just pick up mid-sentence if needed and continue with the next content. "
+                f"Treat this as if your previous response never got interrupted - seamlessly continue."
             )
-            logger.info("📝 Added continuation instruction to system prompt")
+            
+            logger.info(f"🔄 Modified user message for continuation")
+            logger.info(f"📝 Original message: {original_message[:100]}...")
+            logger.info(f"📝 Last response ended with: ...{last_response_end[-100:]}")
 
         # Log if document context was added
         if accumulated_docs:
@@ -1905,15 +1916,10 @@ class AgentService:
                 response_data["requires_continuation"] = True
                 response_data["finish_reason"] = finish_reason
                 
-                # Store continuation state - the full response is already in conversation history
-                # When user says "continue", we detect it and add special instruction to resume
+                # Store truncation state in session for continuation detection
                 if session_id:
+                    self.session_manager.set_truncation_state(session_id, True)
                     logger.info(f"📦 Continuation state ready for session {session_id} - response in memory")
-                
-                # Store continuation state for resumption
-                if session_id:
-                    logger.info(f"Storing continuation state for session {session_id}")
-                    # The response is already in memory, next message will have full context
 
                 logger.info(
                     f"Response truncated: original={original_length} chars, "
@@ -1925,6 +1931,10 @@ class AgentService:
                 response_data["requires_continuation"] = False
                 response_data["truncated"] = False
                 response_data["finish_reason"] = finish_reason
+                
+                # Clear truncation state since response is complete
+                if session_id:
+                    self.session_manager.set_truncation_state(session_id, False)
 
             self._add_to_memory(message, ai_response, session_id)
 

@@ -57,6 +57,7 @@ class SessionContextManager:
                 "last_access": time.time(),
                 "created_at": time.time(),
                 "message_count": 0,
+                "last_response_truncated": False,
             }
             logger.info(f"Created new session context for {session_id[:8]}...")
         else:
@@ -209,6 +210,31 @@ class SessionContextManager:
             logger.info(f"Cleared session context: {session_id[:8]}...")
             return True
         return False
+
+    def set_truncation_state(self, session_id: str, truncated: bool) -> None:
+        """
+        Set whether the last response was truncated.
+
+        Args:
+            session_id: Session identifier
+            truncated: Whether the last response was truncated
+        """
+        context = self.get_or_create_context(session_id)
+        context["last_response_truncated"] = truncated
+        logger.debug(f"Session {session_id[:8]} truncation state: {truncated}")
+
+    def was_last_response_truncated(self, session_id: str) -> bool:
+        """
+        Check if the last response was truncated.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if last response was truncated
+        """
+        context = self.get_or_create_context(session_id)
+        return context.get("last_response_truncated", False)
 
     def get_stats(self) -> dict[str, Any]:
         """
