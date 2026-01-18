@@ -561,11 +561,76 @@ class ToolExecutor:
                     }
 
             elif function_name == "get_air_quality_by_location":
-                if self.airqo is None:
-                    return {"success": False, "message": "AirQo service is not enabled."}
-                return self.airqo.get_air_quality_by_location(
-                    latitude=args.get("latitude"), longitude=args.get("longitude")
-                )
+                """
+                Get air quality by GPS coordinates with intelligent fallback.
+                Prioritizes AirQo for African coordinates, WAQI for global, then OpenMeteo.
+                """
+                latitude = args.get("latitude")
+                longitude = args.get("longitude")
+                
+                if latitude is None or longitude is None:
+                    return {"success": False, "message": "Latitude and longitude are required."}
+                
+                # Check if coordinates are in Africa (roughly)
+                # Africa: Latitude -35 to 37, Longitude -17 to 52
+                is_african = (-35 <= latitude <= 37) and (-17 <= longitude <= 52)
+                
+                # Try AirQo first for African coordinates
+                if is_african and self.airqo and not self._is_circuit_open("airqo"):
+                    try:
+                        logger.info(f"Trying AirQo for GPS ({latitude}, {longitude})")
+                        result = self.airqo.get_air_quality_by_location(
+                            latitude=latitude, longitude=longitude
+                        )
+                        if result.get("success"):
+                            self._record_success("airqo")
+                            result["data_source"] = "AirQo monitoring network"
+                            return result
+                        logger.info(f"AirQo returned no data for coordinates ({latitude}, {longitude})")
+                        self._record_failure("airqo")
+                    except Exception as e:
+                        logger.error(f"AirQo error for GPS ({latitude}, {longitude}): {e}")
+                        self._record_failure("airqo")
+                
+                # Try WAQI (works globally)
+                if self.waqi and not self._is_circuit_open("waqi"):
+                    try:
+                        logger.info(f"Trying WAQI for GPS ({latitude}, {longitude})")
+                        # WAQI uses geo: prefix for GPS coordinates
+                        result = self.waqi.get_city_feed(f"geo:{latitude};{longitude}")
+                        if result.get("success"):
+                            self._record_success("waqi")
+                            result["data_source"] = "World Air Quality Index monitoring network"
+                            if is_african:
+                                result["note"] = "AirQo data unavailable for this location. Using WAQI global network."
+                            return result
+                        self._record_failure("waqi")
+                    except Exception as e:
+                        logger.error(f"WAQI error for GPS ({latitude}, {longitude}): {e}")
+                        self._record_failure("waqi")
+                
+                # Fallback to OpenMeteo (satellite/model data)
+                if self.openmeteo and not self._is_circuit_open("openmeteo"):
+                    try:
+                        logger.info(f"Trying OpenMeteo for GPS ({latitude}, {longitude})")
+                        result = self.openmeteo.get_current_air_quality(latitude, longitude)
+                        if result.get("success"):
+                            self._record_success("openmeteo")
+                            result["data_source"] = "OpenMeteo atmospheric modeling (CAMS satellite)"
+                            result["note"] = "Ground station data unavailable. Using satellite/model data (25km resolution)."
+                            return result
+                        self._record_failure("openmeteo")
+                    except Exception as e:
+                        logger.error(f"OpenMeteo error for GPS ({latitude}, {longitude}): {e}")
+                        self._record_failure("openmeteo")
+                
+                return {
+                    "success": False,
+                    "message": f"Unable to retrieve air quality data for coordinates ({latitude}, {longitude}). No monitoring stations found in this area.",
+                    "suggestion": "search_web",
+                    "search_query": f"air quality near {latitude} {longitude}",
+                    "fallback_advice": "This location may not have active monitoring coverage. Try nearby major cities.",
+                }
 
             elif function_name == "search_airqo_sites":
                 if self.airqo is None:
