@@ -1896,26 +1896,10 @@ class AgentService:
 
             # Handle any truncation (provider, internal, or detected incompleteness)
             if provider_truncated or internal_truncation_needed or appears_incomplete:
-                # Add professional continuation prompt
-                continuation_message = (
-                    "\n\n---\n"
-                    "**📝 Response Incomplete**: This response was truncated due to length limits.\n\n"
-                    "**To continue:**\n"
-                    "• Click the 'Continue' button to resume exactly where this left off\n"
-                    "• Or ask for specific sections (e.g., 'Tell me about health effects')\n"
-                    "• Or request a focused summary\n\n"
-                    "💡 **Tip**: Break complex questions into smaller parts for better results."
-                )
-
                 if internal_truncation_needed:
-                    # Truncate and add continuation message
-                    ai_response = (
-                        ai_response[: self.max_response_length - len(continuation_message)] + continuation_message
-                    )
-                else:
-                    # Provider truncated - just add continuation message
-                    ai_response += continuation_message
-
+                    # Truncate response
+                    ai_response = ai_response[: self.max_response_length]
+                
                 response_data["response"] = ai_response
                 response_data["truncated"] = True
                 response_data["requires_continuation"] = True

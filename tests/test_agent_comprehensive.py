@@ -64,10 +64,9 @@ class TestTruncationAndContinuation:
         print(f"finish_reason: {finish_reason}")
         print(f"Response length: {len(response_text)} chars")
         
-        # If response appears incomplete, flags should be set
-        if "📝 Response Incomplete" in response_text:
-            assert truncated == True, f"Response has truncation message but truncated={truncated}"
-            assert requires_continuation == True, f"Response incomplete but requires_continuation={requires_continuation}"
+        # If response is truncated, flags should be set correctly
+        if truncated:
+            assert requires_continuation == True, f"Response truncated but requires_continuation={requires_continuation}"
             assert finish_reason in ["stop", "length"], f"Invalid finish_reason: {finish_reason}"
     
     def test_continuation_works(self, require_server):
