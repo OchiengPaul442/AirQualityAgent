@@ -288,7 +288,9 @@ class SearchService:
                     # Use a single DDGS instance with reasonable timeout
                     with DDGS() as ddgs:
                         # Simple search - let DDGS handle the complexity
-                        results = list(ddgs.text(query, max_results=max_results * 2, timelimit=10.0))
+                        # Note: timelimit should be a string like 'd' (day), 'w' (week), 'm' (month), 'y' (year)
+                        # or None for no limit. Using 'd' for recent results
+                        results = list(ddgs.text(query, max_results=max_results * 2, timelimit='d'))
                         if results:
                             raw_results = results
                             break

@@ -346,6 +346,52 @@ class AgentService:
 
         return False
 
+
+    def _contains_code_blocks(self, response: str) -> bool:
+        """Check if response contains ACTUAL code blocks (not just technical terms)."""
+        # Only block OBVIOUS code patterns to avoid false positives
+        
+        # Check for code fences with language identifiers
+        if "```python" in response or "```json" in response or "```javascript" in response:
+            logger.error("Code fence with language identifier detected")
+            return True
+        
+        # Check for Python import statements followed by actual code structure
+        import_patterns = [
+            ("import ", "\n" in response and ("latitude =" in response or "def " in response)),
+            ("from ", "import" in response and "\n" in response and "=" in response),
+        ]
+        for pattern, condition in import_patterns:
+            if pattern in response and condition:
+                logger.error(f"Code pattern detected: {pattern}")
+                return True
+        
+        # Check for obvious tutorial/documentation patterns
+        tutorial_patterns = [
+            "Expected Output:",
+            "Response Example:",
+            "# Call the tool",
+            "# Execute the function",
+            "latitude = 32.5662",  # Specific coordinate assignment
+        ]
+        for pattern in tutorial_patterns:
+            if pattern in response:
+                logger.error(f"Tutorial pattern detected: {pattern}")
+                return True
+        
+        return False
+
+    def _check_response_completeness(self, response: str) -> bool:
+        """Check if response appears incomplete."""
+        if not response or len(response) < 50:
+            return False
+        # Check if ends mid-sentence
+        tail = response[-50:].strip()
+        if tail.endswith((",", "(", "[", "{")):
+            logger.warning("Response appears incomplete")
+            return True
+        return False
+
     def _manage_memory(self, session_id: str | None = None):
         """Manage conversation memory to prevent bloat and loops.
         
@@ -1626,8 +1672,52 @@ class AgentService:
             # SECURITY: Filter out any sensitive information from response
             response_data = self._filter_sensitive_info(response_data)
 
-            # CHECK FOR REASONING EXPOSURE: If AI exposed internal thinking, replace with helpful response
+            # CRITICAL: Check for code leakage BEFORE sending response
             ai_response = response_data.get("response", "").strip()
+            if self._contains_code_blocks(ai_response):
+                logger.error("CODE LEAKAGE DETECTED - Blocking and reconstructing response")
+                
+                # If tools were used, try to present the data without code
+                if response_data.get("tools_used"):
+                    # Extract clean data from response (remove code blocks)
+                    clean_response = ai_response
+                    # Remove code fences and their content
+                    import re
+                    clean_response = re.sub(r'```[\w]*\n[\s\S]*?```', '', clean_response)
+                    # Remove lines that look like code
+                    lines = clean_response.split('\n')
+                    clean_lines = []
+                    for line in lines:
+                        # Skip lines that are clearly code
+                        if not any([
+                            line.strip().startswith('import '),
+                            line.strip().startswith('from '),
+                            line.strip().startswith('def '),
+                            ' = ' in line and 'latitude' in line,
+                            'Expected Output:' in line,
+                        ]):
+                            clean_lines.append(line)
+                    clean_response = '\n'.join(clean_lines).strip()
+                    
+                    # If we have clean content, use it; otherwise provide helpful message
+                    if clean_response and len(clean_response) > 50:
+                        response_data["response"] = clean_response
+                        logger.info("Cleaned code from response, presenting data")
+                    else:
+                        response_data["response"] = (
+                            "I apologize, but I encountered a formatting issue while presenting the data. "
+                            "The air quality information was retrieved successfully. "
+                            "Could you please rephrase your question so I can present it properly?"
+                        )
+                else:
+                    response_data["response"] = (
+                        "I apologize for the formatting issue. "
+                        "Please rephrase your question and I'll provide a clear answer."
+                    )
+                response_data["code_blocked"] = True
+                ai_response = response_data["response"]
+
+            # CHECK FOR REASONING EXPOSURE: If AI exposed internal thinking, replace with helpful response
             if self._check_response_for_reasoning_exposure(ai_response):
                 logger.warning("Reasoning exposure detected - replacing with helpful options response")
                 response_data["response"] = (
@@ -1689,13 +1779,16 @@ class AgentService:
 
             # Check if provider indicated truncation via finish_reason
             finish_reason = response_data.get("finish_reason", "stop")
-            provider_truncated = finish_reason == "length"
+            provider_truncated = finish_reason in ["length", "MAX_TOKENS"]
 
             # Check if we need to truncate internally
             internal_truncation_needed = len(ai_response) > self.max_response_length
+            
+            # Check if response appears incomplete
+            appears_incomplete = self._check_response_completeness(ai_response)
 
-            # Handle any truncation (provider or internal)
-            if provider_truncated or internal_truncation_needed:
+            # Handle any truncation (provider, internal, or detected incompleteness)
+            if provider_truncated or internal_truncation_needed or appears_incomplete:
                 # Add professional continuation prompt
                 continuation_message = (
                     "\n\n---\n"
