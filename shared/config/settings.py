@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Provider URLs
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     DASHSCOPE_API_KEY: str = ""
 

@@ -26,12 +26,27 @@ class OllamaProvider(BaseAIProvider):
         """
         Set up Ollama client.
 
-        Note: Ollama is stateless, no authentication required.
+        Note: Ollama is stateless, no authentication required for local.
+        For cloud, API key is required.
         """
-        # Ollama is stateless, just log the configuration
-        logger.info(
-            f"Initialized Ollama provider. Host: {self.settings.OLLAMA_BASE_URL}, Model: {self.settings.AI_MODEL}"
-        )
+        api_key = self.settings.OLLAMA_API_KEY
+        base_url = self.settings.OLLAMA_BASE_URL
+
+        if api_key:
+            # Use client for cloud with authentication
+            self.client = ollama.Client(
+                host=base_url,
+                headers={'Authorization': f'Bearer {api_key}'}
+            )
+            logger.info(
+                f"Initialized Ollama cloud provider. Host: {base_url}, Model: {self.settings.AI_MODEL}"
+            )
+        else:
+            # Local setup, use global client
+            self.client = None
+            logger.info(
+                f"Initialized Ollama local provider. Host: {base_url}, Model: {self.settings.AI_MODEL}"
+            )
 
     @staticmethod
     def _sanitize_text(text: str) -> str:
@@ -236,12 +251,20 @@ class OllamaProvider(BaseAIProvider):
                 tools = self.get_tool_definitions()
                 logger.info(f"Ollama calling with {len(tools)} tools available")
 
-                response = ollama.chat(
-                    model=self.settings.AI_MODEL,
-                    messages=messages,
-                    tools=tools,  # CRITICAL: Pass tools to Ollama
-                    options=options,
-                )
+                if self.client:
+                    response = self.client.chat(
+                        model=self.settings.AI_MODEL,
+                        messages=messages,
+                        tools=tools,  # CRITICAL: Pass tools to Ollama
+                        options=options,
+                    )
+                else:
+                    response = ollama.chat(
+                        model=self.settings.AI_MODEL,
+                        messages=messages,
+                        tools=tools,  # CRITICAL: Pass tools to Ollama
+                        options=options,
+                    )
 
                 # Only log response details in development, not the full response
                 if self.settings.ENVIRONMENT == "development":
