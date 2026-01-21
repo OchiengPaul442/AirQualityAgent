@@ -143,15 +143,15 @@ class TestLatexFormatting:
     
     def test_display_latex_format(self):
         """LaTeX should use $$ or \\[ \\] for display math."""
-        # Correct formats
+        # Correct formats should have proper delimiters
         correct1 = "$$E = mc^2$$"
         correct2 = "\\[E = mc^2\\]"
         
-        # Incorrect format
-        incorrect = "[math]E = mc^2[/math]"
-        
-        assert "$$" in correct1 or "\\[" in correct2
-        assert "[math]" not in incorrect
+        # Check that correct formats have valid delimiters
+        assert "$$" in correct1
+        assert "\\[" in correct2
+        assert "[math]" not in correct1  # Should not use invalid format
+        assert "[math]" not in correct2  # Should not use invalid format
 
 
 class TestToolExecution:

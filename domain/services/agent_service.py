@@ -397,7 +397,7 @@ class AgentService:
         Returns:
             bool: True if response appears incomplete, False otherwise
         """
-        if not response or len(response) < 50:
+        if not response or len(response) < 10:  # Only skip very short responses
             return False
         
         # Get last 100 characters for analysis
