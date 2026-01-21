@@ -88,6 +88,8 @@ kaleido==0.2.1                     # Static image export from Plotly
 # Security & Rate Limiting
 # -----------------------------------------------------------------------------
 slowapi==0.1.9                     # Rate limiting for FastAPI
+psutil==7.0.0                      # System and process monitoring
+
 # -----------------------------------------------------------------------------
 black==25.12.0                     # Code formatter
 ruff==0.9.0                        # Fast Python linter

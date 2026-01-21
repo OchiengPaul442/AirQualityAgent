@@ -1,8 +1,9 @@
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +14,7 @@ from infrastructure.database.database import Base, engine, ensure_database_direc
 from interfaces.rest_api.error_handlers import register_error_handlers
 from interfaces.rest_api.routes import router
 from shared.config.settings import get_settings
+from shared.monitoring.health_monitor import get_health_monitor
 
 
 # Configure logging based on environment
@@ -142,10 +144,24 @@ app.add_middleware(
 )
 
 
-# Add security and performance headers
+# Add security, performance headers, and response time tracking
 @app.middleware("http")
-async def add_security_headers(request, call_next):
+async def add_security_headers(request: Request, call_next):
+    # Track request start time
+    start_time = time.time()
+    
+    # Process request
     response = await call_next(request)
+    
+    # Calculate response time
+    process_time = (time.time() - start_time) * 1000  # Convert to ms
+    
+    # Record metrics
+    try:
+        health_monitor = get_health_monitor()
+        health_monitor.record_response_time(request.url.path, process_time)
+    except Exception:
+        pass  # Don't fail request if metrics recording fails
 
     # Security headers
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -156,9 +172,14 @@ async def add_security_headers(request, call_next):
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     )
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-
+    
     # Performance headers
-    response.headers["X-Response-Time"] = str(getattr(request.state, "response_time", 0))
+    response.headers["X-Response-Time"] = f"{process_time:.2f}ms"
+    
+    # Correlation ID for request tracking
+    correlation_id = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID")
+    if correlation_id:
+        response.headers["X-Correlation-ID"] = correlation_id
 
     return response
 
@@ -169,9 +190,36 @@ register_error_handlers(app)
 app.include_router(router, prefix=settings.API_V1_STR)
 
 
+# ===============================================================================
+# HEALTH & MONITORING ENDPOINTS
+# ===============================================================================
+
 @app.get("/health")
-async def health_check():
-    return {"status": "ok", "version": "1.0.0"}
+async def health_check_basic():
+    """
+    Basic health check endpoint (fast, no dependencies checked).
+    Use this for load balancer health checks.
+    """
+    return {"status": "healthy", "version": "1.0.0"}
+
+
+@app.get("/health/detailed")
+async def health_check_detailed():
+    """
+    Detailed health check with component status.
+    Checks database, AI providers, and data sources.
+    """
+    health_monitor = get_health_monitor()
+    return await health_monitor.check_health(detailed=True)
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Get performance metrics and statistics.
+    """
+    health_monitor = get_health_monitor()
+    return health_monitor.get_metrics()
 
 
 @app.on_event("startup")
