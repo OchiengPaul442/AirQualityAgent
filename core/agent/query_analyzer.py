@@ -158,14 +158,36 @@ class QueryAnalyzer:
         
         Returns:
             Dict with:
-                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research' | 'general_knowledge' | 'personal_info'
+                - query_type: 'educational' | 'location_specific' | 'data_analysis' | 'research' | 'general_knowledge' | 'personal_info' | 'complex_scientific'
                 - confidence: float (0-1)
                 - recommended_tools: list of tool names
                 - skip_ai_tools: bool (whether AI should call additional tools)
         """
         message_lower = message.lower()
 
-        # HIGHEST PRIORITY: Personal information sharing/recall
+        # HIGHEST PRIORITY: Complex scientific/modeling questions
+        # Atmospheric chemistry, transport modeling, dispersion, chemical reactions
+        complex_scientific_indicators = [
+            'hysplit', 'backward trajectory', 'transport model', 'dispersion',
+            'chemical reaction', 'oxidation pathway', 'conversion', 'atmospheric chemistry',
+            'acid rain', 'acid deposition', 'sulfate aerosol', 'so2', 'so₂',
+            'volcanic emission', 'plume transport', 'long-range transport',
+            'chemical species', 'reaction mechanism', 'ph', 'rainfall ph',
+            'mineral buffer', 'neutralization', 'cation', 'ca²⁺', 'mg²⁺',
+            'oh radical', 'h2o2', 'hydroxyl', 'hydrogen peroxide',
+            'gas-to-particle', 'aerosol formation', 'secondary pollutant',
+        ]
+
+        if any(indicator in message_lower for indicator in complex_scientific_indicators):
+            logger.info(f"🔬 Complex scientific question detected: '{message[:100]}...'")
+            return {
+                "query_type": "complex_scientific",
+                "confidence": 0.95,
+                "recommended_tools": ["search_web"],  # Use web search for scientific literature
+                "skip_ai_tools": False,  # Let AI reason about the question and use tools
+            }
+
+        # SECOND PRIORITY: Personal information sharing/recall
         # Users telling the AI about themselves (name, location for memory, preferences)
         # Must be checked BEFORE location detection to avoid treating "I live in Paris" as AQ query
         personal_info_patterns = [
@@ -247,7 +269,7 @@ class QueryAnalyzer:
                     "skip_ai_tools": False,  # MUST use web search for latest info
                 }
 
-        # Educational queries - No tools needed, pure AI knowledge
+        # Educational queries - May need web search for complex topics
         # CHECKED AFTER general_knowledge to avoid false positives
         educational_patterns = [
             r'\bwhat is\b',
@@ -264,6 +286,14 @@ class QueryAnalyzer:
         if any(re.search(pattern, message_lower) for pattern in educational_patterns):
             # Verify it's not location-specific
             if not any(city in message_lower for city in QueryAnalyzer.AFRICAN_CITIES + QueryAnalyzer.GLOBAL_CITIES):
+                # For complex topics, recommend web search
+                if any(term in message_lower for term in ['model', 'process', 'mechanism', 'pathway', 'formation']):
+                    return {
+                        "query_type": "educational",
+                        "confidence": 0.85,
+                        "recommended_tools": ["search_web"],
+                        "skip_ai_tools": False,
+                    }
                 return {
                     "query_type": "educational",
                     "confidence": 0.9,
